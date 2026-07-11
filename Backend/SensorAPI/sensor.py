@@ -2,12 +2,14 @@ import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from flask import Flask, jsonify
-from flask_cors import CORS # pip install flask-cors
+from flask_cors import CORS 
+from datetime import datetime
+
 
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app) # This allows your Flutter app to make requests without being blocked
+CORS(app) 
 
 # Initialize Supabase
 supabase: Client = create_client(
@@ -19,19 +21,46 @@ supabase: Client = create_client(
 def get_current_status():
     try:
         response = supabase.table('latest_sensor_readings').select('*').execute()
-        return jsonify(format_sensor_data(response.data)), 200 # 200 is the HTTP OK code
+        return jsonify(format_sensor_data(response.data)), 200 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500 # 500 is Internal Server Error
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/temp', methods=['GET'])
 def get_temp():
     try:
-        response = (supabase.table('SensorData').select('*').eq("sensor_type", "temp").order("created_at", desc=True).limit(30).execute())
+        response = (supabase.table('SensorData')
+                    .select('*')
+                    .eq("sensor_type", "temp")
+                    .order("created_at", desc=True)
+                    .limit(30).execute())
         return jsonify(format_historic_data(response.data)), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ... (You can apply this same try/except and jsonify structure to /api/ph, /api/tds, /api/lux) ...
+@app.route('/api/ph', methods=['GET'])
+def get_ph():
+    try:
+        response = (supabase.table('SensorData').select('*').eq("sensor_type", "pH").order("created_at", desc=True).limit(30).execute())
+        return jsonify(format_historic_data(response.data)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tds', methods=['GET'])
+def get_tds():
+    try:
+        response = (supabase.table('SensorData').select('*').eq("sensor_type", "TDS").order("created_at", desc=True).limit(30).execute())
+        return jsonify(format_historic_data(response.data)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/lux', methods=['GET'])
+def get_lux():
+    try:
+        response = (supabase.table('SensorData').select('*').eq("sensor_type", "LUX").order("created_at", desc=True).limit(30).execute())
+        return jsonify(format_historic_data(response.data)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 def format_sensor_data(sensordata):
     formatted_sensors = {}
@@ -48,7 +77,11 @@ def format_historic_data(raw_sensordata_list):
             "time": sensor.get("created_at"),
             "value": sensor.get("data1")
         }
-        chart_data.append(data_point)
+        # "Casting" it into a Python datetime object
+        dt_object = datetime.fromisoformat(data_point["time"])
+        date=dt_object.date()
+        if date == datetime.now().date():
+            chart_data.append(data_point)
     return chart_data
 
 if __name__ == '__main__':

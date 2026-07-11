@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 // import 'home_screen.dart'; // We will route to this later
 import 'main_layout.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase/supabase.dart';
+import 'package:geolocator/geolocator.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -18,17 +21,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _selectedRegion = 'Central';
   final List<String> _sgRegions = ['North', 'South', 'East', 'West', 'Central'];
 
-  void _saveAndContinue() {
-    // TODO: Write these values to shared_preferences or Supabase user_profile here.
+  Future<void> _saveAndContinue() async {
+    final prefs = await SharedPreferences.getInstance();
     final volume = _volumeController.text;
     final biomass = _biomassController.text;
     final region = _selectedRegion;
+
+    // Writing onboarding data into shared preferences for future reference
+    await prefs.setString('tankVolume', volume);
+    await prefs.setString('fishBiomass', biomass);
+    await prefs.setString('sgRegion', region);
+    await prefs.setBool('isOnboarded', true);
+    print("Saved! Transitioning to Dashboard...");
+    // Writing to Supabase
+    const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
+    const String supabaseAnonKey = String.fromEnvironment(
+      'SUPABASE_PUBLISHABLE_KEY',
+    );
+    final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
+    final response = await supabaseClient
+        .from('UserData')
+        .insert({'volume': volume, 'biomass': biomass, 'region': region})
+        .select('id')
+        .single();
+    final int newId = response['id'];
+    await prefs.setInt('userId', newId);
+    print("Data saved to Supabase with ID: $newId");
+
     // After saving, navigate to the Home Screen and remove Onboarding from the stack
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const MainLayout()),
     );
-    print("Saved! Transitioning to Dashboard...");
   }
 
   @override
