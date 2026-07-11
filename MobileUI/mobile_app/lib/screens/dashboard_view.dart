@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:async'; // Required for Timer
-import 'dart:convert'; // Required to decode JSON
-import 'package:http/http.dart' as http; // Required for network requests
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -11,11 +11,9 @@ class DashboardView extends StatefulWidget {
 }
 
 class _DashboardViewState extends State<DashboardView> {
-  // 1. Declare your state variables and the Timer
   Timer? _pollingTimer;
 
-  // Replace this IP with your laptop's actual local Wi-Fi IP address!
-  final String apiUrl = 'http://192.168.68.64:5000/api/current_status';
+  final String apiUrl = 'http://127.0.0.1:5000/api/current_status';
 
   String currentPh = "--";
   String currentTemp = "--";
@@ -26,30 +24,166 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
-    // Fetch data immediately when the screen loads
     _fetchCurrentStatus();
 
-    // 2. Start the periodic timer to fetch every 1 minute
     _pollingTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _fetchCurrentStatus();
     });
   }
 
+  void _logFeeding() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        // 1. Initialize our default values for the popup
+        DateTime selectedTime = DateTime.now();
+        bool isNow = true;
+        String selectedVolume = 'Medium';
+
+        // 2. StatefulBuilder allows the UI inside the dialog to update dynamically
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Log Feeding Event'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min, // Keeps the dialog compact
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- TIME SELECTION ---
+                  const Text(
+                    'When did you feed them?',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      // "NOW" Button
+                      ChoiceChip(
+                        label: const Text('NOW'),
+                        selected: isNow,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setDialogState(() {
+                              isNow = true;
+                              selectedTime = DateTime.now();
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      // "Custom Time" Button
+                      ChoiceChip(
+                        label: Text(
+                          isNow
+                              ? 'Custom Time'
+                              : "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}",
+                        ),
+                        selected: !isNow,
+                        onSelected: (selected) async {
+                          if (selected) {
+                            // Opens the native phone time picker wheel
+                            TimeOfDay? picked = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.fromDateTime(selectedTime),
+                            );
+
+                            if (picked != null) {
+                              setDialogState(() {
+                                isNow = false;
+                                // Merge the picked time with today's date
+                                selectedTime = DateTime(
+                                  selectedTime.year,
+                                  selectedTime.month,
+                                  selectedTime.day,
+                                  picked.hour,
+                                  picked.minute,
+                                );
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // --- VOLUME SELECTION ---
+                  const Text(
+                    'Estimated Volume:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'Small', label: Text('Small')),
+                      ButtonSegment(value: 'Medium', label: Text('Medium')),
+                      ButtonSegment(value: 'Large', label: Text('Large')),
+                    ],
+                    selected: {selectedVolume},
+                    onSelectionChanged: (Set<String> newSelection) {
+                      setDialogState(() {
+                        selectedVolume = newSelection.first;
+                      });
+                    },
+                  ),
+                ],
+              ),
+
+              // --- ACTION BUTTONS ---
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(context), // Close without saving
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close the dialog
+                    _submitFeedingData(
+                      selectedTime,
+                      selectedVolume,
+                    ); // Process the data
+                  },
+                  style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+                  child: const Text('Save Log'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // The method that actually handles the data after the user clicks "Save Log"
+  void _submitFeedingData(DateTime time, String volume) {
+    // TODO: Push 'time.toIso8601String()' and 'volume' to your Supabase 'feeding_logs' table
+
+    print("Feeding logged! Time: $time, Volume: $volume. Updating models...");
+
+    // Show a success message at the bottom of the screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Logged $volume feeding at ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}.',
+        ),
+        backgroundColor: Colors.teal,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   void dispose() {
-    // 3. CRITICAL: Always cancel the timer when leaving the screen!
-    // If you don't do this, it will keep running in the background and drain the battery.
     _pollingTimer?.cancel();
     super.dispose();
   }
 
-  // 4. The function that talks to your Flask server
   Future<void> _fetchCurrentStatus() async {
     try {
       final response = await http.get(Uri.parse(apiUrl));
 
       if (response.statusCode == 200) {
-        // Decode the JSON from your Flask jsonify() response
         final data = json.decode(response.body);
 
         // Update the UI with the fresh data
@@ -66,43 +200,51 @@ class _DashboardViewState extends State<DashboardView> {
       }
     } catch (e) {
       print("Failed to connect to Flask server: $e");
-      // Optional: Set variables to "Error" or show a snackbar here
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Current Readings',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
+    return Scaffold(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
 
-          // Show a loading spinner until the first fetch finishes
-          if (isLoading)
-            const Center(child: CircularProgressIndicator())
-          else
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.5,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              children: [
-                // Notice these now use our state variables directly!
-                _buildSensorCard('pH Level', currentPh, Colors.blue),
-                _buildSensorCard('Temp (°C)', currentTemp, Colors.orange),
-                _buildSensorCard('TDS (ppm)', currentTds, Colors.green),
-                _buildSensorCard('Lux', currentLux, Colors.amber),
-              ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Current Readings',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-        ],
+            const SizedBox(height: 12),
+
+            if (isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.5,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                children: [
+                  // Notice these now use our state variables directly!
+                  _buildSensorCard('pH Level', currentPh, Colors.blue),
+                  _buildSensorCard('Temp (°C)', currentTemp, Colors.orange),
+                  _buildSensorCard('TDS (ppm)', currentTds, Colors.green),
+                  _buildSensorCard('Lux', currentLux, Colors.amber),
+                ],
+              ),
+          ],
+        ),
+      ),
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _logFeeding,
+        icon: const Icon(Icons.restaurant),
+        label: const Text('Feed Koi Now'),
+        backgroundColor: Colors.teal,
       ),
     );
   }
