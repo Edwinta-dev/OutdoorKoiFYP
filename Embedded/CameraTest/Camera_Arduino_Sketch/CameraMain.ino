@@ -1,8 +1,9 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h> // Fixed header include
 
-// AI-Thinker Physical Board Routings
+// --- AI-Thinker Physical Board Pin Routing ---
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
@@ -21,12 +22,49 @@
 #define PCLK_GPIO_NUM 22
 
 // --- NETWORK PROFILE CONFIGURATION ---
-const char *ssid = "107";
-const char *password = "6Casting.";
-// --- Replace with Server URL instead of Localhost IP ---
-const char *server_ip = "192.168.68.61";
-unsigned long lastTriggerTime = 0;
-const unsigned long loopInterval = 10000; // Fires every 10 seconds
+const char *ssid = "107";                   // Wi-Fi Router Name
+const char *password = "6Casting.";         // Wi-Fi Router Password
+const char *flask_server = "192.168.68.61"; // Flask server URL
+// Default fallback sleep duration (2 hours in seconds)
+const unsigned long DEFAULT_SLEEP_SEC = 7200;
+
+// --- Function Declarations ---
+void initCamera();
+bool ConnectWifi();
+unsigned long UploadPhoto(camera_fb_t *fb);
+unsigned long takePhoto();
+void enterDeepSleep(unsigned long secondsToSleep);
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(500); // Short delay to let Serial Monitor attach
+
+  Serial.println("\n--- ESP32-CAM Wake Cycle Started ---");
+
+  initCamera();
+
+  unsigned long sleepSec = DEFAULT_SLEEP_SEC;
+
+  // Attempt Wi-Fi Connection
+  if (ConnectWifi())
+  {
+    // Capture photo and attempt upload
+    sleepSec = takePhoto();
+  }
+  else
+  {
+    Serial.println("Wi-Fi failed. Entering fallback sleep mode.");
+  }
+
+  // Always enter deep sleep at the end of setup
+  enterDeepSleep(sleepSec);
+}
+
+void loop()
+{
+  // Unreachable code due to Deep Sleep
+}
 
 void initCamera()
 {
@@ -50,79 +88,117 @@ void initCamera()
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
 
-  config.xclk_freq_hz = 10000000;
+  config.xclk_freq_hz = 10000000; // 10MHz stable clock
   config.pixel_format = PIXFORMAT_JPEG;
   config.fb_count = 1;
   config.jpeg_quality = 12;
-  config.frame_size = FRAMESIZE_VGA;
+  config.frame_size = FRAMESIZE_VGA; // 640x480
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK)
   {
-    while (true)
-      ;
+    Serial.printf("Camera init failed with error 0x%x\n", err);
+    // If camera fails, sleep 5 mins and reboot
+    enterDeepSleep(300);
   }
 }
 
-void setup()
+bool ConnectWifi()
 {
-  Serial.begin(115200);
-  initCamera();
-
-  // Establish Wireless Connection Link
-  Serial.print("Connecting to local network: ");
+  Serial.print("Connecting to Wi-Fi: ");
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
+
+  int attempts = 0;
+  // Non-blocking timeout guardrail (10 seconds max)
+  while (WiFi.status() != WL_CONNECTED && attempts < 20)
   {
     delay(500);
     Serial.print(".");
+    attempts++;
   }
-  Serial.println("\nWiFi Network Bridge Active!");
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("\nWi-Fi Connected! IP: " + WiFi.localIP().toString());
+    return true;
+  }
+  else
+  {
+    Serial.println("\nWi-Fi Connection Timed Out!");
+    return false;
+  }
 }
 
-void loop()
+unsigned long takePhoto()
 {
-  unsigned long currentMillis = millis();
+  camera_fb_t *fb = esp_camera_fb_get();
 
-  if (currentMillis - lastTriggerTime >= loopInterval)
+  if (!fb)
   {
-    lastTriggerTime = currentMillis;
-
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      Serial.println("Network dropped! Skipping cycle...");
-      return;
-    }
-
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb)
-    {
-      Serial.println("Camera capture failed!");
-      return;
-    }
-
-    // Build the structural destination string URL pointing to Flask
-    String serverUrl = "http://" + String(server_ip) + ":5000/upload";
-
-    HTTPClient http;
-    http.begin(serverUrl);
-
-    // Explicitly set the transmission context type header to handle binary
-    http.addHeader("Content-Type", "application/octet-stream");
-
-    // Execute the POST operation directly pushing the memory bytes array across Wi-Fi
-    int httpResponseCode = http.POST(fb->buf, fb->len);
-
-    if (httpResponseCode > 0)
-    {
-      Serial.printf("Network Push Complete. Server HTTP Status: %d\n", httpResponseCode);
-    }
-    else
-    {
-      Serial.printf("Network Error Occurred: %s\n", http.errorToString(httpResponseCode).c_str());
-    }
-
-    http.end();
-    esp_camera_fb_return(fb); // Clear volatile buffer indices instantly
+    Serial.println("Camera capture failed!");
+    return DEFAULT_SLEEP_SEC; // Return fallback sleep if capture fails
   }
+
+  // Pass frame buffer pointer into upload function
+  unsigned long sleepSec = UploadPhoto(fb);
+
+  // Clean up buffer memory
+  esp_camera_fb_return(fb);
+  return sleepSec;
+}
+
+unsigned long UploadPhoto(camera_fb_t *fb)
+{
+  unsigned long calculatedSleepSec = DEFAULT_SLEEP_SEC;
+
+  String serverUrl = "http://" + String(flask_server) + ":5000/upload";
+  HTTPClient http;
+  http.begin(serverUrl);
+  http.addHeader("Content-Type", "application/octet-stream");
+
+  Serial.println("Posting photo payload to Flask...");
+  int httpResponseCode = http.POST(fb->buf, fb->len);
+
+  if (httpResponseCode == 200)
+  {
+    Serial.printf("Network Push Complete. Server Status: %d\n", httpResponseCode);
+
+    String responseString = http.getString();
+    Serial.println("Raw HTTP Response: " + responseString);
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, responseString);
+
+    if (error)
+    {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+    }
+    else if (doc.containsKey("sleep_sec"))
+    {
+      calculatedSleepSec = doc["sleep_sec"].as<unsigned long>();
+      Serial.printf("Server scheduled next wake in %lu seconds.\n", calculatedSleepSec);
+    }
+  }
+  else
+  {
+    Serial.printf("Network Error Occurred (Code %d): %s\n",
+                  httpResponseCode,
+                  http.errorToString(httpResponseCode).c_str());
+  }
+
+  http.end(); // Safely close HTTP socket
+  return calculatedSleepSec;
+}
+
+void enterDeepSleep(unsigned long secondsToSleep)
+{
+  Serial.printf("Shutting down network & entering deep sleep for %lu seconds...\n", secondsToSleep);
+  Serial.flush();
+
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  esp_sleep_enable_timer_wakeup((uint64_t)secondsToSleep * 1000000ULL);
+  esp_deep_sleep_start();
 }
