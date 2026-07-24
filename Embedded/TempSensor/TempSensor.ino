@@ -4,11 +4,9 @@
 #include <Arduino.h>
 #include <ESPSupabase.h>
 
-
 Supabase db;
 String supabase_url = "https://mkzfdxhzmrnapvrhshte.supabase.co";
-String anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1remZkeGh6bXJuYXB2cmhzaHRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNTExMTgsImV4cCI6MjA4NjkyNzExOH0.x-f-jAGaps1fjzXx4FyKATHxtFOPb-s7_1_tqqpuQUs";
-
+String service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1remZkeGh6bXJuYXB2cmhzaHRlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM1MTExOCwiZXhwIjoyMDg2OTI3MTE4fQ.0SrMz-cRwDS7IrBtfAOjvblFAtcvLMiHOc5E3MABoJs";
 const char *ssid = "107";
 const char *psswd = "6Casting.";
 
@@ -16,11 +14,12 @@ String table = "SensorData";
 JsonDocument doc;
 bool upsert = false;
 String JSON = "";
-const int oneWireBus = 18;     
+const int oneWireBus = 18;
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   sensors.begin();
   Serial.print("Connecting to WiFi");
@@ -31,11 +30,12 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\nConnected!");
-  db.begin(supabase_url, anon_key);
+  db.begin(supabase_url, service_role_key);
 }
 
-void loop() {
-  sensors.requestTemperatures(); 
+void loop()
+{
+  sensors.requestTemperatures();
   float temperatureC = sensors.getTempCByIndex(0);
   Serial.print("Temperature in C: ");
   Serial.print(temperatureC);
