@@ -13,6 +13,8 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)   
 
+
+
 # Initialize Supabase
 supabase: Client = create_client(
     os.environ.get("SUPABASE_URL"),
@@ -29,12 +31,15 @@ def upload_image():
     filename = f"wifi_photo_{int(time.time())}.jpg"
     bucket_name = 'imageAnalysisBucket'
     state = hsvEngine.getstate()
+    print(f"State is: {state}")
+    state = hsvEngine.evalstate()
     if state == "base":
         time_to_next_image = imageSchedule.get_base_schedule_sleep_seconds()
     elif state == "dynamic":
         time_to_next_image = imageSchedule.get_dynamicstate_sleep_seconds()
     elif state == "obstruction":
         time_to_next_image = imageSchedule.get_obstructionstate_sleep_seconds()
+    print(f"Time to next image: {time_to_next_image}")
     try:
         # 2. Upload file bytes to Supabase Storage with explicit MIME type
         response = supabase.storage.from_(bucket_name).upload(
