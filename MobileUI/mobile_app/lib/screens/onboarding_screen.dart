@@ -64,7 +64,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // Writing to Supabase
     const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
     const String supabaseAnonKey = String.fromEnvironment(
-      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SERVICEROLE_KEY',
     );
 
     final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
