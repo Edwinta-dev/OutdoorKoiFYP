@@ -32,7 +32,7 @@ def get_base_schedule_sleep_seconds() -> int:
         if target_dt > now:
             # Next slot today
             sleep_duration = (target_dt - now).total_seconds()
-            return int(sleep_duration)
+            #return int(sleep_duration)
             
     # Next Slot tomorrow 
     tomorrow = today + datetime.timedelta(days=1)
@@ -40,15 +40,19 @@ def get_base_schedule_sleep_seconds() -> int:
     next_day_target_dt = datetime.datetime.combine(tomorrow, first_slot_time)
     
     sleep_duration = (next_day_target_dt - now).total_seconds()
-    return int(sleep_duration)
-
+    #return int(sleep_duration) TESTING STATE MACHINE AND CONNCECTIONs
+    return 100
 
 def get_obstructionstate_sleep_seconds()-> int:
-    return obstructionstate_sleep * 60 * 60 
-
+    #return obstructionstate_sleep * 60 * 60 TESTING STATE MACHINE AND CONNECTORS
+    return 80
 def get_dynamicstate_sleep_seconds()-> int:
     smart_dynamic_state=0
-    return smart_dynamic_state
+    # return smart_dynamic_state TESTING STATE MACHINE AND CONNECTORS
+    return 60
+
+
+
 if __name__ == "__main__":
     sleep_sec = get_base_schedule_sleep_seconds()
     print(f"ESP32 should deep sleep for: {sleep_sec} seconds ({sleep_sec / 3600:.2f} hours)")
