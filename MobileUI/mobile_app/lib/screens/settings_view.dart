@@ -74,13 +74,13 @@ class _SettingsViewState extends State<SettingsView> {
     print('Deleting pond data for user ID: $userid');
     const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
     const String supabaseAnonKey = String.fromEnvironment(
-      'SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_SERVICEROLE_KEY',
     );
     final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
     await supabaseClient
         .from('UserData')
         .delete()
-        .eq('id', userid); // Example for Supabase
+        .eq('userID', userid); // Example for Supabase
     print('Pond data deleted'); // Placeholder for actual deletion logic
     Navigator.pushReplacement(
       context,
