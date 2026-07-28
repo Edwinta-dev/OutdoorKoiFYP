@@ -13,7 +13,7 @@ class DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<DashboardView> {
   Timer? _pollingTimer;
 
-  final String apiUrl = 'http://127.0.0.1:5000/api/current_status';
+  final String apiUrl = 'http://192.168.68.66:5000/api/current_status';
 
   String currentPh = "--";
   String currentTemp = "--";
@@ -206,72 +206,359 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Current Readings',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      // 1. Deep Aquatic Dark Gradient Canvas Background
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0F2027), // Deep Navy
+              Color(0xFF203A43), // Lagoon Blue
+              Color(0xFF2C5364), // Soft Teal-Grey
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
             ),
-            const SizedBox(height: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top App Bar / Title Banner
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          "Outdoor Koi Pond",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          "Ecosystem Health",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Live Connectivity Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.greenAccent, width: 1),
+                      ),
+                      child: Row(
+                        children: const [
+                          CircleAvatar(
+                            radius: 4,
+                            backgroundColor: Colors.greenAccent,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            "LIVE",
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
-            if (isLoading)
-              const Center(child: CircularProgressIndicator())
-            else
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 1.5,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  // Notice these now use our state variables directly!
-                  _buildSensorCard('pH Level', currentPh, Colors.blue),
-                  _buildSensorCard('Temp (°C)', currentTemp, Colors.orange),
-                  _buildSensorCard('TDS (ppm)', currentTds, Colors.green),
-                  _buildSensorCard('Lux', currentLux, Colors.amber),
-                ],
-              ),
-          ],
+                // 2. HERO CARD: Master Health Status Overview
+                _buildHeroHealthCard(),
+
+                const SizedBox(height: 24),
+
+                // Section Label
+                const Text(
+                  'Telemetry Metrics',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // 3. Dynamic Sensor Metric Cards Grid
+                if (isLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(40.0),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.tealAccent,
+                      ),
+                    ),
+                  )
+                else
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.15, // Taller cards for better density
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    children: [
+                      _buildMetricTile(
+                        title: 'pH Level',
+                        value: currentPh,
+                        unit: 'pH',
+                        status: 'Optimal',
+                        icon: Icons.water_drop_rounded,
+                        accentColor: const Color(0xFF00E676), // Emerald
+                      ),
+                      _buildMetricTile(
+                        title: 'Water Temp',
+                        value: currentTemp,
+                        unit: '°C',
+                        status: 'Normal',
+                        icon: Icons.thermostat_rounded,
+                        accentColor: const Color(0xFFFF9100), // Vibrant Amber
+                      ),
+                      _buildMetricTile(
+                        title: 'TDS Purity',
+                        value: currentTds,
+                        unit: 'ppm',
+                        status: 'Good',
+                        icon: Icons.blur_on_rounded,
+                        accentColor: const Color(0xFF00E5FF), // Cyan
+                      ),
+                      _buildMetricTile(
+                        title: 'Sunlight',
+                        value: currentLux,
+                        unit: 'Lux',
+                        status: 'Daylight',
+                        icon: Icons.light_mode_rounded,
+                        accentColor: const Color(0xFFFFD600), // Gold
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 80), // Padding space for FAB
+              ],
+            ),
+          ),
         ),
       ),
 
+      // 4. Action Button: Floating Action Button with Glass Gradient Style
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _logFeeding,
-        icon: const Icon(Icons.restaurant),
-        label: const Text('Feed Koi Now'),
-        backgroundColor: Colors.teal,
+        elevation: 6,
+        icon: const Icon(Icons.set_meal_rounded, color: Colors.black87),
+        label: const Text(
+          'Log Koi Feeding',
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: const Color(0xFF00E676), // Bright mint green
       ),
     );
   }
 
-  Widget _buildSensorCard(String title, String value, Color color) {
-    return Card(
-      elevation: 2,
-      clipBehavior: Clip.hardEdge,
-      child: InkWell(
-        onTap: () {},
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
+  /// Master Hero Status Box
+  Widget _buildHeroHealthCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            Colors.teal.shade700.withOpacity(0.5),
+            Colors.cyan.shade900.withOpacity(0.4),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: Colors.tealAccent.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Circular Status Icon Ring
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.tealAccent.withOpacity(0.15),
+              border: Border.all(color: Colors.tealAccent, width: 2),
+            ),
+            child: const Icon(
+              Icons.verified_user_rounded,
+              color: Colors.tealAccent,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "Pond Status: Optimal",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  "All 4 water quality parameters are within safe ranges for Koi health.",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Individual Visual Metric Cards
+  Widget _buildMetricTile({
+    required String title,
+    required String value,
+    required String unit,
+    required String status,
+    required IconData icon,
+    required Color accentColor,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        // Translucent "Glassmorphism" panel effect
+        color: Colors.white.withOpacity(0.07),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(14.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Tile Header: Icon & Category Title
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: accentColor, size: 20),
+                  ),
+                  // Status Pill Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Title Label
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+
+              // Tile Main Value Output
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    unit,
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
