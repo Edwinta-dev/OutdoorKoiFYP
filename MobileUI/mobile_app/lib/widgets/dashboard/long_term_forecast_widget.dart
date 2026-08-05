@@ -7,27 +7,63 @@ class LongTermForecastWidget extends StatelessWidget {
 
   const LongTermForecastWidget({super.key, required this.data});
 
+  /// Maps NEA weather forecast strings to icons
+  IconData _getWeatherIcon(String forecastText) {
+    final lower = forecastText.toLowerCase();
+    if (lower.contains('thunder') || lower.contains('tl')) {
+      return Icons.thunderstorm_outlined;
+    } else if (lower.contains('rain') || lower.contains('shower')) {
+      return Icons.grain_outlined;
+    } else if (lower.contains('cloud')) {
+      if (lower.contains('night')) return Icons.nights_stay_outlined;
+      return Icons.wb_cloudy_outlined;
+    } else if (lower.contains('fair') || lower.contains('clear')) {
+      if (lower.contains('night')) return Icons.brightness_3_outlined;
+      return Icons.wb_sunny_outlined;
+    }
+    return Icons.wb_cloudy_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final List hourlyList = data['hourly'] ?? [];
-    final List fourDayList = data['four_day'] ?? [];
+    // 1. Safely extract 24-Hour & 2-Hour General Data
+    final forecast24hr = data['forecast_24hr'] is Map
+        ? data['forecast_24hr']
+        : {};
+    final general = forecast24hr['general'] is Map
+        ? forecast24hr['general']
+        : {};
+
+    final forecastText24hr = general['forecast']?['text'] ?? 'Fair';
+    final tempLow = general['temperature']?['low'] ?? '--';
+    final tempHigh = general['temperature']?['high'] ?? '--';
+    final rhLow = general['relativeHumidity']?['low'] ?? '--';
+    final rhHigh = general['relativeHumidity']?['high'] ?? '--';
+    final windSpeedHigh = general['wind']?['speed']?['high'] ?? '--';
+    final windDir = general['wind']?['direction'] ?? '';
+
+    // 2. Safely extract 4-Day Outlook Array
+    final List outlook4Day = data['outlook_4day'] is List
+        ? data['outlook_4day']
+        : [];
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
+        color: const Color(0xFF131B2A), // Dark cohesive background
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Section Title
           const Row(
             children: [
               Icon(
                 Icons.calendar_today_outlined,
                 color: Colors.cyanAccent,
-                size: 18,
+                size: 16,
               ),
               SizedBox(width: 8),
               Text(
@@ -40,69 +76,128 @@ class LongTermForecastWidget extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          const Text(
-            '24-HOUR HORIZON',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 10,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Hourly Horizontal Scroll List
-          SizedBox(
-            height: 70,
-            child: hourlyList.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No hourly data',
-                      style: TextStyle(color: Colors.white38, fontSize: 11),
-                    ),
-                  )
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: hourlyList.length,
-                    itemBuilder: (context, index) {
-                      final item = hourlyList[index];
-                      return ForecastItem(
-                        time: item['time'] ?? '--',
-                        temp: "${item['temp'] ?? '--'}°",
-                      );
-                    },
-                  ),
-          ),
           const SizedBox(height: 16),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 8),
 
+          // --- 1. 24-HOUR GENERAL OVERVIEW (Header + Micro Stats Bar) ---
+          Row(
+            children: [
+              Icon(
+                _getWeatherIcon(forecastText24hr),
+                color: Colors.cyanAccent,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      forecastText24hr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '24-Hour Forecast • Temp $tempLow–$tempHigh°C',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Micro Inline Telemetry Strip (No Card Boxes, Clean Spaced Text)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildMicroStat('Humidity', '$rhLow–$rhHigh%'),
+                Text(
+                  '|',
+                  style: TextStyle(color: Colors.white.withOpacity(0.12)),
+                ),
+                _buildMicroStat('Wind', '$windSpeedHigh km/h $windDir'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 14),
+
+          // --- 2. 4-DAY OUTLOOK STRIP (Clean Columns, No Individual Cards) ---
           const Text(
-            '4-DAY FORECAST SUMMARY',
+            '4-DAY OUTLOOK',
             style: TextStyle(
               color: Colors.white54,
               fontSize: 10,
+              fontWeight: FontWeight.bold,
               letterSpacing: 1,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // 4-Day Outlook Cards
-          fourDayList.isEmpty
-              ? const Text(
-                  'No 4-day forecast available',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+          outlook4Day.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    'No 4-day outlook data available',
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
                 )
               : Row(
-                  children: fourDayList.map((item) {
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: outlook4Day.map((item) {
+                    final itemData = item['data'] is Map ? item['data'] : {};
+                    final dayName = itemData['day'] ?? item['slot_id'] ?? '--';
+                    final shortDay = dayName.length >= 3
+                        ? dayName.substring(0, 3)
+                        : dayName;
+
+                    final forecastText = itemData['forecast']?['text'] ?? '';
+                    final lowTemp = itemData['temperature']?['low'] ?? '--';
+                    final highTemp = itemData['temperature']?['high'] ?? '--';
+
                     return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: DayCard(
-                          day: item['day'] ?? '--',
-                          tempRange: item['temp_range'] ?? '--',
-                        ),
+                      child: Column(
+                        children: [
+                          Text(
+                            shortDay.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Icon(
+                            _getWeatherIcon(forecastText),
+                            color: Colors.lightBlueAccent,
+                            size: 20,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$lowTemp–$highTemp°',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }).toList(),
@@ -111,89 +206,23 @@ class LongTermForecastWidget extends StatelessWidget {
       ),
     );
   }
-}
 
-class ForecastItem extends StatelessWidget {
-  final String time;
-  final String temp;
-
-  const ForecastItem({super.key, required this.time, required this.temp});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 60,
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            time,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
+  Widget _buildMicroStat(String label, String value) {
+    return Row(
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(color: Colors.white54, fontSize: 10),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 2),
-          const Icon(
-            Icons.wb_cloudy_outlined,
-            color: Colors.cyanAccent,
-            size: 16,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            temp,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class DayCard extends StatelessWidget {
-  final String day;
-  final String tempRange;
-
-  const DayCard({super.key, required this.day, required this.tempRange});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            day,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Icon(
-            Icons.thunderstorm_outlined,
-            color: Colors.lightBlueAccent,
-            size: 18,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            tempRange,
-            style: const TextStyle(color: Colors.white54, fontSize: 9),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
