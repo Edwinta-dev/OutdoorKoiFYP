@@ -14,7 +14,7 @@ CORS(app)
 # Initialize Supabase
 supabase: Client = create_client(
     os.environ.get("SUPABASE_URL"),
-    os.environ.get("SUPABASE_SERVICEROLE_KEY")
+    os.environ.get("SUPABASE_PUBLISHABLE_KEY")
 )
 
 @app.route('/api/current_status', methods=['GET'])

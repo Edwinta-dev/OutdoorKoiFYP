@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'main_layout.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase/supabase.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
 
@@ -251,13 +251,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Fetch species dictionary list from Supabase
   Future<void> _fetchFishSpeciesDictionary() async {
-    const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
-    const String supabaseAnonKey = String.fromEnvironment(
-      'SUPABASE_SERVICEROLE_KEY',
-    );
+    try {
+      // 1. Use global client singleton
+      final supabase = Supabase.instance.client;
 
-    if (supabaseURL.isEmpty || supabaseAnonKey.isEmpty) {
-      // Fallback default list if Supabase env parameters are not configured during testing
+      // 2. Fetch species list from database
+      final List<dynamic> response = await supabase
+          .from('Fish_Database') // Replace with your actual table name
+          .select('Title');
+
+      if (!mounted) return;
+
+      setState(() {
+        _speciesDictionary = response
+            .map((row) => row['Title'].toString())
+            .toList();
+        _isLoadingSpecies = false;
+      });
+    } catch (e) {
+      debugPrint("Failed to fetch species from Supabase: $e");
+
+      // Fallback to local default array on network/configuration failure
       if (mounted) {
         setState(() {
           _speciesDictionary = [
@@ -270,35 +284,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             'Fantail Goldfish',
             'Plecostomus (Algae Eater)',
           ];
-          _isLoadingSpecies = false;
-        });
-      }
-      return;
-    }
-
-    try {
-      final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
-      // Query fish dictionary table
-      final response = await supabaseClient
-          .from('Fish_Database')
-          .select('Title')
-          .order('Title', ascending: true);
-      print("Fish Dictionary: $response");
-      final List<dynamic> data = response as List<dynamic>;
-      final List<String> fetchedNames = data
-          .map((item) => item['Title'].toString())
-          .toList();
-
-      if (mounted) {
-        setState(() {
-          _speciesDictionary = fetchedNames;
-          _isLoadingSpecies = false;
-        });
-      }
-    } catch (e) {
-      print("Failed to fetch species dictionary from Supabase: $e");
-      if (mounted) {
-        setState(() {
           _isLoadingSpecies = false;
         });
       }
@@ -398,27 +383,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     print("Longitude: $longitude");
     print("Latitude: $latitude");
     print("User ID: $userID");
-    // Writing to Supabase
-    const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
-    const String supabaseAnonKey = String.fromEnvironment(
-      'SUPABASE_SERVICEROLE_KEY',
-    );
 
-    if (supabaseURL.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-      final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
-
-      try {
-        final response = await supabaseClient.from('UserData').insert({
-          'volume': volume,
-          'biomass': totalBiomassKg,
-          'latitude': latitude,
-          'longitude': longitude,
-          'manualpostallocation': manualpostallocation,
-          'userID': userID,
-        });
-      } catch (supabaseError) {
-        print("Supabase write failure: $supabaseError");
+    try {
+      final response = await Supabase.instance.client
+          .from('UserData')
+          .upsert({
+            'volume': volume,
+            'biomass': totalBiomassKg,
+            'latitude': latitude,
+            'longitude': longitude,
+            'manualpostallocation': manualpostallocation,
+            'userID': userID,
+          })
+          .select()
+          .single();
+      final Map<String, dynamic>? closestStations = response['ClosestStations'];
+      if (closestStations != null) {
+        print("Assigned NEA Stations: $closestStations");
+        // 2. Encode the JSON map to a string and persist to SharedPreferences
+        final String jsonString = jsonEncode(closestStations);
+        await prefs.setString('assignedStationsJson', jsonString);
+      } else {
+        print("No assigned stations returned from database.");
       }
+      print("Supabase write success: $response");
+    } catch (supabaseError) {
+      print("Supabase write failure: $supabaseError");
     }
 
     if (!mounted) return;
