@@ -19,17 +19,18 @@ class DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<DashboardView> {
   Timer? _pollingTimer;
   bool _isLoading = true;
+  bool _isFetching = false;
   Map<String, dynamic> _dashboardData = {};
 
   @override
   void initState() {
     super.initState();
     // 1. Initial immediate RPC Fetch
-    _fetchBundledPayload();
+    _fetchBundledPayload(isBackgroundPoll: false);
 
     // 2. Schedule periodic polling loop (every 30 seconds)
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _fetchBundledPayload();
+      _fetchBundledPayload(isBackgroundPoll: true);
     });
   }
 
@@ -40,16 +41,24 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   /// RPC HTTP call to Supabase to fetch bundled dashboard payload
-  Future<void> _fetchBundledPayload() async {
+  Future<void> _fetchBundledPayload({bool isBackgroundPoll = false}) async {
+    if (_isFetching) return;
+    _isFetching = true;
+
+    if (!isBackgroundPoll && mounted) {
+      setState(() => _isLoading = true);
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userid = prefs.getString('userID') ?? '0';
+
       final response = await Supabase.instance.client.rpc(
         'get_bundled_dashboard_payload',
         params: {'p_user_id': userid},
       );
 
-      if (mounted) {
+      if (mounted && response != null) {
         setState(() {
           _dashboardData = Map<String, dynamic>.from(response as Map);
           _isLoading = false;
@@ -62,6 +71,8 @@ class _DashboardViewState extends State<DashboardView> {
           _isLoading = false;
         });
       }
+    } finally {
+      _isFetching = false;
     }
   }
 
@@ -98,10 +109,7 @@ class _DashboardViewState extends State<DashboardView> {
                     ),
                   )
                 : const Icon(Icons.refresh, color: Colors.white70),
-            onPressed: () {
-              setState(() => _isLoading = true);
-              _fetchBundledPayload();
-            },
+            onPressed: () => _fetchBundledPayload(isBackgroundPoll: false),
           ),
         ],
       ),
@@ -112,9 +120,11 @@ class _DashboardViewState extends State<DashboardView> {
           : RefreshIndicator(
               color: Colors.cyanAccent,
               backgroundColor: const Color(0xFF131B2A),
-              onRefresh: _fetchBundledPayload,
+              onRefresh: () => _fetchBundledPayload(isBackgroundPoll: false),
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 8,
@@ -122,29 +132,116 @@ class _DashboardViewState extends State<DashboardView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. TOP PORTION: Central Icon + Orbital Telemetry Bubbles
+                    // =================----------------======================
+                    // MUST SEE 1: TOP PORTION (Central Icon + Telemetry Dials)
+                    // =================----------------======================
                     AtAGlanceWidget(data: _dashboardData['raw_sensor'] ?? {}),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // 2. LOCALIZED REAL-TIME NEA DATA + ADVISORY
+                    // =================----------------======================
+                    // MUST SEE 2: LOCALIZED REAL-TIME NEA DATA + ADVISORY
+                    // =================----------------======================
                     LocalizedNeaWidget(
-                      data: _dashboardData['nea_telemetry'] ?? {},
+                      telemetryData: _dashboardData['nea_telemetry'] ?? {},
+                      forecastData: _dashboardData['nea_forecasts'] ?? {},
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // 3. EXTENDED FORECAST (24H HORIZON + 4-DAY OUTLOOK)
-                    LongTermForecastWidget(
-                      data: _dashboardData['nea_forecasts'] ?? {},
+                    // =================----------------======================
+                    // COLLAPSIBLE 1: EXTENDED WEATHER OUTLOOK
+                    // =================----------------======================
+                    CollapsibleDashboardSection(
+                      title: 'Extended Weather Outlook',
+                      icon: Icons.calendar_today_outlined,
+                      iconColor: Colors.cyanAccent,
+                      initiallyExpanded: false,
+                      child: LongTermForecastWidget(
+                        data: _dashboardData['nea_forecasts'] ?? {},
+                      ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
-                    // 4. SPECIES-SPECIFIC FISH CARE TIPS
-                    FishTipsWidget(data: _dashboardData['fish_tips'] ?? []),
+                    // =================----------------======================
+                    // COLLAPSIBLE 2: SPECIES-SPECIFIC FISH CARE TIPS
+                    // =================----------------======================
+                    CollapsibleDashboardSection(
+                      title: 'Fish Care & Biomass Tips',
+                      icon: Icons.set_meal_outlined,
+                      iconColor: Colors.orangeAccent,
+                      initiallyExpanded: false,
+                      child: FishTipsWidget(
+                        data: _dashboardData['fish_tips'] ?? [],
+                      ),
+                    ),
                     const SizedBox(height: 32),
                   ],
                 ),
               ),
             ),
+    );
+  }
+}
+
+/// Reusable Collapsible Dropdown Card designed for the dark aquatic theme
+class CollapsibleDashboardSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  const CollapsibleDashboardSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF131B2A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Theme(
+        // Remove default ExpansionTile borders and dividers
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.only(bottom: 12),
+          iconColor: Colors.white70,
+          collapsedIconColor: Colors.white38,
+          title: Row(
+            children: [
+              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: child,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
