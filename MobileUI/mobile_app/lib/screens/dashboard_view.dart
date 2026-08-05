@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -13,51 +13,162 @@ class DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<DashboardView> {
   Timer? _pollingTimer;
 
-  final String apiUrl = 'http://192.168.68.66:5000/api/current_status';
-
+  // Raw Sensor Telemetry
   String currentPh = "--";
   String currentTemp = "--";
   String currentTds = "--";
   String currentLux = "--";
+
+  // NEA Microclimate Telemetry
+  String ambientTemp = "--";
+  String ambientRain = "0";
+  String ambientWind = "--";
+
+  // Forecasts & Advisory State
+  String forecast2Hr = "Loading...";
+  String currentUvIndex = "--";
+  Map<String, dynamic> forecast24HrGeneral = {};
+  Map<String, dynamic> forecast24HrRegional = {};
+  List<dynamic> outlook4Day = [];
+
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchCurrentStatus();
+    _fetchDashboardData();
 
     _pollingTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      _fetchCurrentStatus();
+      _fetchDashboardData();
     });
+  }
+
+  Future<void> _fetchDashboardData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int userID = int.tryParse(prefs.getString('userID') ?? '4') ?? 4;
+
+      final Map<String, dynamic> payload = await Supabase.instance.client.rpc(
+        'get_bundled_dashboard_payload',
+        params: {'p_user_id': userID},
+      );
+
+      if (!mounted) return;
+
+      final rawSensor = payload['raw_sensor'] ?? {};
+      final neaTelemetry = payload['nea_telemetry'] ?? {};
+      final neaForecasts = payload['nea_forecasts'] ?? {};
+
+      // Filter UV Index for current day's active hour
+      final List<dynamic> rawUvList = neaForecasts['uv_index'] ?? [];
+      final String todayIsoDate = DateTime.now()
+          .toIso8601String()
+          .split('T')
+          .first;
+
+      String latestUv = "0";
+      for (var item in rawUvList) {
+        final String? hourStr = item['valid_period']?['hour'];
+        if (hourStr != null && hourStr.startsWith(todayIsoDate)) {
+          latestUv = item['data']?['uv']?.toString() ?? latestUv;
+        }
+      }
+
+      setState(() {
+        currentPh = rawSensor['pH'] != null
+            ? (rawSensor['pH'] as num).toStringAsFixed(2)
+            : "--";
+        currentTemp = rawSensor['temp'] != null
+            ? (rawSensor['temp'] as num).toStringAsFixed(1)
+            : "--";
+        currentTds = rawSensor['TDS'] != null
+            ? (rawSensor['TDS'] as num).toStringAsFixed(0)
+            : "--";
+        currentLux = rawSensor['LUX'] != null
+            ? (rawSensor['LUX'] as num).toStringAsFixed(0)
+            : "--";
+
+        ambientTemp = neaTelemetry['air_temp']?['value']?.toString() ?? "--";
+        ambientRain = neaTelemetry['rainfall']?['value']?.toString() ?? "0";
+        ambientWind = neaTelemetry['wind_speed']?['value']?.toString() ?? "--";
+
+        forecast2Hr = neaForecasts['forecast_2hr']?['forecast'] ?? "Clear";
+        forecast24HrRegional = neaForecasts['forecast_24hr']?['regional'] ?? {};
+        forecast24HrGeneral = neaForecasts['forecast_24hr']?['general'] ?? {};
+        currentUvIndex = latestUv;
+        outlook4Day = neaForecasts['outlook_4day'] ?? [];
+
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Dashboard payload error: $e");
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  /// Generates contextual helper advisory notes based on live parameters
+  List<String> _getAdvisoryNotes() {
+    List<String> notes = [];
+
+    // UV Check (Intense if UV >= 6)
+    final int uvVal = int.tryParse(currentUvIndex) ?? 0;
+    if (uvVal >= 6) {
+      notes.add(
+        "Intense UV today! Monitor Algal formation over the coming days.",
+      );
+    }
+
+    // Air Temperature Check (Warm if >= 30°C)
+    final double airT = double.tryParse(ambientTemp) ?? 0.0;
+    if (airT >= 30.0) {
+      notes.add(
+        "Warm Air Temperature today! Account for water temperature rising before feeding!",
+      );
+    }
+
+    // Rainfall / Showers Check
+    final double rainVal = double.tryParse(ambientRain) ?? 0.0;
+    if (rainVal > 0 ||
+        forecast2Hr.toLowerCase().contains('shower') ||
+        forecast2Hr.toLowerCase().contains('rain')) {
+      notes.add(
+        "Rainfall forecasted! Add water hardeners / conduct water change.",
+      );
+    }
+
+    return notes;
   }
 
   void _logFeeding() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        // 1. Initialize our default values for the popup
         DateTime selectedTime = DateTime.now();
         bool isNow = true;
         String selectedVolume = 'Medium';
 
-        // 2. StatefulBuilder allows the UI inside the dialog to update dynamically
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Log Feeding Event'),
+              backgroundColor: const Color(0xFF1E3C45),
+              title: const Text(
+                'Log Feeding Event',
+                style: TextStyle(color: Colors.white),
+              ),
               content: Column(
-                mainAxisSize: MainAxisSize.min, // Keeps the dialog compact
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- TIME SELECTION ---
                   const Text(
                     'When did you feed them?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      // "NOW" Button
                       ChoiceChip(
                         label: const Text('NOW'),
                         selected: isNow,
@@ -71,7 +182,6 @@ class _DashboardViewState extends State<DashboardView> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      // "Custom Time" Button
                       ChoiceChip(
                         label: Text(
                           isNow
@@ -81,7 +191,6 @@ class _DashboardViewState extends State<DashboardView> {
                         selected: !isNow,
                         onSelected: (selected) async {
                           if (selected) {
-                            // Opens the native phone time picker wheel
                             TimeOfDay? picked = await showTimePicker(
                               context: context,
                               initialTime: TimeOfDay.fromDateTime(selectedTime),
@@ -90,7 +199,6 @@ class _DashboardViewState extends State<DashboardView> {
                             if (picked != null) {
                               setDialogState(() {
                                 isNow = false;
-                                // Merge the picked time with today's date
                                 selectedTime = DateTime(
                                   selectedTime.year,
                                   selectedTime.month,
@@ -105,12 +213,13 @@ class _DashboardViewState extends State<DashboardView> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-
-                  // --- VOLUME SELECTION ---
+                  const SizedBox(height: 20),
                   const Text(
                     'Estimated Volume:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
@@ -121,31 +230,34 @@ class _DashboardViewState extends State<DashboardView> {
                     ],
                     selected: {selectedVolume},
                     onSelectionChanged: (Set<String> newSelection) {
-                      setDialogState(() {
-                        selectedVolume = newSelection.first;
-                      });
+                      setDialogState(() => selectedVolume = newSelection.first);
                     },
                   ),
                 ],
               ),
-
-              // --- ACTION BUTTONS ---
               actions: [
                 TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context), // Close without saving
-                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
                 FilledButton(
                   onPressed: () {
-                    Navigator.pop(context); // Close the dialog
-                    _submitFeedingData(
-                      selectedTime,
-                      selectedVolume,
-                    ); // Process the data
+                    Navigator.pop(context);
+                    _submitFeedingData(selectedTime, selectedVolume);
                   },
-                  style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                  child: const Text('Save Log'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E676),
+                  ),
+                  child: const Text(
+                    'Save Log',
+                    style: TextStyle(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -155,22 +267,29 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  // The method that actually handles the data after the user clicks "Save Log"
-  void _submitFeedingData(DateTime time, String volume) {
-    // TODO: Push 'time.toIso8601String()' and 'volume' to your Supabase 'feeding_logs' table
+  Future<void> _submitFeedingData(DateTime time, String volume) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int userID = prefs.getInt('userID') ?? 4;
 
-    print("Feeding logged! Time: $time, Volume: $volume. Updating models...");
+      await Supabase.instance.client.from('feeding_logs').insert({
+        'userID': userID,
+        'fed_at': time.toIso8601String(),
+        'volume': volume,
+      });
 
-    // Show a success message at the bottom of the screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Logged $volume feeding at ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}.',
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logged $volume feeding at ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}.',
+          ),
+          backgroundColor: Colors.teal,
         ),
-        backgroundColor: Colors.teal,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint("Feeding log error: $e");
+    }
   }
 
   @override
@@ -179,44 +298,17 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  Future<void> _fetchCurrentStatus() async {
-    try {
-      final response = await http.get(Uri.parse(apiUrl));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // Update the UI with the fresh data
-        setState(() {
-          currentPh = data['pH'].toString();
-          currentTemp = data['temp'].toString();
-          currentTds = data['TDS'].toString();
-          currentLux = data['LUX'].toString();
-          isLoading = false;
-        });
-        print("Successfully updated sensor data at ${DateTime.now()}");
-      } else {
-        print("Server error: ${response.statusCode}");
-      }
-    } catch (e) {
-      print("Failed to connect to Flask server: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final advisoryNotes = _getAdvisoryNotes();
+
     return Scaffold(
-      // 1. Deep Aquatic Dark Gradient Canvas Background
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F2027), // Deep Navy
-              Color(0xFF203A43), // Lagoon Blue
-              Color(0xFF2C5364), // Soft Teal-Grey
-            ],
+            colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
           ),
         ),
         child: SafeArea(
@@ -229,7 +321,7 @@ class _DashboardViewState extends State<DashboardView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top App Bar / Title Banner
+                // Top Banner
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -255,7 +347,6 @@ class _DashboardViewState extends State<DashboardView> {
                         ),
                       ],
                     ),
-                    // Live Connectivity Badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -288,14 +379,9 @@ class _DashboardViewState extends State<DashboardView> {
                 ),
                 const SizedBox(height: 20),
 
-                // 2. HERO CARD: Master Health Status Overview
-                _buildHeroHealthCard(),
-
-                const SizedBox(height: 24),
-
-                // Section Label
+                // 1. TOP: Raw Sensor Data (Primary Verifiable Accuracy)
                 const Text(
-                  'Telemetry Metrics',
+                  'Water Quality Metrics',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -305,7 +391,6 @@ class _DashboardViewState extends State<DashboardView> {
                 ),
                 const SizedBox(height: 14),
 
-                // 3. Dynamic Sensor Metric Cards Grid
                 if (isLoading)
                   const Padding(
                     padding: EdgeInsets.all(40.0),
@@ -320,7 +405,7 @@ class _DashboardViewState extends State<DashboardView> {
                     crossAxisCount: 2,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.15, // Taller cards for better density
+                    childAspectRatio: 1.15,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 14,
                     children: [
@@ -330,7 +415,7 @@ class _DashboardViewState extends State<DashboardView> {
                         unit: 'pH',
                         status: 'Optimal',
                         icon: Icons.water_drop_rounded,
-                        accentColor: const Color(0xFF00E676), // Emerald
+                        accentColor: const Color(0xFF00E676),
                       ),
                       _buildMetricTile(
                         title: 'Water Temp',
@@ -338,7 +423,7 @@ class _DashboardViewState extends State<DashboardView> {
                         unit: '°C',
                         status: 'Normal',
                         icon: Icons.thermostat_rounded,
-                        accentColor: const Color(0xFFFF9100), // Vibrant Amber
+                        accentColor: const Color(0xFFFF9100),
                       ),
                       _buildMetricTile(
                         title: 'TDS Purity',
@@ -346,7 +431,7 @@ class _DashboardViewState extends State<DashboardView> {
                         unit: 'ppm',
                         status: 'Good',
                         icon: Icons.blur_on_rounded,
-                        accentColor: const Color(0xFF00E5FF), // Cyan
+                        accentColor: const Color(0xFF00E5FF),
                       ),
                       _buildMetricTile(
                         title: 'Sunlight',
@@ -354,18 +439,45 @@ class _DashboardViewState extends State<DashboardView> {
                         unit: 'Lux',
                         status: 'Daylight',
                         icon: Icons.light_mode_rounded,
-                        accentColor: const Color(0xFFFFD600), // Gold
+                        accentColor: const Color(0xFFFFD600),
                       ),
                     ],
                   ),
-                const SizedBox(height: 80), // Padding space for FAB
+
+                const SizedBox(height: 24),
+
+                // 2. NEXT: Immediate Microclimate & Actionable Indicators
+                const Text(
+                  'Current Microclimate & Forecast',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _buildEnvironmentalBanner(),
+                const SizedBox(height: 12),
+                _buildNeaMicroclimateStrip(),
+
+                // Actionable Advisory Notes Box
+                if (advisoryNotes.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _buildAdvisoryNotesCard(advisoryNotes),
+                ],
+
+                const SizedBox(height: 24),
+
+                // 3. AFTER: Longer Term Forecasts (24-Hour & 4-Day Dropdown/ExpansionTile)
+                _buildLongTermForecastsSection(),
+
+                const SizedBox(height: 80),
               ],
             ),
           ),
         ),
       ),
-
-      // 4. Action Button: Floating Action Button with Glass Gradient Style
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _logFeeding,
@@ -379,74 +491,71 @@ class _DashboardViewState extends State<DashboardView> {
             letterSpacing: 0.5,
           ),
         ),
-        backgroundColor: const Color(0xFF00E676), // Bright mint green
+        backgroundColor: const Color(0xFF00E676),
       ),
     );
   }
 
-  /// Master Hero Status Box
-  Widget _buildHeroHealthCard() {
+  /// Environmental Banner (2-Hour Forecast & UV Index)
+  Widget _buildEnvironmentalBanner() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          colors: [
-            Colors.teal.shade700.withOpacity(0.5),
-            Colors.cyan.shade900.withOpacity(0.4),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: Colors.tealAccent.withOpacity(0.3),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
       ),
       child: Row(
         children: [
-          // Circular Status Icon Ring
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.tealAccent.withOpacity(0.15),
-              border: Border.all(color: Colors.tealAccent, width: 2),
-            ),
-            child: const Icon(
-              Icons.verified_user_rounded,
-              color: Colors.tealAccent,
-              size: 32,
-            ),
+          const Icon(
+            Icons.wb_twilight_rounded,
+            color: Colors.amberAccent,
+            size: 30,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
+                const Text(
+                  "2-Hour Forecast",
+                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                ),
+                const SizedBox(height: 2),
                 Text(
-                  "Pond Status: Optimal",
-                  style: TextStyle(
+                  forecast2Hr,
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.purpleAccent.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.purpleAccent.withOpacity(0.4)),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  "UV INDEX",
+                  style: TextStyle(
+                    color: Colors.purpleAccent,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 4),
                 Text(
-                  "All 4 water quality parameters are within safe ranges for Koi health.",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    height: 1.3,
+                  currentUvIndex,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
@@ -457,7 +566,362 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  /// Individual Visual Metric Cards
+  /// Microclimate Strip (Air Temp & Wind Speed)
+  Widget _buildNeaMicroclimateStrip() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildMiniStatTile(
+            "Air Temp",
+            "$ambientTemp°C",
+            Icons.air_rounded,
+            const Color(0xFF00E5FF),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildMiniStatTile(
+            "Rainfall Rate",
+            "${ambientRain}mm",
+            Icons.umbrella_rounded,
+            const Color(0xFF29B6F6),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildMiniStatTile(
+            "Wind Speed",
+            "$ambientWind kn",
+            Icons.waves_rounded,
+            const Color(0xFFAB47BC),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniStatTile(
+    String label,
+    String val,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 6),
+          Text(
+            val,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Dynamic Helper Notes Advisory Box
+  Widget _buildAdvisoryNotesCard(List<String> notes) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(
+                Icons.lightbulb_outline_rounded,
+                color: Colors.amberAccent,
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text(
+                "Ecosystem Advisories",
+                style: TextStyle(
+                  color: Colors.amberAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...notes.map(
+            (note) => Padding(
+              padding: const EdgeInsets.only(bottom: 6.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "• ",
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      note,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ExpansionTile Dropdown for Long-Term Forecasts (24-Hour featured + 4-Day mini cards)
+  Widget _buildLongTermForecastsSection() {
+    final tempMap = forecast24HrGeneral['temperature'] ?? {};
+    final windMap = forecast24HrGeneral['wind'] ?? {};
+    final humMap = forecast24HrGeneral['relativeHumidity'] ?? {};
+    final periodMap = forecast24HrGeneral['validPeriod'] ?? {};
+    final forecastText =
+        forecast24HrGeneral['forecast']?['text'] ??
+        "Detailed 24-Hour Forecast Unavailable";
+
+    final num tempLow = tempMap['low'] ?? 24;
+    final num tempHigh = tempMap['high'] ?? 33;
+    final num humLow = humMap['low'] ?? 50;
+    final num humHigh = humMap['high'] ?? 90;
+    final String windDir = windMap['direction'] ?? 'Var';
+    final num windLow = windMap['speed']?['low'] ?? 10;
+    final num windHigh = windMap['speed']?['high'] ?? 20;
+    final String validPeriodText = periodMap['text'] ?? 'Next 24 Hours';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: ExpansionTile(
+        title: const Text(
+          "Extended Weather Forecasts",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        subtitle: const Text(
+          "Tap to view 24-Hour details & 4-Day outlook",
+          style: TextStyle(color: Colors.white60, fontSize: 12),
+        ),
+        iconColor: Colors.tealAccent,
+        collapsedIconColor: Colors.white60,
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 8),
+
+          // Huge Today 24-Hour Featured Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.teal.shade800.withOpacity(0.6),
+                  Colors.cyan.shade900.withOpacity(0.5),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.tealAccent.withOpacity(0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "24 Hour Outlook",
+                        overflow: TextOverflow
+                            .ellipsis, // Gracefully truncates if too long
+                        maxLines: 1,
+                      ),
+                    ),
+                    Text(
+                      validPeriodText,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  forecastText,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _forecastDetailBadge(
+                      Icons.thermostat,
+                      "Temp",
+                      "$tempLow° - $tempHigh°C",
+                    ),
+                    _forecastDetailBadge(
+                      Icons.water_drop,
+                      "Humidity",
+                      "$humLow% - $humHigh%",
+                    ),
+                    _forecastDetailBadge(
+                      Icons.air,
+                      "Wind",
+                      "$windDir $windLow-$windHigh km/h",
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              "4-Day Outlook",
+              style: TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Next 3 Days Mini Cards Grid / Row
+          if (outlook4Day.isNotEmpty)
+            SizedBox(
+              height: 105,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: outlook4Day.length,
+                itemBuilder: (context, index) {
+                  final item = outlook4Day[index];
+                  final String dayStr =
+                      item['data']?['day'] ?? item['slot_id'] ?? '';
+                  final String text =
+                      item['data']?['forecast']?['text'] ?? 'Fair';
+                  final num low = item['data']?['temperature']?['low'] ?? 25;
+                  final num high = item['data']?['temperature']?['high'] ?? 32;
+
+                  return Container(
+                    width: 105,
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dayStr,
+                          style: const TextStyle(
+                            color: Colors.tealAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          text,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          "$low° - $high°C",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _forecastDetailBadge(IconData icon, String label, String val) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.tealAccent, size: 16),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 9),
+            ),
+            Text(
+              val,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildMetricTile({
     required String title,
     required String value,
@@ -469,7 +933,6 @@ class _DashboardViewState extends State<DashboardView> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        // Translucent "Glassmorphism" panel effect
         color: Colors.white.withOpacity(0.07),
         border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
         boxShadow: [
@@ -488,7 +951,6 @@ class _DashboardViewState extends State<DashboardView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Tile Header: Icon & Category Title
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -500,7 +962,6 @@ class _DashboardViewState extends State<DashboardView> {
                     ),
                     child: Icon(icon, color: accentColor, size: 20),
                   ),
-                  // Status Pill Badge
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -521,8 +982,6 @@ class _DashboardViewState extends State<DashboardView> {
                   ),
                 ],
               ),
-
-              // Title Label
               Text(
                 title,
                 style: const TextStyle(
@@ -531,8 +990,6 @@ class _DashboardViewState extends State<DashboardView> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-
-              // Tile Main Value Output
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
@@ -541,7 +998,7 @@ class _DashboardViewState extends State<DashboardView> {
                     value,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
                     ),
@@ -551,7 +1008,7 @@ class _DashboardViewState extends State<DashboardView> {
                     unit,
                     style: TextStyle(
                       color: accentColor,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

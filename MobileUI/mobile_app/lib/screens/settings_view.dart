@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase/supabase.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
 
 class SettingsView extends StatefulWidget {
@@ -70,17 +70,14 @@ class _SettingsViewState extends State<SettingsView> {
     // Implement the logic to delete pond data here
     // This could involve clearing shared preferences, database entries, etc.
     final prefs = await SharedPreferences.getInstance();
-    final int userid = prefs.getInt('userId') ?? 0;
+    final String userid = prefs.getString('userID') ?? '0';
+    final int userIDInt = int.parse(userid);
+    prefs.setBool('isOnboarded', false);
     print('Deleting pond data for user ID: $userid');
-    const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
-    const String supabaseAnonKey = String.fromEnvironment(
-      'SUPABASE_SERVICEROLE_KEY',
-    );
-    final supabaseClient = SupabaseClient(supabaseURL, supabaseAnonKey);
-    await supabaseClient
+    await Supabase.instance.client
         .from('UserData')
         .delete()
-        .eq('userID', userid); // Example for Supabase
+        .eq('userID', userIDInt); // Example for Supabase
     print('Pond data deleted'); // Placeholder for actual deletion logic
     Navigator.pushReplacement(
       context,
