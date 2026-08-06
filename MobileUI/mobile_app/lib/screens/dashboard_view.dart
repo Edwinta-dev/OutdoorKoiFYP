@@ -4,10 +4,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../widgets/dashboard/at_a_glance_widget.dart';
-import '../widgets/dashboard/localized_nea_widget.dart';
-import '../widgets/dashboard/long_term_forecast_widget.dart';
-import '../widgets/dashboard/fish_tips_widget.dart';
+
+import '../widgets/dashboard/temperature_outcome_card.dart';
+import '../widgets/dashboard/solar_outcome_card.dart';
+import '../widgets/dashboard/ph_outcome_card.dart';
+import '../widgets/dashboard/four_day_outlook_card.dart';
+import 'detail_graph_screen.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -76,6 +78,17 @@ class _DashboardViewState extends State<DashboardView> {
     }
   }
 
+  /// Navigates to the Dynamic Detailed Graph Page for a specific metric
+  void _navigateToDetailGraph(String metricType, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            DetailGraphScreen(metricType: metricType, title: title),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,7 +101,7 @@ class _DashboardViewState extends State<DashboardView> {
             Icon(Icons.water_drop_outlined, color: Colors.cyanAccent),
             SizedBox(width: 8),
             Text(
-              'Dashboard Center',
+              'Pond Command Center',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -132,116 +145,48 @@ class _DashboardViewState extends State<DashboardView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // =================----------------======================
-                    // MUST SEE 1: TOP PORTION (Central Icon + Telemetry Dials)
-                    // =================----------------======================
-                    AtAGlanceWidget(data: _dashboardData['raw_sensor'] ?? {}),
-                    const SizedBox(height: 20),
-
-                    // =================----------------======================
-                    // MUST SEE 2: LOCALIZED REAL-TIME NEA DATA + ADVISORY
-                    // =================----------------======================
-                    LocalizedNeaWidget(
+                    // 1. TEMPERATURE & METABOLIC CARD
+                    TemperatureOutcomeCard(
+                      sensorData: _dashboardData['raw_sensor'] ?? {},
                       telemetryData: _dashboardData['nea_telemetry'] ?? {},
                       forecastData: _dashboardData['nea_forecasts'] ?? {},
-                    ),
-                    const SizedBox(height: 20),
-
-                    // =================----------------======================
-                    // COLLAPSIBLE 1: EXTENDED WEATHER OUTLOOK
-                    // =================----------------======================
-                    CollapsibleDashboardSection(
-                      title: 'Extended Weather Outlook',
-                      icon: Icons.calendar_today_outlined,
-                      iconColor: Colors.cyanAccent,
-                      initiallyExpanded: false,
-                      child: LongTermForecastWidget(
-                        data: _dashboardData['nea_forecasts'] ?? {},
+                      onTap: () => _navigateToDetailGraph(
+                        'temperature',
+                        'Water Temperature Analytics',
                       ),
                     ),
                     const SizedBox(height: 16),
 
-                    // =================----------------======================
-                    // COLLAPSIBLE 2: SPECIES-SPECIFIC FISH CARE TIPS
-                    // =================----------------======================
-                    CollapsibleDashboardSection(
-                      title: 'Fish Care & Biomass Tips',
-                      icon: Icons.set_meal_outlined,
-                      iconColor: Colors.orangeAccent,
-                      initiallyExpanded: false,
-                      child: FishTipsWidget(
-                        data: _dashboardData['fish_tips'] ?? [],
+                    // 2. pH STABILITY & ACID CRASH CARD
+                    PhOutcomeCard(
+                      sensorData: _dashboardData['raw_sensor'] ?? {},
+                      forecastData: _dashboardData['nea_forecasts'] ?? {},
+                      phTelemetry: _dashboardData['pH_telemetry'] ?? {},
+                      onTap: () =>
+                          _navigateToDetailGraph('ph', 'pH & Buffer Stability'),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 3. SOLAR RADIATION & ALGAE BLOOM CARD
+                    SolarOutcomeCard(
+                      sensorData: _dashboardData['raw_sensor'] ?? {},
+                      forecastData: _dashboardData['nea_forecasts'] ?? {},
+                      onTap: () => _navigateToDetailGraph(
+                        'lux',
+                        'Solar & Algae Risk Analysis',
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
+
+                    // 4. 4-DAY EXTENDED FORECAST OUTLOOK CARD
+                    FourDayOutlookCard(
+                      forecastData: _dashboardData['nea_forecasts'] ?? {},
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
             ),
-    );
-  }
-}
-
-/// Reusable Collapsible Dropdown Card designed for the dark aquatic theme
-class CollapsibleDashboardSection extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color iconColor;
-  final Widget child;
-  final bool initiallyExpanded;
-
-  const CollapsibleDashboardSection({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.iconColor,
-    required this.child,
-    this.initiallyExpanded = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Theme(
-        // Remove default ExpansionTile borders and dividers
-        data: Theme.of(context).copyWith(
-          dividerColor: Colors.transparent,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          childrenPadding: const EdgeInsets.only(bottom: 12),
-          iconColor: Colors.white70,
-          collapsedIconColor: Colors.white38,
-          title: Row(
-            children: [
-              Icon(icon, color: iconColor, size: 18),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: child,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
