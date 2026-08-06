@@ -101,7 +101,7 @@ class _DashboardViewState extends State<DashboardView> {
             Icon(Icons.water_drop_outlined, color: Colors.cyanAccent),
             SizedBox(width: 8),
             Text(
-              'Pond Command Center',
+              'Pond Dashboard Center',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 18,

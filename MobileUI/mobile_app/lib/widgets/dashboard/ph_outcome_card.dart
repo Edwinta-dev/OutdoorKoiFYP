@@ -66,7 +66,7 @@ class PhOutcomeCard extends StatelessWidget {
                     ),
                     SizedBox(width: 8),
                     Text(
-                      'pH Stability & Acid Crash Guard',
+                      'Water Quality',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

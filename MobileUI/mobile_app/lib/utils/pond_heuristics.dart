@@ -34,9 +34,9 @@ class PondHeuristics {
     final aTemp = double.tryParse(airTemp.toString()) ?? 30.0;
 
     if (wTemp >= 30.0 || aTemp >= 33.0) {
-      return 'High temperatures reduce dissolved oxygen and spike metabolic waste. Consider reducing feed quantity.';
+      return 'High temperatures! Consider reducing feed quantity and providing shade.';
     } else if (wTemp < 20.0) {
-      return 'Low water temperature detected. Fish metabolic rate is sluggish; feed sparingly.';
+      return 'Low water temperature! Feed sparingly.';
     }
     return null; // Normal conditions
   }
@@ -50,11 +50,10 @@ class PondHeuristics {
   }) {
     final phVal = double.tryParse(ph.toString()) ?? 7.2;
     final tdsVal = double.tryParse(tds.toString()) ?? 180;
-    final rainIncoming =
-        isRainForecast(forecast2hr) || isRainForecast(forecast24hr);
+    final rainIncoming = isRainForecast(forecast2hr);
 
     if (rainIncoming && (phVal < 7.2 || tdsVal < 150)) {
-      return 'Rainfall forecast detected with low TDS/pH buffer. High risk of pH acid crash. Add KH buffer or Calcium hardener.';
+      return 'Risk of pH acid crash from rain! Consider adding KH buffer or Calcium hardener.';
     } else if (phVal < 6.8) {
       return 'Critically acidic water! Immediate partial water change or buffer addition required.';
     }
@@ -71,8 +70,8 @@ class PondHeuristics {
     final uvVal = int.tryParse(uvIndex.toString()) ?? 0;
     final isFair = isFairForecast(forecast2hr);
 
-    if ((luxVal > 800 || uvVal >= 8) && isFair) {
-      return 'Strong solar radiation & UV forecast. Expect rapid diurnal pH shifts from photosynthesis. Monitor algae bloom risk.';
+    if (luxVal > 15000 || uvVal >= 8 || isFair) {
+      return 'Strong solar radiation! Monitor algae bloom risk.';
     }
     return null;
   }

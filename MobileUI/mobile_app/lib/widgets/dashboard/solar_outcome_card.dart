@@ -130,7 +130,7 @@ class SolarOutcomeCard extends StatelessWidget {
                     Icon(Icons.wb_sunny_outlined, color: kLuxColor, size: 18),
                     SizedBox(width: 8),
                     Text(
-                      'Light & Algae Bloom Index',
+                      'Algal Monitor',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

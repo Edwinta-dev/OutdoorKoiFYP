@@ -148,7 +148,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                     ),
                     SizedBox(width: 8),
                     Text(
-                      'Temperature & Metabolic State',
+                      'Temperature and Feed Monitor',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
