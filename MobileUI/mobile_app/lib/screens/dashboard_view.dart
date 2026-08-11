@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../utils/pond_heuristics.dart';
 import '../widgets/dashboard/temperature_outcome_card.dart';
 import '../widgets/dashboard/solar_outcome_card.dart';
 import '../widgets/dashboard/ph_outcome_card.dart';
@@ -89,8 +89,39 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
+  /// Safely parses raw RPC JSON list into strongly-typed PondSample objects
+  List<PondSample> _parseTelemetryHistory(dynamic rawList) {
+    if (rawList is! List) return [];
+
+    final List<PondSample> samples = [];
+    for (final item in rawList) {
+      if (item is! Map) continue;
+      try {
+        final timeStr = item['time']?.toString();
+        if (timeStr == null) continue;
+
+        samples.add(
+          PondSample(
+            DateTime.parse(timeStr).toLocal(),
+            double.tryParse(item['ph']?.toString() ?? '') ?? 7.4,
+            double.tryParse(item['tds']?.toString() ?? '') ?? 180.0,
+            double.tryParse(item['tempC']?.toString() ?? '') ?? 26.0,
+            double.tryParse(item['lux']?.toString() ?? '') ?? 500.0,
+          ),
+        );
+      } catch (_) {
+        // Skip malformed timestamp rows without crashing UI
+        continue;
+      }
+    }
+    return samples;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final List<PondSample> telemetryHistory = _parseTelemetryHistory(
+      _dashboardData['telemetry_history'],
+    );
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E17), // Deep Dark Aquatic Theme
       appBar: AppBar(
@@ -154,6 +185,8 @@ class _DashboardViewState extends State<DashboardView> {
                         'temperature',
                         'Water Temperature Analytics',
                       ),
+                      targetMinTemp: 15,
+                      targetMaxTemp: 33,
                     ),
                     const SizedBox(height: 16),
 
@@ -161,7 +194,7 @@ class _DashboardViewState extends State<DashboardView> {
                     PhOutcomeCard(
                       sensorData: _dashboardData['raw_sensor'] ?? {},
                       forecastData: _dashboardData['nea_forecasts'] ?? {},
-                      phTelemetry: _dashboardData['pH_telemetry'] ?? {},
+                      telemetryHistory: telemetryHistory,
                       onTap: () =>
                           _navigateToDetailGraph('ph', 'pH & Buffer Stability'),
                     ),
