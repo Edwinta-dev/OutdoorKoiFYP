@@ -8,8 +8,9 @@ import '../utils/pond_heuristics.dart';
 import '../widgets/dashboard/temperature_outcome_card.dart';
 import '../widgets/dashboard/solar_outcome_card.dart';
 import '../widgets/dashboard/ph_outcome_card.dart';
-import '../widgets/dashboard/four_day_outlook_card.dart';
 import 'detail_graph_screen.dart';
+import '../widgets/dashboard/nea_weather_ribbon.dart';
+import '../widgets/modals/nea_full_forecast_modal.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -122,6 +123,10 @@ class _DashboardViewState extends State<DashboardView> {
     final List<PondSample> telemetryHistory = _parseTelemetryHistory(
       _dashboardData['telemetry_history'],
     );
+    final Map<String, dynamic> forecastData =
+        _dashboardData['nea_forecasts'] ?? {};
+    final Map<String, dynamic> telemetryData =
+        _dashboardData['nea_telemetry'] ?? {};
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E17), // Deep Dark Aquatic Theme
       appBar: AppBar(
@@ -129,7 +134,11 @@ class _DashboardViewState extends State<DashboardView> {
         elevation: 0,
         title: const Row(
           children: [
-            Icon(Icons.water_drop_outlined, color: Colors.cyanAccent),
+            Image(
+              image: AssetImage('lib/assets/koi_icon.png'),
+              width: 32,
+              height: 32,
+            ),
             SizedBox(width: 8),
             Text(
               'Pond Dashboard Center',
@@ -176,6 +185,13 @@ class _DashboardViewState extends State<DashboardView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    NeaWeatherRibbon(
+                      forecastData: forecastData,
+                      telemetryData: telemetryData,
+                      onOpenFullForecast: () =>
+                          showNeaFullForecastModal(context, forecastData),
+                    ),
+                    const SizedBox(height: 12),
                     // 1. TEMPERATURE & METABOLIC CARD
                     TemperatureOutcomeCard(
                       sensorData: _dashboardData['raw_sensor'] ?? {},
@@ -188,7 +204,7 @@ class _DashboardViewState extends State<DashboardView> {
                       targetMinTemp: 15,
                       targetMaxTemp: 33,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
                     // 2. pH STABILITY & ACID CRASH CARD
                     PhOutcomeCard(
@@ -198,7 +214,7 @@ class _DashboardViewState extends State<DashboardView> {
                       onTap: () =>
                           _navigateToDetailGraph('ph', 'pH & Buffer Stability'),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
                     // 3. SOLAR RADIATION & ALGAE BLOOM CARD
                     SolarOutcomeCard(
@@ -209,13 +225,7 @@ class _DashboardViewState extends State<DashboardView> {
                         'Solar & Algae Risk Analysis',
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // 4. 4-DAY EXTENDED FORECAST OUTLOOK CARD
-                    FourDayOutlookCard(
-                      forecastData: _dashboardData['nea_forecasts'] ?? {},
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),

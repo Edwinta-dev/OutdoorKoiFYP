@@ -42,11 +42,8 @@ class PondHeuristics {
   ];
 
   /// Keywords indicating fair, warm, or clear sky conditions
-  static const List<String> fairKeywords = [
+  static const List<String> hotKeywords = [
     'fair and warm',
-    'fair (day)',
-    'fair (night)',
-    'fair',
     'clear',
     'sunny',
     'warm',
@@ -77,7 +74,7 @@ class PondHeuristics {
 
   static bool isFairForecast(String forecast) {
     final lower = forecast.toLowerCase();
-    return fairKeywords.any((k) => lower.contains(k));
+    return hotKeywords.any((k) => lower.contains(k));
   }
 
   static bool _isRainIncoming(String forecast2hr, dynamic rainfallMm) {

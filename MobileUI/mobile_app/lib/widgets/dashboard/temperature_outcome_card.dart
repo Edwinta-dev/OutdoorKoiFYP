@@ -91,9 +91,19 @@ class TemperatureOutcomeCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF131B2A),
+          color: const Color(0xFF1A1F26),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(
+            color: synchronizedColor.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: synchronizedColor.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,8 +149,8 @@ class TemperatureOutcomeCard extends StatelessWidget {
                   children: [
                     Text(
                       waterTempStr,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: synchronizedColor.withValues(alpha: 0.8),
                         fontSize: 36,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,

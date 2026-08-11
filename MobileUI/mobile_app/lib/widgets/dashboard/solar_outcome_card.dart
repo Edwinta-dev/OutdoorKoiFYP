@@ -1,11 +1,7 @@
 // lib/widgets/dashboard/solar_outcome_card.dart
 
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../utils/pond_heuristics.dart';
-
-const Color kLuxColor = Color(0xFFFF8A65); // Soft Coral
-const Color kUvColor = Colors.amberAccent;
 
 class SolarOutcomeCard extends StatelessWidget {
   final Map<String, dynamic> sensorData;
@@ -19,94 +15,31 @@ class SolarOutcomeCard extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Maps the exact 2-hour NEA status string to its corresponding asset path
-  String _getWeatherAssetPath(String status) {
-    // Standard map for precise asset matching
-    const Map<String, String> statusAssetMap = {
-      'Fair': 'lib/assets/fair.png',
-      'Fair (Day)': 'lib/assets/fair_day.png',
-      'Fair (Night)': 'lib/assets/fair_night.png',
-      'Fair and Warm': 'lib/assets/fair_and_warm.png',
-      'Partly Cloudy': 'lib/assets/partly_cloudy.png',
-      'Partly Cloudy (Day)': 'lib/assets/partly_cloudy_day.png',
-      'Partly Cloudy (Night)': 'lib/assets/partly_cloudy_night.png',
-      'Cloudy': 'lib/assets/cloudy.png',
-      'Hazy': 'lib/assets/hazy.png',
-      'Slightly Hazy': 'lib/assets/slightly_hazy.png',
-      'Windy': 'lib/assets/windy.png',
-      'Mist': 'lib/assets/mist.png',
-      'Fog': 'lib/assets/fog.png',
-      'Light Rain': 'lib/assets/light_rain.png',
-      'Moderate Rain': 'lib/assets/moderate_rain.png',
-      'Heavy Rain': 'lib/assets/heavy_rain.png',
-      'Passing Showers': 'lib/assets/passing_showers.png',
-      'Light Showers': 'lib/assets/light_showers.png',
-      'Showers': 'lib/assets/showers.png',
-      'Heavy Showers': 'lib/assets/heavy_showers.png',
-      'Thundery Showers': 'lib/assets/thundery_showers.png',
-      'Heavy Thundery Showers': 'lib/assets/heavy_thundery_showers.png',
-      'Heavy Thundery Showers with Gusty Winds':
-          'lib/assets/heavy_thundery_showers_with_gusty_winds.png',
-    };
-
-    if (statusAssetMap.containsKey(status)) {
-      return statusAssetMap[status]!;
-    }
-
-    // Dynamic fallback transformation for unmapped edge-case strings
-    final sanitized = status
-        .toLowerCase()
-        .replaceAll('(', '')
-        .replaceAll(')', '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '_');
-
-    return 'lib/assets/$sanitized.png';
-  }
-
-  /// Combines LUX (0–1000 lx) and UV Index (0–12) into a 0.0–1.0 dial sweep ratio
-  double _calculateSolarExposureProgress(num lux, num uv) {
-    final double normalizedLux = (lux / 1000.0).clamp(0.0, 1.0);
-    final double normalizedUv = (uv / 12.0).clamp(0.0, 1.0);
-
-    // Weighted index: 60% LUX intensity + 40% UV Index radiation
-    final double combinedIndex = (normalizedLux * 0.60) + (normalizedUv * 0.40);
-    return combinedIndex.clamp(0.08, 1.0);
-  }
-
   @override
   Widget build(BuildContext context) {
-    // 1. Raw Lux Reading
-    final rawLux = sensorData['LUX'] ?? 680;
-    final num luxNum = num.tryParse(rawLux.toString()) ?? 680;
-
-    // 2. UV Index (Safely parsed)
-    final uvObj = forecastData['uv_index'] ?? forecastData['uv'];
-    final dynamic rawUv = (uvObj is Map)
-        ? (uvObj['data'] is Map ? uvObj['data']['uv'] : uvObj['uv'])
-        : 0;
-    final num uvNum = num.tryParse(rawUv.toString()) ?? 0;
-
-    // 3. 2-Hour Forecast Status String
+    // 1. Extract LUX & NEA Forecast Data
+    final double luxNum =
+        double.tryParse(sensorData['LUX']?.toString() ?? '500') ?? 500.0;
     final String forecast2hr =
+        forecastData['two_hr_forecast']?.toString() ??
         forecastData['forecast_2hr']?['forecast']?.toString() ??
-        'Partly Cloudy';
+        'Fair';
+    final int uvNum =
+        int.tryParse(
+          forecastData['uv_index']?['data']?['uv']?.toString() ?? '4',
+        ) ??
+        4;
 
-    // 4. Resolve exact asset PNG path
-    final String assetPath = _getWeatherAssetPath(forecast2hr);
+    // 2. Determine if Solar/Algae Alert Should Be Triggered
+    final bool isFairSky = PondHeuristics.isFairForecast(forecast2hr);
+    final bool isHighUvOrSun = (uvNum >= 6 && isFairSky) || luxNum > 15000;
 
-    // 5. Combined Solar Arc Progress Ratio
-    final double exposureProgress = _calculateSolarExposureProgress(
-      luxNum,
-      uvNum,
-    );
+    // 3. Colors & Progress
+    const Color kLuxColor = Color(0xFF50C878); // Bright aquatic cyan
+    const Color kWarningAmber = Colors.amberAccent;
+    final double exposureProgress = (luxNum / 30000.0).clamp(0.0, 1.0);
 
-    // 6. Heuristic Advisory
-    final advisory = PondHeuristics.getSolarAdvisory(
-      lux: luxNum,
-      uvIndex: uvNum,
-      forecast2hr: forecast2hr,
-    );
+    final Color statusColor = isHighUvOrSun ? kWarningAmber : kLuxColor;
 
     return InkWell(
       onTap: onTap,
@@ -114,9 +47,19 @@ class SolarOutcomeCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF131B2A),
+          color: const Color(0xFF1A1F26),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(
+            color: statusColor.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: statusColor.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,12 +68,12 @@ class SolarOutcomeCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.wb_sunny_outlined, color: kLuxColor, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'Algal Monitor',
+                    Icon(Icons.wb_sunny_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Algal & Solar Monitor',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -151,33 +94,29 @@ class SolarOutcomeCard extends StatelessWidget {
             // --- 2. MAIN DIAL + DATA PANEL (LEFT/RIGHT SPLIT) ---
             Row(
               children: [
-                // LEFT SIDE: Open Arc Circular Dial with Central PNG Asset
+                // LEFT SIDE: Circular Arc Progress Dial
                 SizedBox(
                   width: 96,
                   height: 96,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Circular Arc Progress Painter
                       CustomPaint(
                         size: const Size(96, 96),
-                        painter: MutedArcPainter(
+                        painter: _MutedArcPainter(
                           progress: exposureProgress,
-                          strokeColor: kLuxColor,
+                          strokeColor: isHighUvOrSun
+                              ? kWarningAmber
+                              : kLuxColor,
                         ),
                       ),
 
-                      // Center Weather Graphic Image with Fallback Vector Icon
+                      // Custom Self-Sourced Asset (Algae / Biological icon)
                       Image.asset(
-                        assetPath,
-                        width: 52,
-                        height: 52,
+                        'lib/assets/seaweed.png', // Dedicated ecosystem asset
+                        width: 48,
+                        height: 48,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Icon(
-                          _getFallbackVectorIcon(forecast2hr),
-                          color: Colors.white70,
-                          size: 38,
-                        ),
                       ),
                     ],
                   ),
@@ -189,15 +128,15 @@ class SolarOutcomeCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Ambient Lux Reading
+                      // Ambient Lux Reading (Always Shown)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '$luxNum',
-                            style: const TextStyle(
-                              color: kLuxColor,
+                            luxNum.toStringAsFixed(0),
+                            style: TextStyle(
+                              color: isHighUvOrSun ? kWarningAmber : kLuxColor,
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
                               letterSpacing: -0.5,
@@ -213,142 +152,133 @@ class SolarOutcomeCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
 
-                      // UV Index Row
-                      Row(
-                        children: [
-                          const Icon(Icons.wb_sunny, color: kUvColor, size: 14),
-                          const SizedBox(width: 6),
-                          Text(
-                            'UV Index: $uvNum',
-                            style: const TextStyle(
-                              color: kUvColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                      // --- 3. CONDITIONAL ALERT-BY-EXCEPTION ROW ---
+                      if (isHighUvOrSun) ...[
+                        // Displays ONLY when sunlight/UV is strong enough to accelerate algae
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kWarningAmber.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: kWarningAmber.withOpacity(0.4),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-
-                      // 2-Hour Forecast Status Text
-                      Text(
-                        'Sky: $forecast2hr',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                color: kWarningAmber,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  'UV $uvNum • $forecast2hr • Algal Risk',
+                                  style: const TextStyle(
+                                    color: kWarningAmber,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      ] else ...[
+                        // Normal Baseline View (No UV/Forecast redundancy)
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF50C878), // Healthy green dot
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Algal Photosynthesis Stable',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'No intense UV bloom factors',
+                          style: TextStyle(color: Colors.white38, fontSize: 10),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
-
-            // --- 3. ADVISORY BANNER (If Triggered) ---
-            if (advisory != null) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.amberAccent,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        advisory,
-                        style: const TextStyle(
-                          color: Colors.amberAccent,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
-
-  /// Backup vector icon in case a specific PNG asset file is missing from local disk
-  IconData _getFallbackVectorIcon(String forecastText) {
-    final lower = forecastText.toLowerCase();
-    if (lower.contains('thunder')) {
-      return Icons.thunderstorm_outlined;
-    } else if (lower.contains('rain') || lower.contains('shower')) {
-      return Icons.grain_outlined;
-    } else if (lower.contains('fair') || lower.contains('sunny')) {
-      if (lower.contains('night')) return Icons.brightness_3_outlined;
-      return Icons.wb_sunny_outlined;
-    } else if (lower.contains('wind')) {
-      return Icons.air;
-    } else if (lower.contains('hazy') ||
-        lower.contains('mist') ||
-        lower.contains('fog')) {
-      return Icons.cloud_queue_outlined;
-    }
-    return Icons.wb_cloudy_outlined;
-  }
 }
 
-/// CustomPainter rendering a 285° clean stroke arc with a 75° open gap at the bottom
-class MutedArcPainter extends CustomPainter {
+/// Simple open-arc progress painter
+class _MutedArcPainter extends CustomPainter {
   final double progress;
   final Color strokeColor;
 
-  MutedArcPainter({required this.progress, required this.strokeColor});
+  _MutedArcPainter({required this.progress, required this.strokeColor});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - 8) / 2;
+    const startAngle = 2.4; // Open bottom arc
+    const sweepAngle = 4.6;
 
-    const gapAngleDegrees = 75.0;
-    const gapAngleRadians = gapAngleDegrees * (math.pi / 180);
-
-    const startAngle = (math.pi / 2) + (gapAngleRadians / 2);
-    final totalSweepAngle = (2 * math.pi) - gapAngleRadians;
-    final activeSweepAngle = totalSweepAngle * progress.clamp(0.08, 1.0);
-
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    // Track Paint
-    final trackPaint = Paint()
-      ..color = Colors.white.withOpacity(0.10)
+    final bgPaint = Paint()
+      ..color = Colors.white.withOpacity(0.08)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0
+      ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawArc(rect, startAngle, totalSweepAngle, false, trackPaint);
-
-    // Progress Fill Arc Paint
-    final fillPaint = Paint()
+    final activePaint = Paint()
       ..color = strokeColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.5
+      ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawArc(rect, startAngle, activeSweepAngle, false, fillPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      bgPaint,
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle * progress,
+      false,
+      activePaint,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant MutedArcPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.strokeColor != strokeColor;
-  }
+  bool shouldRepaint(covariant _MutedArcPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.strokeColor != strokeColor;
 }

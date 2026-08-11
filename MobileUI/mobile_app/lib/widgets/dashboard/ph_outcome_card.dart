@@ -61,10 +61,13 @@ class PhOutcomeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1F26),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: statusColor.withOpacity(0.4), width: 1.5),
+          border: Border.all(
+            color: statusColor.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: statusColor.withOpacity(0.08),
+              color: statusColor.withValues(alpha: 0.25),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
