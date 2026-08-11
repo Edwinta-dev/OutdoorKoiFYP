@@ -39,57 +39,22 @@ class SolarOutcomeCard extends StatelessWidget {
     const Color kWarningAmber = Colors.amberAccent;
     final double exposureProgress = (luxNum / 30000.0).clamp(0.0, 1.0);
 
-    final Color statusColor = isHighUvOrSun ? kWarningAmber : kLuxColor;
-
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1F26),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: statusColor.withValues(alpha: 0.4),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        // 1. REMOVE color: const Color(0xFF131B2A)
+        // 2. REMOVE border: Border.all(...)
+        // 3. REMOVE boxShadow: [...]
+        decoration: const BoxDecoration(
+          color:
+              Colors.transparent, // Lets the HUD parent container show through!
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- 1. CARD HEADER ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.wb_sunny_outlined, size: 18),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Algal & Solar Monitor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.white.withOpacity(0.3),
-                  size: 18,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             // --- 2. MAIN DIAL + DATA PANEL (LEFT/RIGHT SPLIT) ---
             Row(

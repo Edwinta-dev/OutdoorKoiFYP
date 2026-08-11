@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/pond_heuristics.dart';
+import '../widgets/dashboard/nea_weather_ribbon.dart';
 import '../widgets/dashboard/temperature_outcome_card.dart';
 import '../widgets/dashboard/solar_outcome_card.dart';
 import '../widgets/dashboard/ph_outcome_card.dart';
-import 'detail_graph_screen.dart';
-import '../widgets/dashboard/nea_weather_ribbon.dart';
 import '../widgets/modals/nea_full_forecast_modal.dart';
+import 'detail_graph_screen.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -28,10 +28,7 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
-    // 1. Initial immediate RPC Fetch
     _fetchBundledPayload(isBackgroundPoll: false);
-
-    // 2. Schedule periodic polling loop (every 30 seconds)
     _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _fetchBundledPayload(isBackgroundPoll: true);
     });
@@ -43,7 +40,6 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  /// RPC HTTP call to Supabase to fetch bundled dashboard payload
   Future<void> _fetchBundledPayload({bool isBackgroundPoll = false}) async {
     if (_isFetching) return;
     _isFetching = true;
@@ -70,16 +66,13 @@ class _DashboardViewState extends State<DashboardView> {
     } catch (e) {
       debugPrint('Error fetching bundled payload: $e');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } finally {
       _isFetching = false;
     }
   }
 
-  /// Navigates to the Dynamic Detailed Graph Page for a specific metric
   void _navigateToDetailGraph(String metricType, String title) {
     Navigator.push(
       context,
@@ -90,7 +83,6 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  /// Safely parses raw RPC JSON list into strongly-typed PondSample objects
   List<PondSample> _parseTelemetryHistory(dynamic rawList) {
     if (rawList is! List) return [];
 
@@ -111,7 +103,6 @@ class _DashboardViewState extends State<DashboardView> {
           ),
         );
       } catch (_) {
-        // Skip malformed timestamp rows without crashing UI
         continue;
       }
     }
@@ -127,109 +118,231 @@ class _DashboardViewState extends State<DashboardView> {
         _dashboardData['nea_forecasts'] ?? {};
     final Map<String, dynamic> telemetryData =
         _dashboardData['nea_telemetry'] ?? {};
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17), // Deep Dark Aquatic Theme
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Row(
+      backgroundColor: const Color(0xFF070B12), // Deeper aerospace HUD black
+      body: SafeArea(
+        child: _isLoading && _dashboardData.isEmpty
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+              )
+            : RefreshIndicator(
+                color: const Color(0xFF38BDF8),
+                backgroundColor: const Color(0xFF131B2A),
+                onRefresh: () => _fetchBundledPayload(isBackgroundPoll: false),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // --- 1. HUD TOP STATUS & WEATHER RIBBON ---
+                      _buildHudHeader(),
+                      const SizedBox(height: 12),
+
+                      NeaWeatherRibbon(
+                        forecastData: forecastData,
+                        telemetryData: telemetryData,
+                        onOpenFullForecast: () =>
+                            showNeaFullForecastModal(context, forecastData),
+                      ),
+
+                      const SizedBox(
+                        height: 16,
+                      ), // 1. TEMPERATURE & FEED MONITOR
+                      _buildHudSectionHeader(
+                        icon: Icons.thermostat_outlined,
+                        title: 'Temperature & Feed Monitor',
+                        color: const Color.fromARGB(255, 252, 252, 252),
+                        onTap: () => _navigateToDetailGraph(
+                          'temperature',
+                          'Water Temperature Analytics',
+                        ),
+                      ),
+                      TemperatureOutcomeCard(
+                        sensorData: _dashboardData['raw_sensor'] ?? {},
+                        telemetryData: _dashboardData['nea_telemetry'] ?? {},
+                        forecastData: _dashboardData['nea_forecasts'] ?? {},
+                        targetMinTemp: 24,
+                        targetMaxTemp: 28,
+                        onTap: () => _navigateToDetailGraph(
+                          'temperature',
+                          'Water Temperature Analytics',
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // 2. pH & BUFFER HEALTH
+                      _buildHudSectionHeader(
+                        icon: Icons.water_drop_outlined,
+                        title: 'pH & Buffer Health',
+                        color: const Color.fromARGB(
+                          255,
+                          254,
+                          255,
+                          255,
+                        ), // Optimal green default
+                        onTap: () => _navigateToDetailGraph(
+                          'ph',
+                          'pH & Buffer Stability',
+                        ),
+                      ),
+                      PhOutcomeCard(
+                        sensorData: _dashboardData['raw_sensor'] ?? {},
+                        forecastData: _dashboardData['nea_forecasts'] ?? {},
+                        telemetryHistory: telemetryHistory,
+                        onTap: () => _navigateToDetailGraph(
+                          'ph',
+                          'pH & Buffer Stability',
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // 3. ALGAL & SOLAR MONITOR
+                      _buildHudSectionHeader(
+                        icon: Icons.wb_sunny_outlined,
+                        title: 'Algal & Solar Monitor',
+                        color: const Color.fromARGB(
+                          255,
+                          252,
+                          252,
+                          253,
+                        ), // Aquatic cyan default
+                        onTap: () => _navigateToDetailGraph(
+                          'lux',
+                          'Solar & Algae Risk Analysis',
+                        ),
+                      ),
+                      SolarOutcomeCard(
+                        sensorData: _dashboardData['raw_sensor'] ?? {},
+                        forecastData: _dashboardData['nea_forecasts'] ?? {},
+                        onTap: () => _navigateToDetailGraph(
+                          'lux',
+                          'Solar & Algae Risk Analysis',
+                        ),
+                      ),
+                      const SizedBox(height: 48), // Padding above floating pill
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  /// Minimalist HUD Header replacing the traditional AppBar
+  Widget _buildHudHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
           children: [
-            Image(
-              image: AssetImage('lib/assets/koi_icon.png'),
-              width: 32,
-              height: 32,
+            Container(
+              width: 50,
+              height: 40,
+              decoration: BoxDecoration(
+                image: const DecorationImage(
+                  image: AssetImage('lib/assets/koi_icon.png'),
+                ),
+              ),
             ),
-            SizedBox(width: 8),
-            Text(
-              'Pond Dashboard Center',
+            const SizedBox(width: 10),
+            const Text(
+              'Pond Dashboard Centre',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
                 color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.cyanAccent,
-                    ),
-                  )
-                : const Icon(Icons.refresh, color: Colors.white70),
-            onPressed: () => _fetchBundledPayload(isBackgroundPoll: false),
-          ),
-        ],
-      ),
-      body: _isLoading && _dashboardData.isEmpty
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.cyanAccent),
-            )
-          : RefreshIndicator(
-              color: Colors.cyanAccent,
-              backgroundColor: const Color(0xFF131B2A),
-              onRefresh: () => _fetchBundledPayload(isBackgroundPoll: false),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    NeaWeatherRibbon(
-                      forecastData: forecastData,
-                      telemetryData: telemetryData,
-                      onOpenFullForecast: () =>
-                          showNeaFullForecastModal(context, forecastData),
-                    ),
-                    const SizedBox(height: 12),
-                    // 1. TEMPERATURE & METABOLIC CARD
-                    TemperatureOutcomeCard(
-                      sensorData: _dashboardData['raw_sensor'] ?? {},
-                      telemetryData: _dashboardData['nea_telemetry'] ?? {},
-                      forecastData: _dashboardData['nea_forecasts'] ?? {},
-                      onTap: () => _navigateToDetailGraph(
-                        'temperature',
-                        'Water Temperature Analytics',
-                      ),
-                      targetMinTemp: 15,
-                      targetMaxTemp: 33,
-                    ),
-                    const SizedBox(height: 20),
+        IconButton(
+          icon: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF38BDF8),
+                  ),
+                )
+              : const Icon(Icons.refresh, color: Colors.white54, size: 20),
+          onPressed: () => _fetchBundledPayload(isBackgroundPoll: false),
+        ),
+      ],
+    );
+  }
 
-                    // 2. pH STABILITY & ACID CRASH CARD
-                    PhOutcomeCard(
-                      sensorData: _dashboardData['raw_sensor'] ?? {},
-                      forecastData: _dashboardData['nea_forecasts'] ?? {},
-                      telemetryHistory: telemetryHistory,
-                      onTap: () =>
-                          _navigateToDetailGraph('ph', 'pH & Buffer Stability'),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // 3. SOLAR RADIATION & ALGAE BLOOM CARD
-                    SolarOutcomeCard(
-                      sensorData: _dashboardData['raw_sensor'] ?? {},
-                      forecastData: _dashboardData['nea_forecasts'] ?? {},
-                      onTap: () => _navigateToDetailGraph(
-                        'lux',
-                        'Solar & Algae Risk Analysis',
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+  /// Sleek HUD Section Header with optional tap action & trailing arrow
+  Widget _buildHudSectionHeader({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 15),
+            const SizedBox(width: 8),
+            Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color.withValues(alpha: 0.35), Colors.transparent],
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            // Rightward pointing affordance arrow
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white.withValues(alpha: 0.3),
+              size: 12,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Cockpit HUD wrapper: removes hard box edges and gives instruments a subtle radial canvas glow
+  Widget _buildBorderlessInstrumentWrap({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.06),
+          width: 1,
+        ),
+      ),
+      child: child,
     );
   }
 }

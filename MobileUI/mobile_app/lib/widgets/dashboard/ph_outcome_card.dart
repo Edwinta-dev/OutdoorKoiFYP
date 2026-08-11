@@ -54,54 +54,22 @@ class PhOutcomeCard extends StatelessWidget {
     final buffer = phAdvisory.bufferAssessment;
     final statusColor = _getStatusColor(phAdvisory.severity, buffer.status);
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1F26),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: statusColor.withValues(alpha: 0.4),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        // 1. REMOVE color: const Color(0xFF131B2A)
+        // 2. REMOVE border: Border.all(...)
+        // 3. REMOVE boxShadow: [...]
+        decoration: const BoxDecoration(
+          color:
+              Colors.transparent, // Lets the HUD parent container show through!
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ROW ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.water_drop_outlined,
-                      color: statusColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'pH & BUFFER HEALTH',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             // --- MAIN TWO-COLUMN BODY ---
             Row(

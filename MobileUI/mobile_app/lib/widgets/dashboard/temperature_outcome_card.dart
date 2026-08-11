@@ -49,7 +49,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
     }
 
     // Default green when well within optimal bounds
-    return optimalGreen;
+    return Color(0xFF50C878);
   }
 
   @override
@@ -87,57 +87,20 @@ class TemperatureOutcomeCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1F26),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: synchronizedColor.withValues(alpha: 0.4),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: synchronizedColor.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        // 1. REMOVE color: const Color(0xFF131B2A)
+        // 2. REMOVE border: Border.all(...)
+        // 3. REMOVE boxShadow: [...]
+        decoration: const BoxDecoration(
+          color:
+              Colors.transparent, // Lets the HUD parent container show through!
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.thermostat_outlined,
-                      color: Colors.cyanAccent,
-                      size: 18,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Temperature and Feed Monitor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.white.withOpacity(0.3),
-                  size: 18,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             // --- MAIN SECTION: BOLD TEMP (LEFT) | SYNCHRONIZED SCALE (RIGHT) ---
             Row(
@@ -150,7 +113,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                     Text(
                       waterTempStr,
                       style: TextStyle(
-                        color: synchronizedColor.withValues(alpha: 0.8),
+                        color: synchronizedColor,
                         fontSize: 36,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
