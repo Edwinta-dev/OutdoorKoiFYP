@@ -16,10 +16,10 @@ class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
 
   @override
-  State<DashboardView> createState() => _DashboardViewState();
+  State<DashboardView> createState() => DashboardViewState();
 }
 
-class _DashboardViewState extends State<DashboardView> {
+class DashboardViewState extends State<DashboardView> {
   Timer? _pollingTimer;
   bool _isLoading = true;
   bool _isFetching = false;
@@ -39,6 +39,10 @@ class _DashboardViewState extends State<DashboardView> {
     _pollingTimer?.cancel();
     super.dispose();
   }
+
+  /// Public method called by MainLayout refresh button
+  Future<void> refreshData() async =>
+      _fetchBundledPayload(isBackgroundPoll: false);
 
   Future<void> _fetchBundledPayload({bool isBackgroundPoll = false}) async {
     if (_isFetching) return;
@@ -141,10 +145,6 @@ class _DashboardViewState extends State<DashboardView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // --- 1. HUD TOP STATUS & WEATHER RIBBON ---
-                      _buildHudHeader(),
-                      const SizedBox(height: 12),
-
                       NeaWeatherRibbon(
                         forecastData: forecastData,
                         telemetryData: telemetryData,
@@ -228,57 +228,11 @@ class _DashboardViewState extends State<DashboardView> {
                           'Solar & Algae Risk Analysis',
                         ),
                       ),
-                      const SizedBox(height: 48), // Padding above floating pill
                     ],
                   ),
                 ),
               ),
       ),
-    );
-  }
-
-  /// Minimalist HUD Header replacing the traditional AppBar
-  Widget _buildHudHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 50,
-              height: 40,
-              decoration: BoxDecoration(
-                image: const DecorationImage(
-                  image: AssetImage('lib/assets/koi_icon.png'),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'Pond Dashboard Centre',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
-        ),
-        IconButton(
-          icon: _isLoading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF38BDF8),
-                  ),
-                )
-              : const Icon(Icons.refresh, color: Colors.white54, size: 20),
-          onPressed: () => _fetchBundledPayload(isBackgroundPoll: false),
-        ),
-      ],
     );
   }
 

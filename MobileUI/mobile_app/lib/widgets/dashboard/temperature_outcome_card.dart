@@ -137,7 +137,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Min: ${targetMinTemp.toStringAsFixed(1)}°',
+                            '${targetMinTemp.toStringAsFixed(1)}°',
                             style: const TextStyle(
                               color: Colors.white38,
                               fontSize: 10,
@@ -152,7 +152,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Max: ${targetMaxTemp.toStringAsFixed(1)}°',
+                            '${targetMaxTemp.toStringAsFixed(1)}°',
                             style: const TextStyle(
                               color: Colors.white38,
                               fontSize: 10,
