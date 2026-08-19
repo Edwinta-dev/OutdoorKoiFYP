@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../utils/digital_twin_api.dart';
 
 /// Main Entry Point: Opens the Quick Action Option Selector
 void showQuickActionSelector(BuildContext context) {
@@ -157,6 +158,14 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
+
+      // Fish stock was captured at onboarding into SharedPreferences (not
+      // synced to Supabase's UserData table), so it rides along on each
+      // event push for the DigitalTwin engine to use as PondConfig context.
+      final ownedSpecies = prefs.getStringList('ownedFishSpecies') ?? [];
+      final fishType = ownedSpecies.isEmpty ? null : ownedSpecies.join(', ');
+      final fishCount = int.tryParse(prefs.getString('fishCount') ?? '');
+
       final hour24 = (_hour % 12) + (_isPm ? 12 : 0);
       final timestamp = DateTime(
         _date.year,
@@ -167,31 +176,59 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
       );
 
       final Map<String, dynamic> payload = {
-        'user_id': userId,
+        'userID': userId,
         'event_type': widget.eventType,
         'event_timestamp': timestamp.toIso8601String(),
       };
 
+      double? volumePercent;
+      double? volumeLitres;
+      double? foodGrams;
+      double? proteinPercent;
+
       // Map dynamic fields based on event type
       if (widget.eventType == 'WATER_CHANGE' ||
           widget.eventType == 'WATER_TOPUP') {
-        payload['volume_percentage'] = double.parse(_val1Ctrl.text.trim());
-        payload['volume_litres'] = double.tryParse(_val2Ctrl.text.trim());
+        volumePercent = double.parse(_val1Ctrl.text.trim());
+        volumeLitres = double.tryParse(_val2Ctrl.text.trim());
+        payload['volume_percentage'] = volumePercent;
+        payload['volume_litres'] = volumeLitres;
       } else if (widget.eventType == 'FEEDING') {
-        payload['food_grams'] = double.parse(_val1Ctrl.text.trim());
-        payload['protein_percentage'] =
-            double.tryParse(_val2Ctrl.text.trim()) ?? 40.0;
+        foodGrams = double.parse(_val1Ctrl.text.trim());
+        proteinPercent = double.tryParse(_val2Ctrl.text.trim()) ?? 40.0;
+        payload['food_grams'] = foodGrams;
+        payload['protein_percentage'] = proteinPercent;
       } else if (widget.eventType == 'ALGAE_SCRUB') {
         payload['algae_method'] = _selectedOption;
       }
 
+      // Historical intervention record - feeds the timeline graph markers.
       await Supabase.instance.client.from('pondInterventions').insert(payload);
+
+      // Push the same event into the DigitalTwin chemistry engine so its
+      // TAN/NO2/NO3 pools and the water buffer status card reflect it.
+      // Best-effort: the Supabase insert above already succeeded, so a
+      // slow/unreachable Flask host must not fail this save.
+      final assessment = await _pushToDigitalTwin(
+        userId: userId,
+        timestamp: timestamp,
+        volumePercent: volumePercent,
+        volumeLitres: volumeLitres,
+        foodGrams: foodGrams,
+        proteinPercent: proteinPercent,
+        fishType: fishType,
+        fishCount: fishCount,
+      );
 
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.title} logged successfully!'),
+            content: Text(
+              assessment != null
+                  ? '${widget.title} logged • water buffer status: ${assessment.category}'
+                  : '${widget.title} logged successfully!',
+            ),
             backgroundColor: widget.accentColor,
           ),
         );
@@ -206,6 +243,57 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           ),
         );
       }
+    }
+  }
+
+  Future<WaterChemistryAssessment?> _pushToDigitalTwin({
+    required int userId,
+    required DateTime timestamp,
+    double? volumePercent,
+    double? volumeLitres,
+    double? foodGrams,
+    double? proteinPercent,
+    String? fishType,
+    int? fishCount,
+  }) {
+    switch (widget.eventType) {
+      case 'FEEDING':
+        return DigitalTwinApi.logFeeding(
+          userId: userId,
+          foodGrams: foodGrams ?? 0.0,
+          proteinPercent: proteinPercent ?? 40.0,
+          timestamp: timestamp,
+          fishType: fishType,
+          fishCount: fishCount,
+        );
+      case 'WATER_CHANGE':
+        return DigitalTwinApi.logWaterChange(
+          userId: userId,
+          volumePercent: volumePercent,
+          volumeLitres: volumeLitres,
+          timestamp: timestamp,
+          fishType: fishType,
+          fishCount: fishCount,
+        );
+      case 'WATER_TOPUP':
+        return DigitalTwinApi.logTopUp(
+          userId: userId,
+          volumePercent: volumePercent,
+          volumeLitres: volumeLitres,
+          timestamp: timestamp,
+          fishType: fishType,
+          fishCount: fishCount,
+        );
+      case 'ALGAE_SCRUB':
+        return DigitalTwinApi.logAlgalScrub(
+          userId: userId,
+          scrubType: _selectedOption,
+          timestamp: timestamp,
+          fishType: fishType,
+          fishCount: fishCount,
+        );
+      default:
+        return Future.value(null);
     }
   }
 

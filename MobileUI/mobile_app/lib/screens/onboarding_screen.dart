@@ -369,10 +369,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         .toSet() // Removes duplicate names if user added same species twice
         .toList();
 
+    // Total headcount across all entries (species can repeat if added twice)
+    final int totalFishCount = _addedFishList.fold(
+      0,
+      (sum, item) => sum + item.count,
+    );
+
     // Writing onboarding data locally into Shared Preferences
     await prefs.setString('tankVolume', volume);
     await prefs.setString('fishBiomass', totalBiomassKg);
     await prefs.setStringList('ownedFishSpecies', uniqueOwnedSpecies);
+    await prefs.setString('fishCount', totalFishCount.toString());
     await prefs.setBool('isOnboarded', true);
     await prefs.setString('latitude', latitude);
     await prefs.setString('longitude', longitude);

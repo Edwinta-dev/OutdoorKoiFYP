@@ -161,7 +161,7 @@ class DashboardViewState extends State<DashboardView> {
                         color: const Color.fromARGB(255, 252, 252, 252),
                         onTap: () => _navigateToDetailGraph(
                           'temperature',
-                          'Water Temperature Analytics',
+                          'Detailed Temperature',
                         ),
                       ),
                       TemperatureOutcomeCard(
@@ -172,7 +172,7 @@ class DashboardViewState extends State<DashboardView> {
                         targetMaxTemp: 28,
                         onTap: () => _navigateToDetailGraph(
                           'temperature',
-                          'Water Temperature Analytics',
+                          'Detailed Temperature',
                         ),
                       ),
 
