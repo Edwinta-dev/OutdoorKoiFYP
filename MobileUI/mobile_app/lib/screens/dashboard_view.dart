@@ -1,7 +1,13 @@
-import 'package:flutter/material.dart';
+// lib/screens/dashboard_view.dart
+
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/dashboard/at_a_glance_widget.dart';
+import '../widgets/dashboard/localized_nea_widget.dart';
+import '../widgets/dashboard/long_term_forecast_widget.dart';
+import '../widgets/dashboard/fish_tips_widget.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -12,165 +18,20 @@ class DashboardView extends StatefulWidget {
 
 class _DashboardViewState extends State<DashboardView> {
   Timer? _pollingTimer;
-
-  final String apiUrl = 'http://192.168.68.66:5000/api/current_status';
-
-  String currentPh = "--";
-  String currentTemp = "--";
-  String currentTds = "--";
-  String currentLux = "--";
-  bool isLoading = true;
+  bool _isLoading = true;
+  bool _isFetching = false;
+  Map<String, dynamic> _dashboardData = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchCurrentStatus();
+    // 1. Initial immediate RPC Fetch
+    _fetchBundledPayload(isBackgroundPoll: false);
 
-    _pollingTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      _fetchCurrentStatus();
+    // 2. Schedule periodic polling loop (every 30 seconds)
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _fetchBundledPayload(isBackgroundPoll: true);
     });
-  }
-
-  void _logFeeding() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        // 1. Initialize our default values for the popup
-        DateTime selectedTime = DateTime.now();
-        bool isNow = true;
-        String selectedVolume = 'Medium';
-
-        // 2. StatefulBuilder allows the UI inside the dialog to update dynamically
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Log Feeding Event'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min, // Keeps the dialog compact
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- TIME SELECTION ---
-                  const Text(
-                    'When did you feed them?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      // "NOW" Button
-                      ChoiceChip(
-                        label: const Text('NOW'),
-                        selected: isNow,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setDialogState(() {
-                              isNow = true;
-                              selectedTime = DateTime.now();
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      // "Custom Time" Button
-                      ChoiceChip(
-                        label: Text(
-                          isNow
-                              ? 'Custom Time'
-                              : "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}",
-                        ),
-                        selected: !isNow,
-                        onSelected: (selected) async {
-                          if (selected) {
-                            // Opens the native phone time picker wheel
-                            TimeOfDay? picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay.fromDateTime(selectedTime),
-                            );
-
-                            if (picked != null) {
-                              setDialogState(() {
-                                isNow = false;
-                                // Merge the picked time with today's date
-                                selectedTime = DateTime(
-                                  selectedTime.year,
-                                  selectedTime.month,
-                                  selectedTime.day,
-                                  picked.hour,
-                                  picked.minute,
-                                );
-                              });
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // --- VOLUME SELECTION ---
-                  const Text(
-                    'Estimated Volume:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'Small', label: Text('Small')),
-                      ButtonSegment(value: 'Medium', label: Text('Medium')),
-                      ButtonSegment(value: 'Large', label: Text('Large')),
-                    ],
-                    selected: {selectedVolume},
-                    onSelectionChanged: (Set<String> newSelection) {
-                      setDialogState(() {
-                        selectedVolume = newSelection.first;
-                      });
-                    },
-                  ),
-                ],
-              ),
-
-              // --- ACTION BUTTONS ---
-              actions: [
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context), // Close without saving
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.pop(context); // Close the dialog
-                    _submitFeedingData(
-                      selectedTime,
-                      selectedVolume,
-                    ); // Process the data
-                  },
-                  style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                  child: const Text('Save Log'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // The method that actually handles the data after the user clicks "Save Log"
-  void _submitFeedingData(DateTime time, String volume) {
-    // TODO: Push 'time.toIso8601String()' and 'volume' to your Supabase 'feeding_logs' table
-
-    print("Feeding logged! Time: $time, Volume: $volume. Updating models...");
-
-    // Show a success message at the bottom of the screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Logged $volume feeding at ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}.',
-        ),
-        backgroundColor: Colors.teal,
-        duration: const Duration(seconds: 3),
-      ),
-    );
   }
 
   @override
@@ -179,386 +40,206 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  Future<void> _fetchCurrentStatus() async {
+  /// RPC HTTP call to Supabase to fetch bundled dashboard payload
+  Future<void> _fetchBundledPayload({bool isBackgroundPoll = false}) async {
+    if (_isFetching) return;
+    _isFetching = true;
+
+    if (!isBackgroundPoll && mounted) {
+      setState(() => _isLoading = true);
+    }
+
     try {
-      final response = await http.get(Uri.parse(apiUrl));
+      final prefs = await SharedPreferences.getInstance();
+      final String userid = prefs.getString('userID') ?? '0';
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+      final response = await Supabase.instance.client.rpc(
+        'get_bundled_dashboard_payload',
+        params: {'p_user_id': userid},
+      );
 
-        // Update the UI with the fresh data
+      if (mounted && response != null) {
         setState(() {
-          currentPh = data['pH'].toString();
-          currentTemp = data['temp'].toString();
-          currentTds = data['TDS'].toString();
-          currentLux = data['LUX'].toString();
-          isLoading = false;
+          _dashboardData = Map<String, dynamic>.from(response as Map);
+          _isLoading = false;
         });
-        print("Successfully updated sensor data at ${DateTime.now()}");
-      } else {
-        print("Server error: ${response.statusCode}");
       }
     } catch (e) {
-      print("Failed to connect to Flask server: $e");
+      debugPrint('Error fetching bundled payload: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } finally {
+      _isFetching = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 1. Deep Aquatic Dark Gradient Canvas Background
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F2027), // Deep Navy
-              Color(0xFF203A43), // Lagoon Blue
-              Color(0xFF2C5364), // Soft Teal-Grey
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 16.0,
+      backgroundColor: const Color(0xFF0A0E17), // Deep Dark Aquatic Theme
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Row(
+          children: [
+            Icon(Icons.water_drop_outlined, color: Colors.cyanAccent),
+            SizedBox(width: 8),
+            Text(
+              'Dashboard Center',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.white,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top App Bar / Title Banner
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          "Outdoor Koi Pond",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            letterSpacing: 1.1,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          "Ecosystem Health",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Live Connectivity Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.greenAccent.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.greenAccent, width: 1),
-                      ),
-                      child: Row(
-                        children: const [
-                          CircleAvatar(
-                            radius: 4,
-                            backgroundColor: Colors.greenAccent,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            "LIVE",
-                            style: TextStyle(
-                              color: Colors.greenAccent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // 2. HERO CARD: Master Health Status Overview
-                _buildHeroHealthCard(),
-
-                const SizedBox(height: 24),
-
-                // Section Label
-                const Text(
-                  'Telemetry Metrics',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // 3. Dynamic Sensor Metric Cards Grid
-                if (isLoading)
-                  const Padding(
-                    padding: EdgeInsets.all(40.0),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.tealAccent,
-                      ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.cyanAccent,
                     ),
                   )
-                else
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.15, // Taller cards for better density
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    children: [
-                      _buildMetricTile(
-                        title: 'pH Level',
-                        value: currentPh,
-                        unit: 'pH',
-                        status: 'Optimal',
-                        icon: Icons.water_drop_rounded,
-                        accentColor: const Color(0xFF00E676), // Emerald
-                      ),
-                      _buildMetricTile(
-                        title: 'Water Temp',
-                        value: currentTemp,
-                        unit: '°C',
-                        status: 'Normal',
-                        icon: Icons.thermostat_rounded,
-                        accentColor: const Color(0xFFFF9100), // Vibrant Amber
-                      ),
-                      _buildMetricTile(
-                        title: 'TDS Purity',
-                        value: currentTds,
-                        unit: 'ppm',
-                        status: 'Good',
-                        icon: Icons.blur_on_rounded,
-                        accentColor: const Color(0xFF00E5FF), // Cyan
-                      ),
-                      _buildMetricTile(
-                        title: 'Sunlight',
-                        value: currentLux,
-                        unit: 'Lux',
-                        status: 'Daylight',
-                        icon: Icons.light_mode_rounded,
-                        accentColor: const Color(0xFFFFD600), // Gold
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 80), // Padding space for FAB
-              ],
-            ),
-          ),
-        ),
-      ),
-
-      // 4. Action Button: Floating Action Button with Glass Gradient Style
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _logFeeding,
-        elevation: 6,
-        icon: const Icon(Icons.set_meal_rounded, color: Colors.black87),
-        label: const Text(
-          'Log Koi Feeding',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
-        ),
-        backgroundColor: const Color(0xFF00E676), // Bright mint green
-      ),
-    );
-  }
-
-  /// Master Hero Status Box
-  Widget _buildHeroHealthCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          colors: [
-            Colors.teal.shade700.withOpacity(0.5),
-            Colors.cyan.shade900.withOpacity(0.4),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: Colors.tealAccent.withOpacity(0.3),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+                : const Icon(Icons.refresh, color: Colors.white70),
+            onPressed: () => _fetchBundledPayload(isBackgroundPoll: false),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // Circular Status Icon Ring
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.tealAccent.withOpacity(0.15),
-              border: Border.all(color: Colors.tealAccent, width: 2),
-            ),
-            child: const Icon(
-              Icons.verified_user_rounded,
-              color: Colors.tealAccent,
-              size: 32,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  "Pond Status: Optimal",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: _isLoading && _dashboardData.isEmpty
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.cyanAccent),
+            )
+          : RefreshIndicator(
+              color: Colors.cyanAccent,
+              backgroundColor: const Color(0xFF131B2A),
+              onRefresh: () => _fetchBundledPayload(isBackgroundPoll: false),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
-                SizedBox(height: 4),
-                Text(
-                  "All 4 water quality parameters are within safe ranges for Koi health.",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // =================----------------======================
+                    // MUST SEE 1: TOP PORTION (Central Icon + Telemetry Dials)
+                    // =================----------------======================
+                    AtAGlanceWidget(data: _dashboardData['raw_sensor'] ?? {}),
+                    const SizedBox(height: 20),
 
-  /// Individual Visual Metric Cards
-  Widget _buildMetricTile({
-    required String title,
-    required String value,
-    required String unit,
-    required String status,
-    required IconData icon,
-    required Color accentColor,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        // Translucent "Glassmorphism" panel effect
-        color: Colors.white.withOpacity(0.07),
-        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(14.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Tile Header: Icon & Category Title
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
+                    // =================----------------======================
+                    // MUST SEE 2: LOCALIZED REAL-TIME NEA DATA + ADVISORY
+                    // =================----------------======================
+                    LocalizedNeaWidget(
+                      telemetryData: _dashboardData['nea_telemetry'] ?? {},
+                      forecastData: _dashboardData['nea_forecasts'] ?? {},
                     ),
-                    child: Icon(icon, color: accentColor, size: 20),
-                  ),
-                  // Status Pill Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        color: accentColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(height: 20),
+
+                    // =================----------------======================
+                    // COLLAPSIBLE 1: EXTENDED WEATHER OUTLOOK
+                    // =================----------------======================
+                    CollapsibleDashboardSection(
+                      title: 'Extended Weather Outlook',
+                      icon: Icons.calendar_today_outlined,
+                      iconColor: Colors.cyanAccent,
+                      initiallyExpanded: false,
+                      child: LongTermForecastWidget(
+                        data: _dashboardData['nea_forecasts'] ?? {},
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+
+                    // =================----------------======================
+                    // COLLAPSIBLE 2: SPECIES-SPECIFIC FISH CARE TIPS
+                    // =================----------------======================
+                    CollapsibleDashboardSection(
+                      title: 'Fish Care & Biomass Tips',
+                      icon: Icons.set_meal_outlined,
+                      iconColor: Colors.orangeAccent,
+                      initiallyExpanded: false,
+                      child: FishTipsWidget(
+                        data: _dashboardData['fish_tips'] ?? [],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
+            ),
+    );
+  }
+}
 
-              // Title Label
+/// Reusable Collapsible Dropdown Card designed for the dark aquatic theme
+class CollapsibleDashboardSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  const CollapsibleDashboardSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF131B2A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Theme(
+        // Remove default ExpansionTile borders and dividers
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.only(bottom: 12),
+          iconColor: Colors.white70,
+          collapsedIconColor: Colors.white38,
+          title: Row(
+            children: [
+              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 10),
               Text(
                 title,
                 style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
                 ),
-              ),
-
-              // Tile Main Value Output
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    unit,
-                    style: TextStyle(
-                      color: accentColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: child,
+            ),
+          ],
         ),
       ),
     );
