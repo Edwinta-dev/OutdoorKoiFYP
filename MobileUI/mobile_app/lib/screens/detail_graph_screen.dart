@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../widgets/detail_graph/algae_severity_rating_card.dart';
+import '../widgets/detail_graph/algae_status_card.dart';
+import '../widgets/detail_graph/evaporation_status_card.dart';
 import '../widgets/detail_graph/historical_line_chart.dart';
 import '../widgets/detail_graph/intervention_legend.dart';
 import '../widgets/detail_graph/scarce_data_placeholder.dart';
@@ -27,6 +30,13 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
   bool _isLoading = true;
   int _selectedDays = 30;
   int _chemistryRefreshTick = 0;
+
+  /// Bumped when a severity rating is submitted or undone. A rating moves
+  /// the engine's modelled level, so the algae forecast card underneath is
+  /// immediately stale - but the historical chart is not, so this is kept
+  /// separate from _chemistryRefreshTick to avoid re-fetching the whole
+  /// graph payload for something only one card cares about.
+  int _algaeRefreshTick = 0;
 
   int _userId = 0;
 
@@ -107,9 +117,19 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
       return st.toLowerCase() == primaryType.toLowerCase();
     }).toList();
 
+    final String lowerMetric = widget.metricType.toLowerCase();
+
     final bool isWaterQualityDomain =
-        widget.metricType.toLowerCase().contains('ph') ||
-        widget.metricType.toLowerCase().contains('water_quality');
+        lowerMetric.contains('ph') || lowerMetric.contains('water_quality');
+
+    // Algal & Solar screen - dashboard_view navigates here with 'lux'.
+    final bool isAlgaeDomain =
+        lowerMetric.contains('lux') || lowerMetric.contains('algae');
+
+    // Temperature & Feed screen. Checked LAST and only when the other two
+    // did not match, mirroring _getTargetSensorTypes()'s else-branch:
+    // 'temperature' and 'evaporation' both land on this screen.
+    final bool isTemperatureDomain = !isWaterQualityDomain && !isAlgaeDomain;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E17),
@@ -176,6 +196,49 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
                     WaterBufferStatusCard(
                       key: ValueKey('chemistry-$_chemistryRefreshTick'),
                       userId: _userId,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // --- 3c. EVAPORATION & FEED LOOKAHEAD (temp domain) ---
+                  // "When do I next top up?" + temperature-driven feed cap.
+                  // Server-computed by the DigitalTwin Flask engine
+                  // (GET /forecast/evaporation/<user_id>).
+                  if (isTemperatureDomain) ...[
+                    EvaporationStatusCard(
+                      key: ValueKey('evaporation-$_chemistryRefreshTick'),
+                      userId: _userId,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // --- 3d. ALGAE DOMAIN ---
+                  // Ordered deliberately: forecast first (the outcome the
+                  // user came for), then the camera frame + rating control
+                  // that grounds it. Putting the rating control last means
+                  // the user has already seen what the model currently
+                  // believes before being asked to correct it, which makes
+                  // the correction meaningful rather than a blind survey.
+                  if (isAlgaeDomain) ...[
+                    AlgaeStatusCard(
+                      key: ValueKey(
+                        'algae-$_chemistryRefreshTick-$_algaeRefreshTick',
+                      ),
+                      userId: _userId,
+                    ),
+                    const SizedBox(height: 20),
+                    AlgaeSeverityRatingCard(
+                      key: ValueKey('algae-rating-$_algaeRefreshTick'),
+                      userId: _userId,
+                      // A rating changes the engine's modelled level, so
+                      // the forecast card above must be rebuilt against
+                      // the new state rather than left showing the
+                      // pre-rating projection.
+                      onRatingChanged: () {
+                        if (mounted) {
+                          setState(() => _algaeRefreshTick++);
+                        }
+                      },
                     ),
                     const SizedBox(height: 20),
                   ],

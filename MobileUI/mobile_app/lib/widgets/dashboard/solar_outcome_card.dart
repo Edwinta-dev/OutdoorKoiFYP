@@ -145,7 +145,7 @@ class SolarOutcomeCard extends StatelessWidget {
                               const SizedBox(width: 5),
                               Flexible(
                                 child: Text(
-                                  'UV $uvNum • $forecast2hr • Algal Risk',
+                                  'UV $uvNum • $forecast2hr ',
                                   style: const TextStyle(
                                     color: kWarningAmber,
                                     fontSize: 11,
