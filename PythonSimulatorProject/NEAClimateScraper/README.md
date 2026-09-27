@@ -18,10 +18,14 @@ run the collator anytime after (instant, no network).
 ## 1. `fetch_nea_climate.py` — the unattended scraper
 
 ```bash
-pip install requests truststore --break-system-packages   # truststore only needed if your
-                                                            # Python can't verify NEA's TLS cert
-                                                            # (see note below)
-export NEA_API_KEY="your-dev-api-key"
+pip install requests truststore python-dotenv --break-system-packages  # truststore only needed if your
+                                                                        # Python can't verify NEA's TLS cert
+                                                                        # (see note below)
+
+# Put your key in the repo-root .env: NEA_API_KEY=your-dev-api-key
+# (already has a placeholder line -- same file/convention as Backend/DataGovAPI/data.py's
+# NEA_API_KEY, auto-loaded by explicit path regardless of which directory you run from)
+# Or skip the .env and just: export NEA_API_KEY="your-dev-api-key"
 
 # Smoke test first -- 2-3 dates, all three endpoints:
 python3 fetch_nea_climate.py --max-dates 3

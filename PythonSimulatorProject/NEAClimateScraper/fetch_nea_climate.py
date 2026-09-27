@@ -49,7 +49,8 @@ unattended, so these matter more than usual):
 
 Usage
 -----
-    export NEA_API_KEY="your-dev-api-key-here"
+    # Put your key in the repo-root .env (NEA_API_KEY=...) -- auto-loaded, no
+    # export needed. Or: export NEA_API_KEY="your-dev-api-key-here"
 
     # Smoke test first -- a handful of dates, all three endpoints:
     python3 fetch_nea_climate.py --max-dates 3
@@ -87,6 +88,11 @@ cert (Windows machines using a corporate/AV root not in certifi's bundle
 commonly can't), `pip install truststore` and this script will use it
 automatically to fall back to the OS trust store, the same fix already
 in use for this repo's git config.
+Recommended: `python-dotenv` -- lets NEA_API_KEY live in the repo-root .env
+(same convention as Backend/DataGovAPI/data.py) instead of an env var you
+have to re-export every session. Both are optional -- the script degrades
+gracefully (skips the shim / falls back to $NEA_API_KEY) if either isn't
+installed.
 """
 
 import argparse
@@ -99,6 +105,7 @@ import sys
 import time
 from collections import deque
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 try:
     import truststore
@@ -111,6 +118,16 @@ try:
 except ImportError:
     sys.exit("This script needs the 'requests' package: "
               "pip install requests --break-system-packages")
+
+# Repo-root .env (same file/convention as Backend/DataGovAPI/data.py's
+# NEA_API_KEY), loaded by explicit path so this works regardless of the
+# directory the script is launched from -- not just via load_dotenv()'s
+# CWD-relative upward search.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+except ImportError:
+    pass  # fine if python-dotenv isn't installed; --api-key/$NEA_API_KEY still work
 
 try:
     from zoneinfo import ZoneInfo
@@ -295,7 +312,8 @@ def fetch_day(session, limiter, endpoint_key, day, out_root, api_key, counts, fa
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--api-key", default=os.environ.get("NEA_API_KEY", ""),
-                         help="data.gov.sg API key. Defaults to $NEA_API_KEY. "
+                         help="data.gov.sg API key. Defaults to $NEA_API_KEY, which is auto-loaded from "
+                              "the repo-root .env's NEA_API_KEY= line if set there. "
                               "Leave blank to run unauthenticated (6 req/10s).")
     parser.add_argument("--start", default=DEFAULT_START.isoformat(),
                          help="Start date YYYY-MM-DD (default 2020-02-01). "
