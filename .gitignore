@@ -9,3 +9,9 @@ __pycache__/
 
 # Large scraped data dumps (regenerate via the scraper scripts instead of committing)
 PythonSimulatorProject/*.zip
+NEA_Data_Analysis/hourly_rainfall_mm.csv
+NEA_Data_Analysis/twenty_four_hr_periods.csv
+NEA_Data_Analysis/twenty_four_hr_general.csv
+NEA_Data_Analysis/four_day_outlook.csv
+NEA_Data_Analysis/daily_rainfall_mm.csv
+NEA_Data_Analysis/exploration_outputs/

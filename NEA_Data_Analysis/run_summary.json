@@ -1,0 +1,16 @@
+{
+  "range": [
+    "2020-02-01",
+    "2026-08-19"
+  ],
+  "counts": {
+    "ok": 0,
+    "empty": 0,
+    "api_error": 0,
+    "http_error": 142,
+    "network_error": 0,
+    "skipped": 4642
+  },
+  "failures": 142,
+  "finished_at": "2026-08-19T21:13:44.124060"
+}
