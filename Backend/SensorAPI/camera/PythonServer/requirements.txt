@@ -1,0 +1,6 @@
+flask
+flask-cors
+python-dotenv
+supabase
+numpy
+opencv-python-headless
