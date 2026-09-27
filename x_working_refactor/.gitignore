@@ -1,0 +1,4 @@
+# Compiled test binaries (host-side test builds, not build artifacts of the real targets)
+*.exe
+*.o
+*.out
