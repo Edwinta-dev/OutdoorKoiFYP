@@ -1,0 +1,1034 @@
+// lib/widgets/detail_graph/algae_severity_rating_card.dart
+//
+// The grounding control for the Algal & Solar detail screen: shows the
+// latest ESP32-CAM frame and asks the user to rate what they see.
+//
+// WHY THIS IS NOT JUST A SURVEY WIDGET
+// ------------------------------------
+// The rating is a first-class observation. On submit the engine corrects
+// its modelled green level toward the rating at HUMAN_TRUST (0.85, higher
+// than the camera's 0.70), because a person standing at the pond is
+// better evidence than a 640x480 JPEG of one corner of it. That is the
+// only mechanism in the whole system capable of catching a lying camera -
+// a fouled lens reads as pond algae and is otherwise invisible.
+//
+// The accumulated (label, green_ratio) pairs also calibrate the alert
+// thresholds, replacing baseline-relative guesses with measured class
+// boundaries. So the card has to show its work: what the rating did to
+// the estimate, how much calibration is still outstanding, and whether
+// the camera itself looks like it is drifting.
+//
+// Two design rules this widget enforces:
+//   1. The rating is attached to a SPECIFIC frame (imageId), never to
+//      "now". Rating at 9pm against a 6pm photo without pinning the frame
+//      silently corrupts the calibration set.
+//   2. Obstruction is presented in the same list for UX simplicity but is
+//      visually separated, because it is a data-quality flag on a
+//      different axis - not a level above "severe".
+//
+// DATA SOURCES
+// ------------
+// The camera frame comes from Supabase directly (PondCameraStorage) - one
+// imageTable query for the photo, frame id and green_ratio. Flask has
+// nothing to add to that, and routing it through the analysis service
+// would only mean a blank photo whenever that process is down.
+// Calibration state does come from Flask, because only the engine has it.
+// The two are merged in _load() and degrade independently.
+
+import 'package:flutter/material.dart';
+import '../../utils/digital_twin_api.dart';
+import '../../utils/pond_camera_storage.dart';
+
+class AlgaeSeverityRatingCard extends StatefulWidget {
+  final int userId;
+
+  /// Called after a successful submit or undo so the parent can refresh
+  /// the chart and the forecast card - a rating moves the model, so
+  /// everything downstream is now stale.
+  final VoidCallback? onRatingChanged;
+
+  const AlgaeSeverityRatingCard({
+    super.key,
+    required this.userId,
+    this.onRatingChanged,
+  });
+
+  @override
+  State<AlgaeSeverityRatingCard> createState() =>
+      _AlgaeSeverityRatingCardState();
+}
+
+class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
+  static const Color _surface = Color(0xFF131B2A);
+  static const Color _accent = Colors.tealAccent;
+
+  late Future<_RatingCardData> _future;
+
+  AlgaeSeverity? _selected;
+  bool _submitting = false;
+  AlgaeRatingResult? _lastResult;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  /// Frame from Supabase, calibration from Flask, merged.
+  ///
+  /// Both are awaited concurrently and each failure is tolerated
+  /// independently: a missing frame still allows rating (the engine
+  /// accepts a rating with no paired measurement, it just cannot use it
+  /// for calibration), and unreachable Flask still shows the photo.
+  Future<_RatingCardData> _load() async {
+    // Started together, awaited separately. Future.wait over
+    // heterogeneous futures collapses to List<Object?> and would need a
+    // cast back to a record type on the way out - fragile, and needless
+    // here. Kicking all three off before the first await gives the same
+    // concurrency with full static typing.
+    final frameFuture = PondCameraStorage.fetchLatestFrame(userId: widget.userId);
+    final contextFuture = DigitalTwinApi.fetchAlgaeRatingContext(widget.userId);
+
+    final frameResult = await frameFuture;
+    final ctx = await contextFuture;
+
+    return _RatingCardData(
+      frame: frameResult.frame,
+      frameError: frameResult.error,
+      context: ctx,
+    );
+  }
+
+  void _reload({bool notifyParent = false}) {
+    setState(() {
+      _future = _load();
+      _selected = null;
+    });
+    if (notifyParent) widget.onRatingChanged?.call();
+  }
+
+  Future<void> _submit(_RatingCardData data) async {
+    final choice = _selected;
+    if (choice == null || _submitting) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    final res = await DigitalTwinApi.submitAlgaeRating(
+      userId: widget.userId,
+      severity: choice,
+      // Pin the exact frame being rated - see the header comment.
+      imageId: data.frame?.id,
+      greenRatio: data.frame?.greenRatio,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _lastResult = res.result;
+      _error = res.error;
+    });
+
+    if (res.result != null) {
+      _reload(notifyParent: true);
+    }
+  }
+
+  Future<void> _undo() async {
+    final id = _lastResult?.ratingId;
+    setState(() => _submitting = true);
+    final ok = await DigitalTwinApi.undoAlgaeRating(
+      userId: widget.userId,
+      ratingId: id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      if (ok) _lastResult = null;
+      if (!ok) _error = 'Could not undo - this is no longer the newest rating.';
+    });
+    if (ok) _reload(notifyParent: true);
+  }
+
+  // ------------------------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_RatingCardData>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _shell(
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: _accent,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          debugPrint('AlgaeSeverityRatingCard load failed: ${snapshot.error}');
+        }
+        final data = snapshot.data;
+        if (data == null) {
+          return _shell(child: _unavailable());
+        }
+        return _card(data);
+      },
+    );
+  }
+
+  Widget _unavailable() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _header(),
+        const SizedBox(height: 10),
+        const Text(
+          'Could not load the pond camera or your device profile. This is '
+          'not the "analysis service is down" case - that one still shows '
+          'the photo - so it usually means local storage is unavailable.',
+          style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+        ),
+        const SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: () => _reload(),
+          style: TextButton.styleFrom(
+            foregroundColor: _accent,
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Retry', style: TextStyle(fontSize: 12)),
+        ),
+      ],
+    ),
+  );
+
+  Widget _card(_RatingCardData data) {
+    final ctx = data.context;
+    final cal = ctx?.calibration;
+    final frame = data.frame;
+    final canRate = ctx != null; // rating requires the Flask service
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _accent.withOpacity(0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _header(),
+          const SizedBox(height: 14),
+
+          // --- the frame being rated ---
+          _framePanel(data),
+
+          // --- camera drift warning, if the labels imply one ---
+          if (cal != null && cal.drift.isConcerning) ...[
+            const SizedBox(height: 12),
+            _driftBanner(cal.drift),
+          ],
+
+          const SizedBox(height: 16),
+          Text(
+            frame?.imageUrl == null
+                ? 'How does the pond look right now?'
+                : 'How does the pond look in this photo?',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            frame?.imageUrl == null
+                ? 'No camera frame available, so this rating will correct the '
+                      'model but will not join the calibration set.'
+                : 'Your answer corrects the model directly - it counts for more '
+                      'than the camera reading does.',
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 10.5,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // --- the rating options ---
+          ..._severityOptions(cal),
+
+          // --- previous rating, for anchoring ---
+          if (ctx?.latestRating != null) ...[
+            const SizedBox(height: 12),
+            _previousRating(ctx!.latestRating!),
+          ],
+
+          const SizedBox(height: 14),
+          if (canRate)
+            _submitRow(data)
+          else
+            _ratingOfflineNotice(),
+
+          // --- what the last rating actually did ---
+          if (_lastResult != null) ...[
+            const SizedBox(height: 12),
+            _resultBanner(_lastResult!),
+          ],
+
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 14),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 10.5),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // --- calibration progress ---
+          if (cal != null) ...[
+            const SizedBox(height: 14),
+            const Divider(color: Colors.white10, height: 1),
+            const SizedBox(height: 12),
+            _calibrationPanel(cal),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------
+
+  Widget _header() => Row(
+    children: const [
+      Icon(Icons.rate_review_outlined, color: _accent, size: 18),
+      SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          'Rate What You See',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _framePanel(_RatingCardData data) {
+    final frame = data.frame;
+    final url = frame?.imageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Stack(
+        children: [
+          AspectRatio(
+            aspectRatio: 4 / 3,
+            child: url == null
+                ? Container(
+                    color: Colors.white.withOpacity(0.04),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.photo_camera_outlined,
+                                color: Colors.white24, size: 30),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'No camera frame yet',
+                              style: TextStyle(
+                                  color: Colors.white54, fontSize: 11.5),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              // Say WHY. "No frames for user 455" is
+                              // actionable; a bare placeholder is not,
+                              // especially while the ESP32 is still
+                              // writing under a different id.
+                              data.frameError ??
+                                  'Waiting for the pond camera to report.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white24,
+                                  fontSize: 10,
+                                  height: 1.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    // The bucket is public but a phone on mobile data may
+                    // still fail - degrade to a labelled placeholder
+                    // rather than a broken-image glyph.
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.white.withOpacity(0.04),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image_outlined,
+                                color: Colors.white24, size: 28),
+                            SizedBox(height: 6),
+                            Text(
+                              'Photo could not be loaded',
+                              style: TextStyle(
+                                  color: Colors.white38, fontSize: 10.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        color: Colors.white.withOpacity(0.04),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _accent,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Frame metadata overlay - makes it unambiguous WHICH reading
+          // is being rated.
+          if (url != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.schedule, color: Colors.white70, size: 12),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        _relativeTime(frame?.capturedAt),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ),
+                    if (frame?.greenRatio != null)
+                      Text(
+                        'camera reads '
+                        '${(frame!.greenRatio! * 100).toStringAsFixed(2)}%',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          // hsvEngine already suspects this frame is blocked - surface
+          // that so the user is nudged toward the right answer rather
+          // than rating a leaf as severe algae.
+          if (frame?.isFlaggedObstructed == true)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orangeAccent.withOpacity(0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.visibility_off_outlined,
+                        color: Colors.orangeAccent, size: 11),
+                    SizedBox(width: 4),
+                    Text(
+                      'view may be blocked',
+                      style: TextStyle(
+                          color: Colors.orangeAccent, fontSize: 9.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ratingOfflineNotice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: Colors.white38, size: 15),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Text(
+              'Analysis service unreachable - ratings cannot be saved right '
+              'now. The photo above is live from storage.',
+              style: TextStyle(
+                  color: Colors.white38, fontSize: 10.5, height: 1.35),
+            ),
+          ),
+          TextButton(
+            onPressed: () => _reload(),
+            style: TextButton.styleFrom(
+              foregroundColor: _accent,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Retry', style: TextStyle(fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _driftBanner(CameraDriftVerdict drift) {
+    final severe = drift.verdict == 'drift_suspected';
+    final color = severe ? Colors.orangeAccent : Colors.amberAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cleaning_services_outlined, color: color, size: 15),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  severe ? 'Camera lens may need cleaning' : 'Camera baseline shifting',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  drift.detail,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _severityOptions(AlgaeCalibration? cal) {
+    const severityScale = [
+      AlgaeSeverity.none,
+      AlgaeSeverity.minor,
+      AlgaeSeverity.moderate,
+      AlgaeSeverity.severe,
+    ];
+    final needed = cal?.labelsNeeded ?? const <String, int>{};
+
+    final widgets = <Widget>[];
+    for (final s in severityScale) {
+      widgets.add(_optionTile(
+        s,
+        // Highlight classes the model is still short of examples for -
+        // uncertainty sampling beats random prompting when a healthy
+        // pond reads "none" almost every time.
+        wanted: (needed[s.wire] ?? 0) > 0,
+      ));
+      widgets.add(const SizedBox(height: 6));
+    }
+
+    // Obstruction is visually separated: it is a data-quality flag, not a
+    // fifth severity level, and it is handled completely differently by
+    // the engine (it removes a reading rather than describing one).
+    widgets.add(const SizedBox(height: 4));
+    widgets.add(Row(
+      children: [
+        Expanded(child: Container(height: 1, color: Colors.white10)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            'or flag the reading',
+            style: TextStyle(color: Colors.white24, fontSize: 9.5),
+          ),
+        ),
+        Expanded(child: Container(height: 1, color: Colors.white10)),
+      ],
+    ));
+    widgets.add(const SizedBox(height: 8));
+    widgets.add(_optionTile(AlgaeSeverity.obstruction, wanted: false));
+
+    return widgets;
+  }
+
+  Widget _optionTile(AlgaeSeverity s, {required bool wanted}) {
+    final selected = _selected == s;
+    final isObstruction = s == AlgaeSeverity.obstruction;
+    final color = isObstruction ? Colors.white54 : _severityColor(s);
+
+    return InkWell(
+      onTap: _submitting ? null : () => setState(() => _selected = s),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.14) : Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.6) : Colors.white.withOpacity(0.06),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: selected ? color : Colors.white24,
+              size: 17,
+            ),
+            const SizedBox(width: 10),
+            if (!isObstruction) ...[
+              _severityDot(s),
+              const SizedBox(width: 9),
+            ] else ...[
+              const Icon(Icons.visibility_off_outlined,
+                  color: Colors.white38, size: 14),
+              const SizedBox(width: 9),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          s.label,
+                          style: TextStyle(
+                            color: selected ? Colors.white : Colors.white70,
+                            fontSize: 12,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (wanted) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: _accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'needed',
+                            style: TextStyle(
+                              color: _accent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.hint,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _severityDot(AlgaeSeverity s) {
+    final color = _severityColor(s);
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: color.withOpacity(0.5), blurRadius: 5, spreadRadius: 0.5),
+        ],
+      ),
+    );
+  }
+
+  Widget _previousRating(AlgaeRating prev) {
+    final label = prev.severity?.label ?? 'Blocked view';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.history, color: Colors.white38, size: 13),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              // Anchoring against the previous judgement is the cheapest
+              // defence against a single rater's scale drifting over
+              // weeks - "minor" in August should mean what it meant in June.
+              'Last time you rated this "$label"'
+              '${prev.ratedAt != null ? ' ${_relativeTime(prev.ratedAt)}' : ''}',
+              style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+            ),
+          ),
+          if (prev.greenRatioAtRating != null)
+            Text(
+              '${(prev.greenRatioAtRating! * 100).toStringAsFixed(2)}%',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _submitRow(_RatingCardData data) {
+    final canSubmit = _selected != null && !_submitting;
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: canSubmit ? () => _submit(data) : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: _accent.withOpacity(0.18),
+          foregroundColor: _accent,
+          disabledBackgroundColor: Colors.white.withOpacity(0.04),
+          disabledForegroundColor: Colors.white24,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: canSubmit ? _accent.withOpacity(0.4) : Colors.white10,
+            ),
+          ),
+        ),
+        icon: _submitting
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+              )
+            : const Icon(Icons.check_circle_outline, size: 16),
+        label: Text(
+          _submitting ? 'Saving...' : 'Submit rating',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _resultBanner(AlgaeRatingResult r) {
+    final delta = r.delta;
+    final obstruction = r.removedFrames > 0;
+
+    final String message;
+    if (obstruction) {
+      message =
+          'Reading discarded and removed from the growth estimate. '
+          'The camera frame will no longer skew the forecast.';
+    } else if (delta != null && r.greenBefore != null && r.greenAfter != null) {
+      final dir = delta < 0 ? 'down' : 'up';
+      message =
+          'Estimate moved $dir from ${(r.greenBefore! * 100).toStringAsFixed(2)}% '
+          'to ${(r.greenAfter! * 100).toStringAsFixed(2)}% coverage.';
+    } else {
+      message = 'Rating saved and applied to the model.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.greenAccent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.check_circle_outline,
+                  color: Colors.greenAccent, size: 14),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 10.5,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              // Undo is not optional garnish here: a rating visibly moves
+              // the forecast, so a mis-tap has to be reversible. The
+              // engine restores the exact prior level, thresholds and
+              // growth fit.
+              TextButton(
+                onPressed: _submitting ? null : _undo,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Undo', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+          if (r.warning != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              r.warning!,
+              style: const TextStyle(color: Colors.orangeAccent, fontSize: 9.5),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _calibrationPanel(AlgaeCalibration cal) {
+    final total = cal.totalLabels;
+    final remaining = cal.remainingForCalibration;
+    // 2 labels per class x 4 classes is the minimum for full calibration.
+    const target = 8;
+    final progress = (total / target).clamp(0.0, 1.0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              cal.isCalibrated ? Icons.verified_outlined : Icons.tune,
+              color: cal.isCalibrated ? Colors.greenAccent : Colors.white38,
+              size: 14,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                cal.isCalibrated
+                    ? 'Alert levels calibrated from your ratings'
+                    : cal.isPartiallyCalibrated
+                          ? 'Alert levels partly calibrated'
+                          : 'Alert levels still estimated',
+                style: TextStyle(
+                  color: cal.isCalibrated ? Colors.greenAccent : Colors.white54,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              '$total rating${total == 1 ? '' : 's'}',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+          ],
+        ),
+        if (!cal.isCalibrated) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              backgroundColor: Colors.white.withOpacity(0.06),
+              valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            remaining > 0
+                ? _neededSummary(cal)
+                : 'Enough ratings collected - thresholds will calibrate on the '
+                      'next update.',
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 9.5,
+              height: 1.35,
+            ),
+          ),
+        ],
+        if (cal.isCalibrated) ...[
+          const SizedBox(height: 7),
+          Text(
+            'Watch at ${(cal.watchThreshold * 100).toStringAsFixed(2)}% coverage, '
+            'action at ${(cal.actionThreshold * 100).toStringAsFixed(2)}% - both '
+            'measured from where your own ratings changed.',
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 9.5,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _neededSummary(AlgaeCalibration cal) {
+    final parts = <String>[];
+    cal.labelsNeeded.forEach((k, v) {
+      if (v > 0) {
+        final s = AlgaeSeverityX.fromWire(k);
+        parts.add('$v more "${s?.label ?? k}"');
+      }
+    });
+    if (parts.isEmpty) return '';
+    return 'Still needed to calibrate: ${parts.join(', ')}. Rate whenever the '
+        'pond looks different from last time - varied examples are worth far '
+        'more than repeats of the same state.';
+  }
+
+  // ------------------------------------------------------------------
+
+  Widget _shell({required Widget child}) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withOpacity(0.08)),
+    ),
+    child: child,
+  );
+
+  Color _severityColor(AlgaeSeverity s) => switch (s) {
+    AlgaeSeverity.none => Colors.greenAccent,
+    AlgaeSeverity.minor => const Color(0xFFB2E06A),
+    AlgaeSeverity.moderate => Colors.amberAccent,
+    AlgaeSeverity.severe => Colors.redAccent,
+    AlgaeSeverity.obstruction => Colors.white54,
+  };
+
+  String _relativeTime(DateTime? t) {
+    if (t == null) return 'unknown time';
+    final d = DateTime.now().difference(t.toLocal());
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
+    if (d.inHours < 24) return '${d.inHours} hr ago';
+    if (d.inDays == 1) return 'yesterday';
+    if (d.inDays < 7) return '${d.inDays} days ago';
+    return '${t.toLocal().day}/${t.toLocal().month}';
+  }
+}
+
+/// Merged view model: camera frame straight from imageTable, calibration
+/// state from the Flask engine.
+///
+/// Kept as one object so the widget tree never has to reason about which
+/// of the two sources failed - each field is independently nullable and
+/// the render path degrades per-field.
+class _RatingCardData {
+  final PondCameraFrame? frame;
+
+  /// Why there is no frame, in words worth showing the user - "camera
+  /// hasn't reported yet" and "couldn't reach Supabase" are different
+  /// problems and deserve different messages.
+  final String? frameError;
+
+  /// Null when the Flask service is unreachable. The card still renders
+  /// the photo in that case; only the rating controls are withheld.
+  final AlgaeRatingContext? context;
+
+  const _RatingCardData({
+    required this.frame,
+    required this.frameError,
+    required this.context,
+  });
+}
