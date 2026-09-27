@@ -1,0 +1,98 @@
+# DigitalTwin — three-domain integration
+
+This service now models all three pond outcome domains, not just water
+chemistry. Drop these files into `Backend/DigitalTwin/`.
+
+## New / changed files
+
+| File | Status | Notes |
+|---|---|---|
+| `pond_twin.py` | **NEW** | Aggregate holding all three engines per user |
+| `algae_severity_rating_card.dart` | **NEW** | Camera frame + human rating control (Flutter) |
+| `evaporation_engine.py` | **NEW** | Now stateful (was a stateless projector) |
+| `algae_engine.py` | **NEW** | Now stateful, with camera assimilation |
+| `schema_additions.sql` | **NEW** | Two evaluation tables + indexes |
+| `registry.py` | changed | Holds `PondTwin` instead of a bare chemistry engine |
+| `poller.py` | changed | Advances all three engines per tick |
+| `app.py` | changed | Events fan out; new cached assessment endpoints |
+| `state_store.py` | changed | Evaluation pushes/reads for the two new domains |
+| `engine.py` | unchanged | |
+| `forecast_utils.py` | unchanged | |
+
+## Deploy order
+
+1. Copy all files in.
+2. Run `schema_additions.sql` in the Supabase SQL editor. **Optional to do
+   first** — the evaluation pushes are fail-soft, so the service runs
+   without it; you just lose the cached `/assessment/*` history until it's
+   applied.
+3. Restart the service. Existing `pond_chemistry_state` rows load fine —
+   `PondTwin.from_snapshot` detects the legacy bare-chemistry shape and
+   wraps it, preserving accumulated nitrogen state.
+
+## State update triggers
+
+Three, all through the same locked+persisted path:
+
+**Environmental poll** (`poller.py`, every 15 min) — pulls sensors, NEA
+telemetry/forecast, and any new camera frames; advances all three engines
+to now; pushes one evaluation row per domain.
+
+**Logged intervention** (`/events/*`) — fans out to every affected engine,
+then immediately re-assesses and re-projects:
+
+| Event | chemistry | evaporation | algae |
+|---|---|---|---|
+| `FEEDING` | +TAN | — | — |
+| `WATER_TOPUP` | TDS dilution | **loss reset** | — |
+| `WATER_CHANGE` | dilute TAN/NO2, blend NO3 | **loss reset** | dilute suspended |
+| `ALGAE_SCRUB` | suppress NO3 uptake 5d | — | **level reset** |
+
+**Human severity rating** (`/events/algae-rating`) — the user rates the latest
+camera frame. Corrects the algae engine's level at `HUMAN_TRUST = 0.85`
+(above the camera's `0.70`), and the accumulated (label, green_ratio) pairs
+calibrate the alert thresholds. `obstruction` retroactively removes the
+frame from the growth fit. Exactly reversible via undo.
+
+## Endpoints
+
+Cheap cached reads (dashboard cards + alert badges):
+- `GET /assessment/<uid>` — chemistry
+- `GET /assessment/evaporation/<uid>`
+- `GET /assessment/algae/<uid>`
+- `GET /assessment/all/<uid>` — all three in one call
+
+Live projections (detail graph screens):
+- `GET /forecast/<uid>?horizon_days=21` — chemistry
+- `GET /forecast/evaporation/<uid>?horizon_days=14&depth_m=1.2`
+- `GET /forecast/algae/<uid>?horizon_days=21`
+
+Algae severity ratings:
+- `POST /events/algae-rating` — `{user_id, severity, image_id, green_ratio}`
+  where severity is `none|minor|moderate|severe|obstruction`
+- `POST /events/algae-rating/undo` — `{user_id, rating_id}`
+- `GET /ratings/algae/<uid>` — history + calibration state + latest frame
+
+Every `/events/*` response now returns all three domain assessments, so
+the app can refresh every card from one response.
+
+## Tests
+
+```
+python3 test_pond_twin.py            # 61 checks - state resets, snapshots
+python3 test_poller_integration.py   # 83 checks - real poller + all endpoints
+python3 test_severity_ratings.py     # 63 checks - rating assimilation
+python3 test_new_engines.py          # 49 checks - engine physics
+python3 test_contract.py             # 25 checks - Python <-> Dart JSON contract
+python3 test_projection.py           # chemistry lookahead
+```
+All run offline with Supabase stubbed. `test_contract.py` needs
+`digital_twin_api.dart` beside it.
+
+## Still open
+
+- **No auth.** Every endpoint trusts a caller-supplied `user_id`.
+- **Single process only.** The registry lock does not span gunicorn workers.
+- **ESP32 `user_id` mismatch.** `CameraMain.ino` hardcodes `15`; pond data
+  is `455`. Algae stays `no-camera` for 455 until reconciled.
+- Both new models are uncalibrated against ground truth.

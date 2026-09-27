@@ -9,6 +9,13 @@ Design note: this class is stateful and mutated in place. It is NOT
 thread-safe on its own - callers (app.py, poller.py) are responsible for
 holding a per-user lock around any sequence of mutate-then-persist calls.
 See EngineRegistry in registry.py for how that's enforced.
+
+`project_forward()` is the one exception to "stateful and mutated in
+place": it operates on local copies of the pools only and never touches
+self, so it's safe to call from a read-only endpoint without going through
+the mutate-then-persist contract (though routing it through
+registry.with_engine is still fine/simplest, since the persisted snapshot
+comes out unchanged).
 """
 from __future__ import annotations
 
@@ -303,6 +310,7 @@ class WaterChemistryAssessment:
     sensor_warnings: list
     advisory: str
     add_hardener_now: bool
+    risk_score: int = 0
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -312,10 +320,46 @@ def _day_key(t: datetime) -> str:
     return f"{t.year}-{t.month}-{t.day}"
 
 
+# Ammonia (TAN) production per gram of protein fed - ~16% of protein mass
+# is nitrogen, and roughly `excretion_fraction` of that nitrogen load ends
+# up excreted as TAN rather than retained in fish tissue. Pulled out as a
+# module-level helper so both real event application (apply_event) and the
+# historical-average estimator used by project_forward (see
+# estimate_avg_daily_tan_mg below) use the exact same formula - no risk of
+# the two drifting apart.
+def _ammonia_mg(food_grams: float, protein_percent: float, excretion_fraction: float = 0.70) -> float:
+    return food_grams * (protein_percent / 100.0) * 0.16 * excretion_fraction * 1000.0
+
+
 class WaterChemistryEngine:
     """Persistent, stateful per-pond engine. One instance per userID,
     kept alive across requests via EngineRegistry, snapshotted to Supabase
     after every mutation for crash/restart durability."""
+
+    # Composite risk_score cutoffs - shared by assess() (current-state
+    # classification) and project_forward() (forward simulation), so the
+    # "when would this need attention" projection uses the exact same bar
+    # as the live Green/Amber/Red status. These are the same cutoffs the
+    # original assess() used inline before being pulled out into
+    # RISK_WATCH_THRESHOLD / RISK_HIGH_THRESHOLD constants here:
+    #
+    #   score >= 3 already corresponds to things like "TAN alone in the
+    #   0.5-1.0ppm band plus a mild reactivity read" or "NO3 past 40ppm
+    #   plus a rising buffering trend" - i.e. one clear stressor, or two
+    #   mild ones compounding. That's a reasonable "start planning a
+    #   water change" bar: not an emergency, but not noise either.
+    #
+    #   score >= 6 requires multiple stressors compounding at once (e.g.
+    #   TAN > 1.0 AND NO3 > 80, or high reactivity AND a fast-rising
+    #   trend AND incoming rain) - that's already "Red / High Risk" today,
+    #   i.e. change the water now, not "soon".
+    #
+    # The NO2 > 0.5ppm nitrite override is independent of risk_score in
+    # both assess() and project_forward() - a small amount of nitrite is
+    # dangerous regardless of how the rest of the score reads.
+    RISK_WATCH_THRESHOLD = 3
+    RISK_HIGH_THRESHOLD = 6
+    NITRITE_OVERRIDE_PPM = 0.5
 
     def __init__(self, config: PondConfig):
         self.config = config
@@ -369,7 +413,7 @@ class WaterChemistryEngine:
             self._algae_suppression_days_remaining = 5
 
         elif event.kind == EventKind.FEEDING:
-            tan_added = self._calculate_ammonia_mg(
+            tan_added = _ammonia_mg(
                 food_grams=event.food_grams or 0.0,
                 protein_percent=event.protein_percent or 0.0,
             )
@@ -382,10 +426,6 @@ class WaterChemistryEngine:
             return min(max(litres / self.config.volume_litres, 0.0), 1.0)
         return 0.0
 
-    def _calculate_ammonia_mg(self, food_grams: float, protein_percent: float,
-                               excretion_fraction: float = 0.70) -> float:
-        return food_grams * (protein_percent / 100.0) * 0.16 * excretion_fraction * 1000.0
-
     # --------------------------------------------------------
     # Sensor ingestion
     # --------------------------------------------------------
@@ -396,7 +436,11 @@ class WaterChemistryEngine:
         if self._last_ingest_time is not None:
             hours = (raw.time - self._last_ingest_time).total_seconds() / 3600.0
             if hours > 0:
-                self._advance_pools(hours, gated.temp.value, gated.lux)
+                self._advance_pools(
+                    hours,
+                    gated.temp.value,
+                    gated.lux.value if gated.lux.is_trusted else None,
+                )
         self._last_ingest_time = raw.time
 
         day = self._daily.setdefault(_day_key(raw.time), DailyAggregate(raw.time))
@@ -411,29 +455,62 @@ class WaterChemistryEngine:
 
         return warnings
 
-    def _advance_pools(self, hours: float, temp_c: float, lux: ChannelReading) -> None:
-        mult = self._nitrification_temp_multiplier(temp_c)
+    def _advance_pools(self, hours: float, temp_c: float, lux_value: Optional[float]) -> None:
+        (
+            self._tan_mg,
+            self._no2_mg,
+            self._no3_mg,
+            self._algae_suppression_days_remaining,
+        ) = self._step_pools(
+            self._tan_mg,
+            self._no2_mg,
+            self._no3_mg,
+            self._algae_suppression_days_remaining,
+            hours,
+            temp_c,
+            lux_value,
+        )
+
+    @staticmethod
+    def _step_pools(
+        tan_mg: float,
+        no2_mg: float,
+        no3_mg: float,
+        algae_suppression_days_remaining: int,
+        hours: float,
+        temp_c: float,
+        lux_value: Optional[float],
+    ) -> tuple[float, float, float, int]:
+        """Pure pool-kinetics step - no self, no side effects. This is the
+        single implementation shared by real sensor ingestion
+        (_advance_pools, above) and forward simulation (project_forward,
+        below), so a forecast day and a real elapsed-time step always
+        behave identically for the same (hours, temp_c, lux) inputs."""
+        mult = WaterChemistryEngine._nitrification_temp_multiplier(temp_c)
         base_tan_to_no2 = 0.05
         base_no2_to_no3 = 0.035
 
-        tan_converted = self._tan_mg * (1 - math.exp(-base_tan_to_no2 * mult * hours))
-        self._tan_mg -= tan_converted
-        self._no2_mg += tan_converted
+        tan_converted = tan_mg * (1 - math.exp(-base_tan_to_no2 * mult * hours))
+        tan_mg -= tan_converted
+        no2_mg += tan_converted
 
-        no2_converted = self._no2_mg * (1 - math.exp(-base_no2_to_no3 * mult * hours))
-        self._no2_mg -= no2_converted
-        self._no3_mg += no2_converted
+        no2_converted = no2_mg * (1 - math.exp(-base_no2_to_no3 * mult * hours))
+        no2_mg -= no2_converted
+        no3_mg += no2_converted
 
-        if lux.is_trusted:
-            suppression = 0.3 if self._algae_suppression_days_remaining > 0 else 1.0
-            uptake_rate = 0.01 * min(max(lux.value / 10000.0, 0.0), 3.0) * suppression
-            self._no3_mg -= self._no3_mg * (1 - math.exp(-uptake_rate * hours))
-            self._no3_mg = max(self._no3_mg, 0.0)
+        if lux_value is not None:
+            suppression = 0.3 if algae_suppression_days_remaining > 0 else 1.0
+            uptake_rate = 0.01 * min(max(lux_value / 10000.0, 0.0), 3.0) * suppression
+            no3_mg -= no3_mg * (1 - math.exp(-uptake_rate * hours))
+            no3_mg = max(no3_mg, 0.0)
 
-        if hours >= 24 and self._algae_suppression_days_remaining > 0:
-            self._algae_suppression_days_remaining -= 1
+        if hours >= 24 and algae_suppression_days_remaining > 0:
+            algae_suppression_days_remaining -= 1
 
-    def _nitrification_temp_multiplier(self, temp_c: float) -> float:
+        return tan_mg, no2_mg, no3_mg, algae_suppression_days_remaining
+
+    @staticmethod
+    def _nitrification_temp_multiplier(temp_c: float) -> float:
         def lerp(x, x0, x1, y0, y1):
             return y0 + (y1 - y0) * ((x - x0) / (x1 - x0))
         if temp_c < 5:
@@ -463,35 +540,27 @@ class WaterChemistryEngine:
         return 0.0 if den == 0 else num / den
 
     # --------------------------------------------------------
-    # Assessment
+    # Risk scoring (shared by assess() and project_forward())
     # --------------------------------------------------------
-    def assess(self, rain_incoming: bool, rain_intensity: str = "unknown",
-               recent_sensor_warnings: Optional[list] = None) -> WaterChemistryAssessment:
-        recent_sensor_warnings = recent_sensor_warnings or []
-        tan_ppm = self._tan_mg / self.config.volume_litres
-        no2_ppm = self._no2_mg / self.config.volume_litres
-        no3_ppm = self._no3_mg / self.config.volume_litres
-
-        usable_days = sorted(
-            (d for d in self._daily.values() if d.has_enough_data and not d.had_volume_event),
-            key=lambda d: d.day,
-        )
-
-        current_reactivity = None
-        reactivity_trend = None
-        tds_trend = None
-
-        if usable_days:
-            current_reactivity = usable_days[-1].reactivity
-            reactivities = [d.reactivity for d in usable_days]
-            if len(reactivities) >= 3:
-                reactivity_trend = self._slope(reactivities)
-            tds_series = [d.avg_tds for d in usable_days if d.avg_tds is not None]
-            if len(tds_series) >= 3:
-                tds_trend = self._slope(tds_series)
-
+    @staticmethod
+    def _score_risk(
+        tan_ppm: float,
+        no2_ppm: float,
+        no3_ppm: float,
+        current_reactivity: Optional[float],
+        reactivity_trend: Optional[float],
+        tds_trend: Optional[float],
+        rain_incoming: bool,
+        rain_intensity: str,
+    ) -> tuple[int, bool]:
+        """Returns (risk_score, nitrite_override). Pulled out of assess()
+        so project_forward() scores each simulated day with exactly the
+        same rules the live status uses - current_reactivity/
+        reactivity_trend/tds_trend are None for simulated days (the
+        pH-buffering trend has no forecastable analogue), which simply
+        skips those terms rather than double-counting a stale value."""
         risk_score = 0
-        nitrite_override = no2_ppm > 0.5
+        nitrite_override = no2_ppm > WaterChemistryEngine.NITRITE_OVERRIDE_PPM
 
         if tan_ppm > 1.0:
             risk_score += 2
@@ -524,6 +593,42 @@ class WaterChemistryEngine:
         if rain_incoming:
             risk_score += 2 if rain_intensity == "heavy" else 1
 
+        return risk_score, nitrite_override
+
+    # --------------------------------------------------------
+    # Assessment (current state)
+    # --------------------------------------------------------
+    def assess(self, rain_incoming: bool, rain_intensity: str = "unknown",
+               recent_sensor_warnings: Optional[list] = None) -> WaterChemistryAssessment:
+        recent_sensor_warnings = recent_sensor_warnings or []
+        tan_ppm = self._tan_mg / self.config.volume_litres
+        no2_ppm = self._no2_mg / self.config.volume_litres
+        no3_ppm = self._no3_mg / self.config.volume_litres
+
+        usable_days = sorted(
+            (d for d in self._daily.values() if d.has_enough_data and not d.had_volume_event),
+            key=lambda d: d.day,
+        )
+
+        current_reactivity = None
+        reactivity_trend = None
+        tds_trend = None
+
+        if usable_days:
+            current_reactivity = usable_days[-1].reactivity
+            reactivities = [d.reactivity for d in usable_days]
+            if len(reactivities) >= 3:
+                reactivity_trend = self._slope(reactivities)
+            tds_series = [d.avg_tds for d in usable_days if d.avg_tds is not None]
+            if len(tds_series) >= 3:
+                tds_trend = self._slope(tds_series)
+
+        risk_score, nitrite_override = self._score_risk(
+            tan_ppm, no2_ppm, no3_ppm,
+            current_reactivity, reactivity_trend, tds_trend,
+            rain_incoming, rain_intensity,
+        )
+
         add_hardener = False
         if nitrite_override:
             status, category = "Red", "Nitrite Risk"
@@ -533,7 +638,7 @@ class WaterChemistryEngine:
                 f"any nitrite test kit available, verify directly and consider a partial "
                 f"water change regardless of other readings."
             )
-        elif risk_score >= 6:
+        elif risk_score >= self.RISK_HIGH_THRESHOLD:
             status, category = "Red", "High Risk"
             advisory = (
                 "Multiple stress signals (waste load, buffering trend, and/or incoming "
@@ -541,7 +646,7 @@ class WaterChemistryEngine:
                 "is the driver, add KH/Calcium buffer before rain arrives."
             )
             add_hardener = True
-        elif risk_score >= 3:
+        elif risk_score >= self.RISK_WATCH_THRESHOLD:
             status, category = "Amber", "Watch"
             advisory = (
                 "Some drift in waste load or buffering trend. No urgent action, but "
@@ -564,7 +669,205 @@ class WaterChemistryEngine:
             sensor_warnings=recent_sensor_warnings,
             advisory=advisory,
             add_hardener_now=add_hardener,
+            risk_score=risk_score,
         )
+
+    # --------------------------------------------------------
+    # Forward projection ("when would this need a water change")
+    # --------------------------------------------------------
+    @staticmethod
+    def estimate_avg_daily_tan_mg(
+        feeding_rows: list[dict],
+        excretion_fraction: float = 0.70,
+    ) -> Optional[float]:
+        """feeding_rows: recent FEEDING rows from pondInterventions (most
+        recent first), each with food_grams/protein_percentage/
+        event_timestamp - see state_store.fetch_recent_feeding_events.
+        Returns the average TAN mg produced per day across the span the
+        sample covers (min(fetched) to max(fetched) timestamp), or None
+        if there isn't enough history to establish a meaningful span
+        (fewer than 2 events, or they're all within the same ~12 hours -
+        e.g. one heavy feeding day isn't a "daily rate")."""
+        if not feeding_rows or len(feeding_rows) < 2:
+            return None
+
+        total_tan_mg = 0.0
+        timestamps: list[datetime] = []
+        for row in feeding_rows:
+            grams = float(row.get("food_grams") or 0.0)
+            protein = float(row.get("protein_percentage") or row.get("protein_percent") or 0.0)
+            total_tan_mg += _ammonia_mg(grams, protein, excretion_fraction)
+            ts = row.get("event_timestamp") or row.get("timestamp")
+            if ts:
+                timestamps.append(ts if isinstance(ts, datetime) else datetime.fromisoformat(ts))
+
+        if len(timestamps) < 2:
+            return None
+
+        span_days = (max(timestamps) - min(timestamps)).total_seconds() / 86400.0
+        if span_days < 0.5:
+            return None
+
+        return total_tan_mg / span_days
+
+    def project_forward(
+        self,
+        *,
+        avg_daily_tan_mg: float,
+        daily_temp_forecast_c: Optional[list] = None,
+        daily_lux_forecast: Optional[list] = None,
+        daily_rain: Optional[list] = None,
+        fallback_temp_c: Optional[float] = None,
+        fallback_lux: Optional[float] = None,
+        horizon_days: int = 21,
+        steps_per_day: int = 4,
+    ) -> dict:
+        """Simulates the pond forward assuming feeding continues at
+        avg_daily_tan_mg/day and NO further water changes, top-ups, or
+        algal scrubs occur - i.e. "if nothing changes, when would one
+        become necessary". Operates on local copies of the pools only;
+        never mutates self, so it's safe to call from a read-only request.
+
+        daily_temp_forecast_c / daily_lux_forecast / daily_rain: explicit
+        per-day values for as many days as you have real forecast data for
+        (e.g. NEA's 4-day outlook - see forecast_utils.py). Once the
+        horizon runs past the supplied lists, fallback_temp_c/
+        fallback_lux (recent historical daily averages) are used for the
+        remaining days, with no rain assumed.
+
+        Returns a dict with the day each risk threshold is first crossed,
+        as "N days from now" (0 = already true right now, based on
+        current pool state; 1+ = that many full simulated days out), plus
+        the full day-by-day trajectory for charting.
+
+        Caveat: this only projects the waste-load side of risk
+        (TAN/NO2/NO3). assess()'s buffering/reactivity trend comes from
+        measured pH-vs-light swings and has no forecastable analogue, so
+        it is intentionally excluded here - a real future assess() could
+        still read worse than this projection if buffering is degrading
+        on top of waste load.
+        """
+        if horizon_days < 1:
+            raise ValueError("horizon_days must be >= 1")
+        if steps_per_day < 1:
+            raise ValueError("steps_per_day must be >= 1")
+
+        daily_temp_forecast_c = daily_temp_forecast_c or []
+        daily_lux_forecast = daily_lux_forecast or []
+        daily_rain = daily_rain or []
+
+        tan_mg, no2_mg, no3_mg = self._tan_mg, self._no2_mg, self._no3_mg
+        algae_days = self._algae_suppression_days_remaining
+        hours_per_step = 24.0 / steps_per_day
+        tan_per_step = avg_daily_tan_mg / steps_per_day
+
+        trajectory = []
+        first_watch_day = None
+        first_high_risk_day = None
+        first_nitrite_day = None
+
+        # Evaluate the CURRENT state (day 0, before any simulated time
+        # passes) first. This matters because pool advancement can pull a
+        # value back under a threshold within less than a day (e.g. NO2
+        # actively converting to NO3) - without this check, a pond that is
+        # already past the nitrite threshold right now could decay just
+        # enough by the end of day 1 to never trip the day-by-day loop
+        # below, silently reporting "no action needed" for a pond that
+        # needs one today. assess() surfaces this separately for the live
+        # status, but project_forward should not contradict it.
+        current_tan_ppm = self._tan_mg / self.config.volume_litres
+        current_no2_ppm = self._no2_mg / self.config.volume_litres
+        current_no3_ppm = self._no3_mg / self.config.volume_litres
+        current_risk_score, current_nitrite_override = self._score_risk(
+            current_tan_ppm, current_no2_ppm, current_no3_ppm,
+            current_reactivity=None, reactivity_trend=None, tds_trend=None,
+            rain_incoming=False, rain_intensity="unknown",
+        )
+        if current_nitrite_override:
+            first_nitrite_day = 0
+        if current_risk_score >= self.RISK_WATCH_THRESHOLD:
+            first_watch_day = 0
+        if current_risk_score >= self.RISK_HIGH_THRESHOLD:
+            first_high_risk_day = 0
+
+        for day_index in range(horizon_days):
+            days_from_now = day_index + 1
+
+            temp_c = (
+                daily_temp_forecast_c[day_index]
+                if day_index < len(daily_temp_forecast_c) and daily_temp_forecast_c[day_index] is not None
+                else fallback_temp_c
+            )
+            lux_value = (
+                daily_lux_forecast[day_index]
+                if day_index < len(daily_lux_forecast) and daily_lux_forecast[day_index] is not None
+                else fallback_lux
+            )
+            rain_incoming, rain_intensity = (
+                daily_rain[day_index] if day_index < len(daily_rain) else (False, "unknown")
+            )
+
+            if temp_c is None:
+                raise ValueError(
+                    f"No temperature forecast or fallback available for day {days_from_now} - "
+                    "cannot project nitrification without a temperature assumption."
+                )
+
+            for _ in range(steps_per_day):
+                tan_mg += tan_per_step
+                tan_mg, no2_mg, no3_mg, algae_days = self._step_pools(
+                    tan_mg, no2_mg, no3_mg, algae_days, hours_per_step, temp_c, lux_value,
+                )
+
+            tan_ppm = tan_mg / self.config.volume_litres
+            no2_ppm = no2_mg / self.config.volume_litres
+            no3_ppm = no3_mg / self.config.volume_litres
+
+            risk_score, nitrite_override = self._score_risk(
+                tan_ppm, no2_ppm, no3_ppm,
+                current_reactivity=None, reactivity_trend=None, tds_trend=None,
+                rain_incoming=rain_incoming, rain_intensity=rain_intensity,
+            )
+
+            if nitrite_override and first_nitrite_day is None:
+                first_nitrite_day = days_from_now
+            if risk_score >= self.RISK_WATCH_THRESHOLD and first_watch_day is None:
+                first_watch_day = days_from_now
+            if risk_score >= self.RISK_HIGH_THRESHOLD and first_high_risk_day is None:
+                first_high_risk_day = days_from_now
+
+            trajectory.append({
+                "days_from_now": days_from_now,
+                "tan_ppm": tan_ppm,
+                "no2_ppm": no2_ppm,
+                "no3_ppm": no3_ppm,
+                "risk_score": risk_score,
+                "nitrite_override": nitrite_override,
+                "temp_c_assumed": temp_c,
+                "lux_assumed": lux_value,
+            })
+
+        candidates = [d for d in (first_nitrite_day, first_watch_day, first_high_risk_day) if d is not None]
+        predicted_action_days_from_now = min(candidates) if candidates else None
+
+        return {
+            "assumptions": {
+                "avg_daily_tan_mg": avg_daily_tan_mg,
+                "fallback_temp_c": fallback_temp_c,
+                "fallback_lux": fallback_lux,
+                "horizon_days": horizon_days,
+            },
+            "predicted_action_days_from_now": predicted_action_days_from_now,
+            "first_watch_days_from_now": first_watch_day,
+            "first_high_risk_days_from_now": first_high_risk_day,
+            "first_nitrite_days_from_now": first_nitrite_day,
+            "trajectory": trajectory,
+            "caveat": (
+                "Projection covers TAN/NO2/NO3 waste load only - buffering/reactivity "
+                "trend is not forecastable and is excluded, so actual future risk could "
+                "read higher than shown here if buffering is also degrading."
+            ),
+        }
 
     # --------------------------------------------------------
     # Snapshot serialization (durability across process restarts)
