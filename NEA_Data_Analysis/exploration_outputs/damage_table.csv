@@ -1,0 +1,6 @@
+rain_bucket,count,median,max,dilution_%,KH_lost_dKH,fish_day_equiv,net_level_mm,owner_action,when,provenance
+dry,1142,0.0,1.0,0.0,0.0,0.0,-4.5,Nothing for chemistry. Multi-day: check top-up reservoir; heat/algae watch.,PLAN,"Penman, calibrated ±25%"
+light,591,3.9999999999999996,10.0,0.33277839454767255,0.01247918979553772,0.08319459863691814,-0.5000000000000004,Nothing.,—,physics
+wet,386,16.21075,30.0,1.3418121851180076,0.050317956941925285,0.3354530462795019,11.71075,Nothing — gauge-driven dosing absorbs it. Do NOT top up after rain.,—,physics
+heavy,114,36.765,49.616749999999996,3.0172928323461745,0.11314848121298154,0.7543232080865436,32.265,Nothing pre-emptive. Routine look.,—,physics
+extreme,57,63.2,173.25925,5.13038081532412,0.19238928057465451,1.2825952038310302,58.7,REACT: next-morning check — KH test if buffer already low; debris/runoff.,REACT,physics; runoff/contaminant mechanism UNMODELLED
