@@ -1,0 +1,11 @@
+# Secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+
+# Large scraped data dumps (regenerate via the scraper scripts instead of committing)
+PythonSimulatorProject/*.zip
