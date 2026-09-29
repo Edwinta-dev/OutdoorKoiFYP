@@ -14,3 +14,8 @@ NEA_Data_Analysis/twenty_four_hr_periods.csv
 NEA_Data_Analysis/twenty_four_hr_general.csv
 NEA_Data_Analysis/four_day_outlook.csv
 NEA_Data_Analysis/daily_rainfall_mm.csv
+PythonSimulatorProject/NEAClimateScraper/nea_climate_data/
+PythonSimulatorProject/NEAClimateScraper/*.log
+
+# IDE
+.idea/
