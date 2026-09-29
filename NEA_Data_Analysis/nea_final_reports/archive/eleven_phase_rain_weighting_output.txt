@@ -1,0 +1,109 @@
+2280 days, 2020-02-02 .. 2026-08-18
+
+========================================================================================================
+1. CALIBRATION TABLE -- P(outcome | forecast tier). This IS the confidence weight.
+========================================================================================================
+
+  rain >=1mm today   (base rate 0.500)
+        tier      n   %days       P           95% CI   lift
+     NO_RAIN    357   15.7%   0.140 [0.108,0.180]   0.28
+       LIGHT    228   10.0%   0.425 [0.363,0.490]   0.85
+    MODERATE     36    1.6%   0.917 [0.782,0.971]   1.83
+    THUNDERY   1641   72.0%   0.576 [0.552,0.600]   1.15
+      SEVERE     18    0.8%   0.778 [0.548,0.910]   1.56
+
+  rain >=10mm today   (base rate 0.240)
+        tier      n   %days       P           95% CI   lift
+     NO_RAIN    357   15.7%   0.067 [0.046,0.098]   0.28
+       LIGHT    228   10.0%   0.118 [0.083,0.167]   0.49
+    MODERATE     36    1.6%   0.583 [0.422,0.729]   2.43
+    THUNDERY   1641   72.0%   0.285 [0.263,0.307]   1.19
+      SEVERE     18    0.8%   0.444 [0.246,0.663]   1.85
+
+  rain >=30mm today   (base rate 0.073)
+        tier      n   %days       P           95% CI   lift
+     NO_RAIN    357   15.7%   0.014 [0.006,0.032]   0.19
+       LIGHT    228   10.0%   0.031 [0.015,0.062]   0.42
+    MODERATE     36    1.6%   0.111 [0.044,0.253]   1.52
+    THUNDERY   1641   72.0%   0.091 [0.078,0.106]   1.24
+      SEVERE     18    0.8%   0.111 [0.031,0.328]   1.52
+
+  any >=30mm day next 7d   (base rate 0.379)
+        tier      n   %days       P           95% CI   lift
+     NO_RAIN    357   15.7%   0.227 [0.186,0.273]   0.60
+       LIGHT    228   10.0%   0.377 [0.317,0.442]   1.00
+    MODERATE     36    1.6%   0.556 [0.396,0.705]   1.47
+    THUNDERY   1641   72.0%   0.409 [0.385,0.433]   1.08
+      SEVERE     18    0.8%   0.333 [0.163,0.563]   0.88
+
+  next 7d total >=100mm   (base rate 0.131)
+        tier      n   %days       P           95% CI   lift
+     NO_RAIN    357   15.7%   0.062 [0.041,0.092]   0.47
+       LIGHT    228   10.0%   0.136 [0.097,0.187]   1.04
+    MODERATE     36    1.6%   0.139 [0.061,0.287]   1.06
+    THUNDERY   1641   72.0%   0.146 [0.129,0.164]   1.11
+      SEVERE     18    0.8%   0.056 [0.010,0.258]   0.43
+
+========================================================================================================
+2. WEEK-AHEAD HEAVY RAIN -- the owner's second use case, tested directly
+========================================================================================================
+
+  any >=30mm day next 7d  (base 0.379)
+         outlook wetness      n       P           95% CI   lift
+         top 20% wettest     41   0.488 [0.343,0.635]   1.29
+                 top 30%    883   0.479 [0.446,0.512]   1.26
+                 top 50%   1133   0.462 [0.433,0.491]   1.22
+      bottom 20% (quiet)    455   0.215 [0.180,0.255]   0.57
+
+  next 7d total >=100mm  (base 0.131)
+         outlook wetness      n       P           95% CI   lift
+         top 20% wettest     41   0.146 [0.069,0.284]   1.12
+                 top 30%    883   0.194 [0.169,0.221]   1.48
+                 top 50%   1133   0.177 [0.156,0.201]   1.36
+      bottom 20% (quiet)    455   0.040 [0.025,0.062]   0.30
+
+========================================================================================================
+3. THE FRONTIER -- and the cost ratio each threshold implies
+========================================================================================================
+   At an optimal threshold p*, acting is worth it when
+   p*·C_miss = (1-p*)·C_falsealarm, so C_miss/C_FA = (1-p*)/p*.
+   Read this backwards: pick the row whose cost ratio matches your judgement.
+
+     fire when tier >=  alerts/yr  precision   recall   lift   implied C_miss:C_FA
+               NO_RAIN        365      0.240    1.000   1.00                 3.2:1
+                 LIGHT        308      0.272    0.956   1.13                 2.7:1
+              MODERATE        272      0.293    0.907   1.22                 2.4:1
+              THUNDERY        266      0.286    0.868   1.19                 2.5:1
+                 HEAVY          3      0.444    0.015   1.85                 1.3:1
+                SEVERE          3      0.444    0.015   1.85                 1.3:1
+
+========================================================================================================
+4. DOES A FLAT SCALAR MULTIPLIER DO ANYTHING?
+========================================================================================================
+  x1.0 at fixed threshold 0.25 -> fires  1695 days, precision 0.293
+  x0.8 at fixed threshold 0.25 -> fires    54 days, precision 0.537
+  x0.6 at fixed threshold 0.25 -> fires    54 days, precision 0.537
+  x0.4 at fixed threshold 0.25 -> fires 0 days
+
+  Multiplying every score by the same constant preserves their ORDER,
+  so it cannot change which days rank above which. Against a fixed
+  threshold it is exactly equivalent to raising that threshold, and it
+  moves in discrete jumps as whole tiers cross the line. It is a
+  threshold in disguise -- so tune the threshold, and read its cost
+  ratio off the table above.
+
+========================================================================================================
+5. RELATIVE WEIGHT of rain vs heat signals (logistic, time-split)
+========================================================================================================
+
+  Target: pond thermal stress (top 30%, no rain term)
+       heat only: held-out AUC 0.572   heat_sig=+0.560
+       rain only: held-out AUC 0.763   rain_sig=-1.281
+     heat + rain: held-out AUC 0.763   heat_sig=+0.272  rain_sig=-1.227
+
+  Target: a >=10mm rain day
+       heat only: held-out AUC 0.527   heat_sig=-0.075
+       rain only: held-out AUC 0.641   rain_sig=+0.399
+     heat + rain: held-out AUC 0.643   heat_sig=+0.002  rain_sig=+0.400
+
+Wrote rain_weighting_daily.csv
