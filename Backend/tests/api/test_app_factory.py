@@ -77,8 +77,8 @@ def test_poller_schedules_at_the_configured_interval(monkeypatch):
     jobs = []
 
     class FakeScheduler:
-        def add_job(self, fn, trigger, args, minutes, next_run_time):
-            jobs.append((fn, trigger, args, minutes))
+        def add_job(self, fn, trigger, minutes, next_run_time):
+            jobs.append((fn, trigger, minutes))
 
         def start(self):
             jobs.append("started")
@@ -86,4 +86,42 @@ def test_poller_schedules_at_the_configured_interval(monkeypatch):
     monkeypatch.setattr(background, "BackgroundScheduler", FakeScheduler, raising=False)
     registry = EngineRegistry(MemoryStorage())
     poller.start(make_settings(poll_interval_minutes=3), registry)
-    assert jobs == [(poller._poll_once, "interval", [registry], 3), "started"]
+    [(fn, trigger, minutes), started] = jobs
+    assert (trigger, minutes, started) == ("interval", 3, "started")
+    # The job is a lease-gated worker cycle over the given registry.
+    assert fn.__func__ is poller.Worker.run_cycle and fn.__self__.registry is registry
+
+
+def test_blocking_worker_releases_the_lease_when_stopped(monkeypatch):
+    import apscheduler.schedulers.blocking as blocking
+
+    from koi.registry import EngineRegistry
+    from koi.worker import poller
+
+    storage = MemoryStorage()
+
+    class FakeScheduler:
+        def add_job(self, fn, trigger, minutes, next_run_time):
+            self.fn = fn
+
+        def start(self):
+            assert self.fn() is True  # one cycle takes the lease
+            assert storage.rows("worker_lease") != []
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(blocking, "BlockingScheduler", FakeScheduler, raising=False)
+    poller.start(make_settings(), EngineRegistry(storage), blocking=True)
+    assert storage.rows("worker_lease") == []
+
+
+def test_gunicorn_config_serves_the_app_factory_on_two_workers():
+    import runpy
+    from pathlib import Path
+
+    import koi.api
+
+    config = runpy.run_path(str(Path(__file__).resolve().parents[2] / "gunicorn.conf.py"))
+    assert config["workers"] == 2
+    module, call = config["wsgi_app"].split(":")
+    assert module == "koi.api" and call == "create_app()"
+    assert callable(getattr(koi.api, call.removesuffix("()")))

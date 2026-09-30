@@ -8,7 +8,7 @@ from koi.settings import Settings
 
 ENV_NAMES = ["KOI_ENV", "SUPABASE_URL", "SUPABASE_SERVICEROLE_KEY", "KOI_TIMEZONE",
              "KOI_POLL_INTERVAL_MINUTES", "KOI_CORS_ORIGINS", "POND_IMAGE_BUCKET",
-             "DEVICE_TOKEN", "TEST_MODE", "KOI_STORAGE"]
+             "DEVICE_TOKEN", "TEST_MODE", "KOI_STORAGE", "KOI_WORKER_THREADS"]
 
 
 @pytest.fixture
@@ -23,6 +23,7 @@ def test_defaults_match_the_old_hard_coded_values(clean_env):
     assert s.env == "production"
     assert s.storage == "supabase"
     assert s.poll_interval_minutes == 15          # poller.POLL_INTERVAL_MINUTES
+    assert s.worker_threads == 4
     assert s.timezone == "Asia/Singapore"         # imageSchedule.TZ
     assert s.tz == ZoneInfo("Asia/Singapore")
     assert s.pond_image_bucket == "imageAnalysisBucket"
@@ -43,6 +44,7 @@ def test_reads_the_existing_environment_variable_names(clean_env):
     clean_env.setenv("DEVICE_TOKEN", "t")
     clean_env.setenv("TEST_MODE", "1")
     clean_env.setenv("KOI_STORAGE", "memory")
+    clean_env.setenv("KOI_WORKER_THREADS", "2")
     s = Settings(_env_file=None)
     assert s.env == "development"
     assert s.poller_in_api_process is True
@@ -55,6 +57,7 @@ def test_reads_the_existing_environment_variable_names(clean_env):
     assert s.device_token.get_secret_value() == "t"
     assert s.test_mode is True
     assert s.storage == "memory"
+    assert s.worker_threads == 2
 
 
 def test_env_file_is_read_and_environment_wins(clean_env, tmp_path):
@@ -75,6 +78,7 @@ def test_secrets_are_not_printed(clean_env):
 @pytest.mark.parametrize("field, value", [
     ("env", "staging"),
     ("poll_interval_minutes", 0),
+    ("worker_threads", 0),
     ("timezone", "Not/AZone"),
     ("storage", "postgres"),
 ])

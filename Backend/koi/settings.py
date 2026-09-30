@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     poll_interval_minutes: int = Field(
         default=15, gt=0, validation_alias=AliasChoices("KOI_POLL_INTERVAL_MINUTES", "poll_interval_minutes"))
 
+    # Ponds the worker polls at the same time (one thread each, still one
+    # lock per pond).
+    worker_threads: int = Field(
+        default=4, gt=0, validation_alias=AliasChoices("KOI_WORKER_THREADS", "worker_threads"))
+
     # Origins allowed to call either Flask app from a browser. Comma
     # separated in the environment; "*" allows any origin.
     cors_origins: Annotated[tuple[str, ...], NoDecode] = Field(

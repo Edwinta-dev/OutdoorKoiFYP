@@ -8,6 +8,17 @@ or on a background thread inside the API process when KOI_ENV=development
 (see koi/api/__main__.py).
 
 --------------------------------------------------------------------
+ONE ACTIVE WORKER: THE LEASE
+--------------------------------------------------------------------
+Each cycle a Worker takes or renews the "poller" row in worker_lease
+(Storage.take_lease) before polling anything. A second worker started by
+mistake, or kept as a hot spare, finds the lease held, logs that it is on
+standby and polls nothing that cycle. The lease lasts two poll intervals,
+so it survives the gap between cycles and a standby takes over within
+two intervals of the active worker stopping. A worker that shuts down
+cleanly releases it at once.
+
+--------------------------------------------------------------------
 WHY ALL THREE, NOT JUST CHEMISTRY
 --------------------------------------------------------------------
 Evaporation and algae are both driven by the environment, not just by
@@ -28,12 +39,15 @@ So a poll cycle is a genuine state advancement for every engine, and
 each pushes a fresh evaluation row. The UI then reads cached assessments
 instead of triggering recomputes.
 
-Deliberately NOT using multiple scheduler threads per user - APScheduler's
-single BackgroundScheduler with one job per tick, looping over users
-sequentially, keeps this simple and avoids reasoning about many
-concurrent poll threads on top of the request threads already covered by
-registry.py's per-user locks.
+One APScheduler job per tick runs the cycle; within it, ponds are polled
+on a small thread pool (Settings.worker_threads, default 4). Each pond
+still goes through registry.with_twin, so one lock per pond and the
+snapshot version check apply exactly as they do to API requests.
 """
+import os
+import socket
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -43,22 +57,67 @@ from koi.models import forecast_utils
 from koi.models.engine import PondConfig, RawSample, WaterChemistryEngine
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
-from koi.storage import fail_soft
+from koi.storage import StorageError, fail_soft
 
 # How far ahead each cycle projects when writing the cached "days until
 # next intervention" figures into the evaluation rows. Kept modest - the
 # detail screens ask for a longer horizon on demand via /forecast/*.
 CACHED_HORIZON_DAYS = 21
 
+LEASE_NAME = "poller"
 
-def _poll_once(registry: EngineRegistry):
-    configs = registry.storage.fetch_active_pond_configs()
-    for row in configs:
-        user_id = row["user_id"]
+
+def lease_seconds(settings: Settings) -> int:
+    """How long one take of the lease lasts: two poll intervals."""
+    return 2 * settings.poll_interval_minutes * 60
+
+
+def default_holder() -> str:
+    """Names this worker process in worker_lease.holder."""
+    return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+
+
+class Worker:
+    """Runs poll cycles for one worker process, gated by the lease."""
+
+    def __init__(self, settings: Settings, registry: EngineRegistry, holder: Optional[str] = None):
+        self.settings = settings
+        self.registry = registry
+        self.holder = holder or default_holder()
+
+    def run_cycle(self) -> bool:
+        """Takes or renews the lease and, if held, polls every active pond.
+        Returns whether this worker polled."""
+        storage = self.registry.storage
         try:
-            _poll_user(registry, user_id, row)
-        except Exception as exc:  # noqa: BLE001 - one user's failure must not kill the poll loop
-            print(f"[poller] user {user_id} failed: {exc}")
+            held = storage.take_lease(LEASE_NAME, self.holder, lease_seconds(self.settings))
+        except StorageError as exc:
+            print(f"[worker] {self.holder}: could not take the lease, skipping this cycle ({exc})")
+            return False
+        if not held:
+            print(f"[worker] {self.holder}: standby, another worker holds the poller lease")
+            return False
+        _poll_once(self.registry, self.settings.worker_threads)
+        return True
+
+    def stop(self) -> None:
+        """Releases the lease so a standby worker can take over next cycle."""
+        fail_soft(lambda: self.registry.storage.release_lease(LEASE_NAME, self.holder), None)
+
+
+def _poll_once(registry: EngineRegistry, threads: int = 1):
+    """Polls every active pond, up to `threads` at a time."""
+    configs = registry.storage.fetch_active_pond_configs()
+    with ThreadPoolExecutor(max_workers=threads, thread_name_prefix="poll") as pool:
+        list(pool.map(lambda row: _poll_user_safely(registry, row), configs))
+
+
+def _poll_user_safely(registry: EngineRegistry, row: dict) -> None:
+    user_id = row["user_id"]
+    try:
+        _poll_user(registry, user_id, row)
+    except Exception as exc:  # noqa: BLE001 - one user's failure must not kill the poll loop
+        print(f"[poller] user {user_id} failed: {exc}")
 
 
 def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
@@ -294,19 +353,30 @@ def _algae_forecast_env(forecast_days, baseline_lux, baseline_temp, no3_series, 
 
 
 def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool = False):
-    """Schedules _poll_once(registry) every poll_interval_minutes, first run now.
-    blocking=True runs the scheduler in the calling thread (the worker
-    process); otherwise it runs on a background thread and this returns
-    the scheduler."""
+    """Schedules a Worker's run_cycle every poll_interval_minutes, first run
+    now. blocking=True runs the scheduler in the calling thread (the worker
+    process) and releases the lease when it stops; otherwise it runs on a
+    background thread and this returns the scheduler."""
     settings = settings or get_settings()
     if blocking:
         from apscheduler.schedulers.blocking import BlockingScheduler as Scheduler
     else:
         from apscheduler.schedulers.background import BackgroundScheduler as Scheduler
+    worker = Worker(settings, registry)
     scheduler = Scheduler()
+    # APScheduler's default max_instances=1 skips a tick while the previous
+    # cycle is still running, so cycles never overlap within one worker.
     scheduler.add_job(
-        _poll_once, "interval", args=[registry], minutes=settings.poll_interval_minutes,
+        worker.run_cycle, "interval", minutes=settings.poll_interval_minutes,
         next_run_time=datetime.now(),
     )
-    scheduler.start()
+    if not blocking:
+        scheduler.start()
+        return scheduler
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        worker.stop()
     return scheduler

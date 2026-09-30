@@ -7,6 +7,7 @@ goes in a new file, never in the live project alone.
 | File | What it does |
 |---|---|
 | `0001_baseline.sql` | Every table, the two storage buckets, the `ClosestStations` trigger and the `get_bundled_dashboard_payload` / `get_historical_graph_payload` functions, reconstructed from the code |
+| `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and the `save_pond_snapshot` / `take_worker_lease` functions the backend uses to run the API and the poller as separate processes |
 
 ## How 0001 was built, and what to trust
 
@@ -59,7 +60,7 @@ applying it blind:
   the marker for that item.
 - Where live has objects 0001 does not (RLS policies, grants, extra
   columns, triggers), keep them in a new numbered migration such as
-  `0002_live_policies.sql` so they are reviewable.
+  `0003_live_policies.sql` so they are reviewable.
 - Where 0001 has something live does not, either drop it from 0001 or
   keep it and apply it to live as a later migration.
 

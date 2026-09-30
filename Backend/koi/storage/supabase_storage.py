@@ -16,16 +16,18 @@ Table notes (schema in supabase/migrations/):
   example the chemistry assessment's risk_score and the algae
   assessment's label_count are not stored. Add a migration first to keep
   them in the log.
+- Snapshot saves and the worker lease go through the save_pond_snapshot
+  and take_worker_lease functions (migration 0002), which compare and set
+  in one statement.
 """
 from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
-from koi.storage.base import StorageError, daily_stats, pond_config_from_userdata_row
+from koi.storage.base import StaleSnapshotError, StorageError, daily_stats, pond_config_from_userdata_row
 
 if TYPE_CHECKING:
     from supabase import Client
@@ -83,16 +85,52 @@ class SupabaseStorage:
             )
             return res.data[0]["snapshot"] if res.data else None
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict) -> None:
+    def load_engine_state(self, user_id: int) -> Optional[tuple[dict, int]]:
+        with _operation("load_engine_state"):
+            res = (
+                self._db().table("pond_chemistry_state")
+                .select("snapshot, snapshot_version")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if not res.data:
+                return None
+            row = res.data[0]
+            return row["snapshot"], int(row.get("snapshot_version") or 1)
+
+    def fetch_snapshot_version(self, user_id: int) -> int:
+        with _operation("fetch_snapshot_version"):
+            res = (
+                self._db().table("pond_chemistry_state")
+                .select("snapshot_version")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            return int(res.data[0].get("snapshot_version") or 1) if res.data else 0
+
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
         with _operation("save_engine_snapshot"):
-            self._db().table("pond_chemistry_state").upsert(
-                {
-                    "user_id": user_id,
-                    "snapshot": snapshot,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                },
-                on_conflict="user_id",
+            res = self._db().rpc(
+                "save_pond_snapshot",
+                {"p_user_id": user_id, "p_snapshot": snapshot, "p_base_version": base_version},
             ).execute()
+            if res.data is None:
+                raise StaleSnapshotError(user_id, base_version or 0)
+            return int(res.data)
+
+    # --- worker lease -------------------------------------------------
+    def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
+        with _operation("take_lease"):
+            res = self._db().rpc(
+                "take_worker_lease", {"p_name": name, "p_holder": holder, "p_ttl_seconds": ttl_seconds}
+            ).execute()
+            return bool(res.data)
+
+    def release_lease(self, name: str, holder: str) -> None:
+        with _operation("release_lease"):
+            self._db().table("worker_lease").delete().eq("name", name).eq("holder", holder).execute()
 
     # --- evaluation logs (append-only time series) ---------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:

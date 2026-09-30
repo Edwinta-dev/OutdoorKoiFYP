@@ -16,8 +16,6 @@ def main(settings: Optional[Settings] = None, run: bool = True):
     settings = settings or get_settings()
     app = create_app(settings)
     if settings.poller_in_api_process:
-        # Single process only - see koi/registry.py for why multi-worker
-        # deployment needs a different locking strategy first.
         from koi.worker import poller
 
         # The poller shares the app's storage and registry, so the per-pond

@@ -34,6 +34,17 @@ class StorageError(Exception):
         super().__init__(f"{operation} failed: {self.detail}" if self.detail else f"{operation} failed")
 
 
+class StaleSnapshotError(StorageError):
+    """save_engine_snapshot was given a base version that is no longer the
+    stored one: another process saved this pond's snapshot since it was
+    loaded."""
+
+    def __init__(self, user_id: int, base_version: int):
+        self.user_id = user_id
+        self.base_version = base_version
+        super().__init__("save_engine_snapshot", f"snapshot for user {user_id} is newer than version {base_version}")
+
+
 def fail_soft(call: Callable[[], T], default: T) -> T:
     """Runs call(); on StorageError prints it and returns default. For
     the reads and writes a caller can do without, such as an evaluation
@@ -47,9 +58,34 @@ def fail_soft(call: Callable[[], T], default: T) -> T:
 
 class Storage(Protocol):
     # --- engine snapshots (pond_chemistry_state) ---------------------
+    # snapshot_version counts saves of a pond's snapshot: 0 means no row,
+    # rows written before migration 0002 read as 1.
     def load_engine_snapshot(self, user_id: int) -> Optional[dict]: ...
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict) -> None: ...
+    def load_engine_state(self, user_id: int) -> Optional[tuple[dict, int]]:
+        """(snapshot, snapshot_version), or None when there is no row."""
+        ...
+
+    def fetch_snapshot_version(self, user_id: int) -> int:
+        """The stored snapshot_version, 0 when there is no row."""
+        ...
+
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+        """Stores the snapshot and returns its new version. With base_version
+        set, raises StaleSnapshotError unless the stored version equals it
+        (0: no row may exist yet). None saves unconditionally."""
+        ...
+
+    # --- worker lease (worker_lease) ----------------------------------
+    def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
+        """Takes the named lease if it is free or expired, or renews it if
+        holder already has it, for ttl_seconds. True when holder holds it."""
+        ...
+
+    def release_lease(self, name: str, holder: str) -> None:
+        """Gives the lease up if holder has it, so a standby can take over
+        without waiting for it to expire."""
+        ...
 
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None: ...

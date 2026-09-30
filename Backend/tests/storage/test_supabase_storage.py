@@ -3,7 +3,7 @@ supabase client. No network: the client is injected."""
 import pytest
 
 from conftest import ALGAE_ASSESSMENT, make_settings
-from koi.storage import StorageError, SupabaseStorage
+from koi.storage import StaleSnapshotError, StorageError, SupabaseStorage
 
 
 class _Query:
@@ -78,13 +78,43 @@ def test_missing_credentials_are_reported_on_first_use():
         storage.save_engine_snapshot(1, {})
 
 
-def test_snapshot_load_and_upsert():
-    storage, client = _storage(data={"pond_chemistry_state": [{"snapshot": {"version": 2}}]})
+def test_snapshot_load_and_versioned_save():
+    storage, client = _storage(data={"pond_chemistry_state": [{"snapshot": {"version": 2}, "snapshot_version": 6}],
+                                     "rpc:save_pond_snapshot": 7})
     assert storage.load_engine_snapshot(4) == {"version": 2}
-    storage.save_engine_snapshot(4, {"version": 3})
-    method, args, kwargs = client.queries[-1].calls[0]
-    assert method == "upsert" and kwargs == {"on_conflict": "user_id"}
-    assert args[0]["user_id"] == 4 and args[0]["snapshot"] == {"version": 3}
+    assert storage.load_engine_state(4) == ({"version": 2}, 6)
+    assert storage.fetch_snapshot_version(4) == 6
+    assert storage.save_engine_snapshot(4, {"version": 3}, base_version=6) == 7
+    assert client.queries[-1].calls[0] == (
+        "rpc", ("save_pond_snapshot", {"p_user_id": 4, "p_snapshot": {"version": 3}, "p_base_version": 6}), {})
+
+
+def test_rows_from_before_the_version_column_read_as_version_1():
+    storage, _ = _storage(data={"pond_chemistry_state": [{"snapshot": {"version": 2}}]})
+    assert storage.load_engine_state(4) == ({"version": 2}, 1)
+    assert storage.fetch_snapshot_version(4) == 1
+    empty, _ = _storage()
+    assert empty.load_engine_state(4) is None and empty.fetch_snapshot_version(4) == 0
+
+
+def test_stale_save_raises_stale_snapshot_error():
+    storage, _ = _storage(data={"rpc:save_pond_snapshot": None})
+    with pytest.raises(StaleSnapshotError) as info:
+        storage.save_engine_snapshot(4, {}, base_version=2)
+    assert info.value.operation == "save_engine_snapshot" and info.value.base_version == 2
+
+
+def test_lease_take_and_release():
+    storage, client = _storage(data={"rpc:take_worker_lease": True})
+    assert storage.take_lease("poller", "host:1", 1800) is True
+    assert client.queries[-1].calls[0] == (
+        "rpc", ("take_worker_lease", {"p_name": "poller", "p_holder": "host:1", "p_ttl_seconds": 1800}), {})
+    refused, _ = _storage(data={"rpc:take_worker_lease": False})
+    assert refused.take_lease("poller", "host:2", 1800) is False
+    storage.release_lease("poller", "host:1")
+    assert client.queries[-1].table == "worker_lease"
+    assert client.queries[-1].calls == [("delete", (), {}), ("eq", ("name", "poller"), {}),
+                                        ("eq", ("holder", "host:1"), {})]
 
 
 def test_algae_evaluation_insert_keeps_only_table_columns():

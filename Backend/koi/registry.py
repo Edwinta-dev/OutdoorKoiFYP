@@ -10,27 +10,38 @@ rather than being tracked independently. The short version: a single
 logged intervention mutates several engines at once, and a partial write
 would leave the pond in a state that never physically existed.
 
-This is the piece that makes the architecture safe for a SINGLE Flask
-process handling both the event endpoints (Flask's own request threads)
-and the poller (a background thread) concurrently - without this lock, a
-feeding-event request and a poll cycle for the same user could interleave
-their reads/writes and produce corrupted state.
+Two layers keep a pond's state consistent:
 
-IMPORTANT LIMITATION: this lock only protects against races WITHIN one
-process. It does NOT protect against running multiple Flask worker
-processes (e.g. `gunicorn -w 4`) or multiple server instances - each
-worker/instance would have its own independent copy of this registry and
-could stomp on the Supabase-persisted snapshot. See the architecture
-write-up for why this app should run as a single process/worker for now,
-and what to change if that ever needs to scale.
+  * Within one process, a per-pond lock stops a request thread and a poll
+    thread from interleaving their reads and writes of the same twin.
+  * Across processes (gunicorn API workers and the koi.worker poller each
+    hold their own registry), the stored snapshot_version does. Each
+    registry remembers the version it loaded; before every access it
+    reloads the pond if the stored version is newer, and it saves against
+    the version it loaded. If another process saved in between, storage
+    rejects the save with StaleSnapshotError; the registry then reloads
+    and runs the call once more on the fresh state. A second rejection
+    propagates to the caller.
+
+The retry re-runs the whole callback, so a callback's side effects (the
+event endpoints push evaluation rows) can happen twice when a save races.
+The evaluation logs are append-only and the later row reflects the saved
+state, so that is harmless.
 """
 import threading
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.pond_twin import PondTwin
-from koi.storage import Storage
+from koi.storage import StaleSnapshotError, Storage
+
+
+@dataclass
+class _Loaded:
+    twin: PondTwin
+    version: int  # snapshot_version the twin was loaded at or last saved as; 0 = never stored
 
 
 class EngineRegistry:
@@ -39,7 +50,7 @@ class EngineRegistry:
 
     def __init__(self, storage: Storage):
         self.storage = storage
-        self._twins: dict[int, PondTwin] = {}
+        self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above
 
@@ -54,15 +65,20 @@ class EngineRegistry:
         user_id: int,
         default_config: Optional[PondConfig],
         pond_depth_m: float,
-    ) -> PondTwin:
-        if user_id in self._twins:
-            return self._twins[user_id]
+    ) -> _Loaded:
+        """The pond's twin, reloaded from storage if another process has
+        saved a newer snapshot since this registry loaded it."""
+        loaded = self._twins.get(user_id)
+        if loaded is not None and self.storage.fetch_snapshot_version(user_id) <= loaded.version:
+            return loaded
 
-        snapshot = self.storage.load_engine_snapshot(user_id)
-        if snapshot is not None:
+        state = self.storage.load_engine_state(user_id)
+        version = 0
+        if state is not None:
             # from_snapshot transparently upgrades legacy bare-chemistry
             # snapshots, so existing ponds keep their accumulated nitrogen
             # state across this deployment.
+            snapshot, version = state
             twin = PondTwin.from_snapshot(snapshot, pond_depth_m=pond_depth_m)
         elif default_config is not None:
             twin = PondTwin.create(default_config, pond_depth_m=pond_depth_m)
@@ -82,8 +98,9 @@ class EngineRegistry:
         except Exception as exc:  # noqa: BLE001 - ratings are optional
             print(f"[registry] could not load algae ratings for {user_id}: {exc}")
 
-        self._twins[user_id] = twin
-        return twin
+        loaded = _Loaded(twin, version)
+        self._twins[user_id] = loaded
+        return loaded
 
     def with_twin(
         self,
@@ -105,14 +122,31 @@ class EngineRegistry:
         chart refresh would be pure write amplification. The lock is still
         taken, because reading a twin mid-mutation from the poller thread
         would produce a torn view.
+
+        If another process saved this pond between the load and the save,
+        the in-memory twin is dropped, reloaded and fn runs once more (see
+        the module docstring); a second StaleSnapshotError is raised.
         """
         lock = self._lock_for(user_id)
         with lock:
-            twin = self._load_or_create(user_id, default_config, pond_depth_m)
-            result = fn(twin)
-            if persist:
-                self.storage.save_engine_snapshot(user_id, twin.to_snapshot())
-            return result
+            try:
+                return self._run(user_id, fn, default_config, pond_depth_m, persist)
+            except StaleSnapshotError as exc:
+                print(f"[registry] {exc}; reloading and retrying once")
+                self._twins.pop(user_id, None)
+            try:
+                return self._run(user_id, fn, default_config, pond_depth_m, persist)
+            except StaleSnapshotError:
+                self._twins.pop(user_id, None)
+                raise
+
+    def _run(self, user_id, fn, default_config, pond_depth_m, persist):
+        loaded = self._load_or_create(user_id, default_config, pond_depth_m)
+        result = fn(loaded.twin)
+        if persist:
+            loaded.version = self.storage.save_engine_snapshot(
+                user_id, loaded.twin.to_snapshot(), base_version=loaded.version)
+        return result
 
     # Backwards-compatible alias. Older call sites passed a callback
     # expecting the chemistry engine directly; keeping this shim means

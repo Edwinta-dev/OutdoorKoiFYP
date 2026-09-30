@@ -18,9 +18,9 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/storage/base.py` | | The `Storage` interface, `StorageError`, `fail_soft` |
 | `koi/storage/supabase_storage.py` | `DigitalTwin/state_store.py`, the camera's own client | `SupabaseStorage`: all Supabase I/O, client built on first use |
 | `koi/storage/memory.py` | the tests' fake store | `MemoryStorage`: in-process tables, seedable from JSON |
-| `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user |
+| `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user, reloaded when another process saved a newer snapshot |
 | `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes |
-| `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll |
+| `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll, lease-gated `Worker`, pond thread pool |
 | `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
 
 `koi/models/` does no I/O. The API, the worker and the camera service each
@@ -47,6 +47,7 @@ name in `.env`. Both services read the same file.
 | `SUPABASE_SERVICEROLE_KEY` | none | `SupabaseStorage` (server-side only) |
 | `KOI_TIMEZONE` | `Asia/Singapore` | camera daylight slots |
 | `KOI_POLL_INTERVAL_MINUTES` | `15` | poller |
+| `KOI_WORKER_THREADS` | `4` | poller; ponds polled at the same time |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
 | `POND_IMAGE_BUCKET` | `imageAnalysisBucket` | camera; must match the app's `env/*.json` |
 | `DEVICE_TOKEN` | empty (uploads unauthenticated) | camera; must match `Embedded/camera_node/secrets.h` |
@@ -69,7 +70,38 @@ python -m koi.camera   # camera service, port 5000
 
 With `KOI_ENV=development`, `python -m koi.api` also starts the poller on a
 background thread, as `python app.py` used to. With any other `KOI_ENV` the
-API never starts it; run `python -m koi.worker` as its own process.
+API never starts it (`create_app` never does); run `python -m koi.worker` as
+its own process.
+
+On a host with gunicorn (Linux), serve the API with two worker processes:
+
+```
+pip install -e ".[wsgi]"
+gunicorn -c gunicorn.conf.py   # koi.api:create_app(), -w 2, port 8080
+python -m koi.worker           # separately, one per deployment
+```
+
+### Several processes, one pond state
+
+Each API worker process and the poller worker keep their own in-memory
+twins. They stay consistent through the stored snapshot:
+
+- `pond_chemistry_state.snapshot_version` goes up by one on every save.
+  Before each access the registry compares it with the version it holds
+  and reloads the pond if the stored one is newer, so the API serves what
+  the worker last saved and the worker polls from the API's latest event.
+- A save names the version it started from. If another process saved in
+  between, storage rejects it (`StaleSnapshotError`); the registry reloads
+  and runs the change once more on the fresh state. A second rejection is
+  returned to the caller as an error.
+- Only one poller worker polls at a time. Each cycle it takes or renews the
+  `poller` row in `worker_lease` for two poll intervals. Another
+  `python -m koi.worker` finds the lease held, logs
+  `standby, another worker holds the poller lease` and polls nothing; it
+  takes over within two intervals if the active worker dies, or at the
+  next cycle if it is stopped with Ctrl+C.
+- Within the active worker, ponds are polled `KOI_WORKER_THREADS` at a
+  time, each under its own pond lock.
 
 ## Dependencies
 
@@ -99,10 +131,14 @@ PythonAnywhere uses.
 
    Digital twin API: the same, with `from koi.api import create_app`.
 4. Run the poller as an always-on task: `python -m koi.worker`, with
-   `Backend/` as the working directory.
+   `Backend/` as the working directory. PythonAnywhere web apps run one
+   process each, so no gunicorn step is needed there.
 5. Reload the web apps.
 
-Database: apply `supabase/migrations/` before or after the restart. The
+Database: apply `supabase/migrations/0002_worker_lease.sql` before
+deploying this version: the snapshot reads and writes and the worker
+lease need its column, table and functions. Apply the rest of
+`supabase/migrations/` before or after the restart. The
 evaluation pushes are fail-soft, so the service runs without the
 evaluation tables; you lose the cached `/assessment/*` history until they
 exist. Existing `pond_chemistry_state` rows load unchanged —
@@ -171,6 +207,7 @@ Tests live in `Backend/tests/`, mirroring the package.
 |---|---|---|
 | `models/test_pond_twin.py` | 61 | state resets, snapshots |
 | `worker/test_poller_integration.py` | 97 | real poller + all endpoints, storage failures |
+| `worker/test_worker_lease.py` | | worker lease, pond thread pool, snapshot versions, API and worker registries staying consistent |
 | `models/test_severity_ratings.py` | 63 | rating assimilation |
 | `models/test_new_engines.py` | 49 | engine physics |
 | `api/test_contract.py` | 25 | Python <-> Dart JSON contract |
@@ -198,7 +235,6 @@ location, so it works from any working directory.
 ## Still open
 
 - **No auth.** Every endpoint trusts a caller-supplied `user_id`.
-- **Single process only.** The registry lock does not span gunicorn workers.
 - **ESP32 `user_id` mismatch.** The camera firmware hardcoded `15`; pond data
   is `455`. Algae stays `no-camera` for 455 until reconciled.
 - Both new models are uncalibrated against ground truth.

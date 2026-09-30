@@ -10,9 +10,14 @@ here too.
 Deterministic: ids count up per table, "latest" and "newest first" order
 by the timestamp column and then by insertion order, and the only clock
 is the injectable `clock` used to stamp evaluated_at, rated_at,
-created_at and updated_at. Everything stored or returned is a JSON
+created_at and updated_at and to expire worker leases. Everything stored or returned is a JSON
 round-trip copy, the same as a jsonb column, so a value that cannot be
 serialised fails here rather than in production.
+
+Safe to share between threads, so tests can run an API registry and
+several workers against one store: the versioned snapshot save and the
+lease take are compare-and-set under one lock, as the save_pond_snapshot
+and take_worker_lease functions are in the database.
 
 Seed it from a dict or a JSON file of the form
     {"tables": {"UserData": [...], "imageTable": [...], ...},
@@ -22,15 +27,23 @@ Table names are the Supabase ones; see TABLE_COLUMNS.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
-from koi.storage.base import StorageError, daily_stats, parse_timestamp, pond_config_from_userdata_row
+from koi.storage.base import (
+    StaleSnapshotError,
+    StorageError,
+    daily_stats,
+    parse_timestamp,
+    pond_config_from_userdata_row,
+)
 
 # Columns of each table this store serves, from supabase/migrations/.
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    "pond_chemistry_state": ("user_id", "snapshot", "updated_at"),
+    "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
+    "worker_lease": ("name", "holder", "expires_at"),
     "pond_chemistry_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "tan_ppm", "no2_ppm", "no3_ppm",
         "ph_reactivity", "reactivity_trend", "tds_trend", "sensor_warnings", "advisory",
@@ -99,6 +112,7 @@ def _same_user(row: dict, column: str, user_id: object) -> bool:
 class MemoryStorage:
     def __init__(self, seed: Optional[dict] = None, clock: Optional[Callable[[], datetime]] = None):
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._lock = threading.RLock()
         self._tables: dict[str, list[dict]] = {name: [] for name in TABLE_COLUMNS}
         self._payloads: dict[str, Optional[dict]] = {}
         self.uploads: dict[tuple[str, str], bytes] = {}
@@ -193,21 +207,68 @@ class MemoryStorage:
         self._insert(operation, table, [row])
 
     # --- engine snapshots ---------------------------------------------
+    def _snapshot_row(self, user_id: int) -> Optional[dict]:
+        rows = self._select("pond_chemistry_state", user_id, limit=1)
+        return rows[0] if rows else None
+
+    @staticmethod
+    def _version(row: Optional[dict]) -> int:
+        # Rows seeded without the column were written before migration 0002.
+        if row is None:
+            return 0
+        return int(row.get("snapshot_version") or 1)
+
     def load_engine_snapshot(self, user_id: int) -> Optional[dict]:
         self._check("load_engine_snapshot")
-        rows = self._select("pond_chemistry_state", user_id, limit=1)
-        return rows[0]["snapshot"] if rows else None
+        row = self._snapshot_row(user_id)
+        return row["snapshot"] if row else None
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict) -> None:
+    def load_engine_state(self, user_id: int) -> Optional[tuple[dict, int]]:
+        self._check("load_engine_state")
+        with self._lock:
+            row = self._snapshot_row(user_id)
+        return (row["snapshot"], self._version(row)) if row else None
+
+    def fetch_snapshot_version(self, user_id: int) -> int:
+        self._check("fetch_snapshot_version")
+        return self._version(self._snapshot_row(user_id))
+
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
         self._check("save_engine_snapshot")
-        row = {"user_id": user_id, "snapshot": snapshot, "updated_at": self._clock().isoformat()}
-        try:
-            row = _copy(row)
-        except (TypeError, ValueError) as exc:  # a value jsonb could not hold
-            raise StorageError("save_engine_snapshot", exc) from exc
-        table = self._tables["pond_chemistry_state"]
-        table[:] = [r for r in table if not _same_user(r, "user_id", user_id)]
-        table.append(row)
+        with self._lock:
+            current = self._version(self._snapshot_row(user_id))
+            if base_version is not None and base_version != current:
+                raise StaleSnapshotError(user_id, base_version)
+            row = {"user_id": user_id, "snapshot": snapshot, "updated_at": self._clock().isoformat(),
+                   "snapshot_version": current + 1}
+            try:
+                row = _copy(row)
+            except (TypeError, ValueError) as exc:  # a value jsonb could not hold
+                raise StorageError("save_engine_snapshot", exc) from exc
+            table = self._tables["pond_chemistry_state"]
+            table[:] = [r for r in table if not _same_user(r, "user_id", user_id)]
+            table.append(row)
+            return row["snapshot_version"]
+
+    # --- worker lease -------------------------------------------------
+    def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
+        self._check("take_lease")
+        with self._lock:
+            now = self._clock()
+            table = self._tables["worker_lease"]
+            row = next((r for r in table if r["name"] == name), None)
+            if row is not None and row["holder"] != holder and parse_timestamp(row["expires_at"]) >= now:
+                return False
+            table[:] = [r for r in table if r["name"] != name]
+            table.append({"name": name, "holder": holder,
+                          "expires_at": (now + timedelta(seconds=ttl_seconds)).isoformat()})
+            return True
+
+    def release_lease(self, name: str, holder: str) -> None:
+        self._check("release_lease")
+        with self._lock:
+            table = self._tables["worker_lease"]
+            table[:] = [r for r in table if not (r["name"] == name and r["holder"] == holder)]
 
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:
