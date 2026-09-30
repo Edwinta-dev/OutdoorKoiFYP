@@ -1,0 +1,26 @@
+# Lint and type-check settings for the backend. Run from the repo root with
+#   python tools/check.py backend
+# pytest settings stay in pytest.ini.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# F: pyflakes, E: pycodestyle errors, I: isort, B: flake8-bugbear.
+select = ["F", "E", "I", "B"]
+
+[tool.ruff.lint.isort]
+# DigitalTwin and Camera are flat script directories, not packages, so
+# their sibling imports are first-party.
+known-first-party = [
+    "algae_engine", "app", "engine", "evaporation_engine", "forecast_utils",
+    "poller", "pond_twin", "registry", "state_store", "conftest",
+    "camera", "hsvEngine", "imageSchedule",
+]
+
+[tool.mypy]
+# Lenient baseline: untyped function bodies are not checked yet.
+ignore_missing_imports = true
+check_untyped_defs = false
+explicit_package_bases = true

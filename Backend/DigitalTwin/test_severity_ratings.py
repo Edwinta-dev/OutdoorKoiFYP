@@ -85,7 +85,7 @@ def test_class_targets_quantile_fallback_then_measured():
     e = engine_with([(T0 - timedelta(days=i), 0.02 + i * 0.01) for i in range(8, 0, -1)])
     t_fallback = e._class_targets()
     assert all(t_fallback[a] <= t_fallback[b] for a, b in
-               zip(ae.SEVERITY_LEVELS, ae.SEVERITY_LEVELS[1:])), \
+               zip(ae.SEVERITY_LEVELS, ae.SEVERITY_LEVELS[1:], strict=False)), \
         "fallback targets are monotonic across severity"
     assert t_fallback["severe"] <= 0.12, \
         f"fallback anchored to this pond's own range: {round(t_fallback['severe'], 4)}"
@@ -97,7 +97,7 @@ def test_class_targets_quantile_fallback_then_measured():
     assert abs(t_measured["severe"] - 0.315) < 0.02, \
         f"severe target near labelled median 0.315: {round(t_measured['severe'], 4)}"
     assert all(t_measured[a] <= t_measured[b] for a, b in
-               zip(ae.SEVERITY_LEVELS, ae.SEVERITY_LEVELS[1:])), \
+               zip(ae.SEVERITY_LEVELS, ae.SEVERITY_LEVELS[1:], strict=False)), \
         "measured targets monotonic"
 
 

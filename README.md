@@ -164,6 +164,19 @@ archive/pre-refactor/               Superseded code, kept for traceability only
 
 ## Running it
 
+**Checks**
+
+```bash
+pip install -r Backend/requirements-dev.txt
+python tools/check.py all          # or backend | firmware | mobile
+```
+
+Runs ruff, mypy and pytest for the backend; the firmware host tests (g++)
+and, if `arduino-cli` is installed, ESP32 compiles of `sensor_bench`,
+`sensor_node` and `camera_node`; and `flutter analyze` and `flutter test`.
+A missing tool prints `SKIP`; `--strict` (used by CI in
+`.github/workflows/ci.yml`) makes it a failure.
+
 **Backend**
 
 ```bash

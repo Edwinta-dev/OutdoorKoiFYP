@@ -56,7 +56,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-
 # ============================================================
 # Environmental response curves
 # ============================================================
@@ -1190,7 +1189,7 @@ class AlgaeGrowthEngine:
             advisory = (
                 f"Algae under control at {g * 100:.2f}% coverage"
                 + (
-                    f", currently receding."
+                    ", currently receding."
                     if self._rate_source == "measured_declining"
                     else f", growing at about {self._last_growth_rate * 100:.1f}%/day."
                 )
@@ -1255,6 +1254,7 @@ class AlgaeGrowthEngine:
                 ),
             }
 
+        initial_green = green
         K = self.config.carrying_capacity
         watch = self._thresholds["watch"]
         action = self._thresholds["action"]
@@ -1297,9 +1297,7 @@ class AlgaeGrowthEngine:
         candidates = [d for d in (first_watch_day, first_action_day) if d is not None]
 
         return {
-            "current_green_ratio": round(
-                start_green if start_green is not None else self._green_ratio, 5
-            ),
+            "current_green_ratio": round(initial_green, 5),
             "predicted_scrub_days_from_now": min(candidates) if candidates else None,
             "first_watch_days_from_now": first_watch_day,
             "first_action_days_from_now": first_action_day,

@@ -25,12 +25,12 @@ write-up for why this app should run as a single process/worker for now,
 and what to change if that ever needs to scale.
 """
 import threading
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import evaporation_engine as ev
+import state_store
 from engine import PondConfig
 from pond_twin import PondTwin
-import state_store
 
 
 class EngineRegistry:
@@ -84,7 +84,7 @@ class EngineRegistry:
     def with_twin(
         self,
         user_id: int,
-        fn: Callable[[PondTwin], any],
+        fn: Callable[[PondTwin], Any],
         default_config: Optional[PondConfig] = None,
         pond_depth_m: float = ev.DEFAULT_POND_DEPTH_M,
         persist: bool = True,

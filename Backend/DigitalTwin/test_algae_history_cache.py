@@ -42,7 +42,7 @@ def test_cached_history_matches_a_fresh_derivation():
         f"cached list has the same length as a fresh derivation: " \
         f"cached={len(cached)} fresh={len(fresh)}"
     same_values = all(
-        c.time == f.time and c.green_ratio == f.green_ratio for c, f in zip(cached, fresh)
+        c.time == f.time and c.green_ratio == f.green_ratio for c, f in zip(cached, fresh, strict=True)
     )
     assert same_values, "cached entries are value-identical to a fresh derivation"
 

@@ -59,7 +59,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-
 # ============================================================
 # Physical constants / tunables
 # ============================================================
@@ -252,7 +251,7 @@ def fit_water_air_offset(water_temps: list, air_temps: list) -> Optional[float]:
     n = min(len(water_temps), len(air_temps))
     if n < 3:
         return None
-    pairs = [(w, a) for w, a in zip(water_temps[:n], air_temps[:n])
+    pairs = [(w, a) for w, a in zip(water_temps[:n], air_temps[:n], strict=True)
              if w is not None and a is not None]
     if len(pairs) < 3:
         return None
