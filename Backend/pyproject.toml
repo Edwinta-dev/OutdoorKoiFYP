@@ -18,6 +18,9 @@ known-first-party = [
     "poller", "pond_twin", "registry", "state_store", "conftest",
     "camera", "hsvEngine", "imageSchedule",
 ]
+# The repository's supabase/ folder (SQL migrations) would otherwise make
+# ruff treat the supabase client library as first-party.
+known-third-party = ["supabase"]
 
 [tool.mypy]
 # Lenient baseline: untyped function bodies are not checked yet.

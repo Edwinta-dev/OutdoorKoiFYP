@@ -6,7 +6,7 @@ directly. Responsibilities:
 
 1. Durability: persist/restore the WaterChemistryEngine's internal snapshot
    so in-memory state survives a process restart. Requires a table that
-   is NOT in the original schema - see schema_additions.sql. Pond volume
+   is defined in supabase/migrations/0001_baseline.sql. Pond volume
    and biomass config comes from the existing `UserData` table (populated
    at onboarding); there is no separate pond_configs table.
 
@@ -105,7 +105,7 @@ def push_evaporation_evaluation(user_id: int, assessment: dict) -> None:
     """Appends an evaporation evaluation row.
 
     FAIL-SOFT BY DESIGN: pond_evaporation_evaluations does not exist until
-    schema_additions.sql is applied. A missing table must not take down the
+    supabase/migrations/0001_baseline.sql is applied. A missing table must not take down the
     poll cycle for a user whose chemistry evaluation wrote fine, so the
     error is logged once per call and swallowed. Everything still works -
     the engine state is snapshotted regardless, and /forecast/evaporation

@@ -401,7 +401,7 @@ def log_algae_rating():
         # rather than reporting a clean success.
         result["warning"] = (
             "Rating applied to the live model but NOT persisted - the "
-            "algae_severity_ratings table is missing (see schema_additions.sql)."
+            "algae_severity_ratings table is missing (apply supabase/migrations/0001_baseline.sql)."
         )
     return jsonify(result), 200
 
@@ -503,7 +503,7 @@ def get_latest_evaporation_assessment(user_id):
         return jsonify({
             "error": "No evaporation assessment yet. This appears after the first "
                      "poll cycle, or once pond_evaporation_evaluations exists "
-                     "(see schema_additions.sql)."
+                     "(apply supabase/migrations/0001_baseline.sql)."
         }), 404
     return jsonify(assessment), 200
 
@@ -515,7 +515,7 @@ def get_latest_algae_assessment(user_id):
         return jsonify({
             "error": "No algae assessment yet. Needs at least one clean ESP32-CAM "
                      "frame in imageTable, and pond_algae_evaluations to exist "
-                     "(see schema_additions.sql)."
+                     "(apply supabase/migrations/0001_baseline.sql)."
         }), 404
     return jsonify(assessment), 200
 

@@ -157,6 +157,7 @@ Embedded/bench_tests/               Single-purpose pH bench sketches
 Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
 Embedded/tests/                     Host-side tests for koi_sensing
 MobileUI/mobile_app/                Flutter client
+supabase/migrations/                Database schema as numbered SQL migrations (see supabase/README.md)
 PythonSimulatorProject/             Historical simulation study and forecast validation
 docs/                               Design notes, experiment protocols, screenshots
 archive/pre-refactor/               Superseded code, kept for traceability only
