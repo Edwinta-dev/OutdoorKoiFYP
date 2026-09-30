@@ -183,21 +183,35 @@ A missing tool prints `SKIP`; `--strict` (used by CI in
 cd Backend/DigitalTwin
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env      # SUPABASE_URL, SUPABASE_KEY, NEA_BASE_URL
+cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY
 python app.py
 ```
 
 **App**
 
 ```bash
-cd MobileUI/mobile_app && flutter pub get && flutter run
+cd MobileUI/mobile_app && flutter pub get
+cp env/dev.json.example env/dev.json   # fill in every value
+flutter run --dart-define-from-file=env/dev.json
 ```
+
+A build without these values opens on a configuration error screen that
+names each missing value.
 
 **Firmware**
 
 Copy or symlink `Embedded/libraries/koi_sensing` into your Arduino
 `libraries/` folder (or pass `--libraries Embedded/libraries` to
 `arduino-cli compile`), then open a sketch folder under `Embedded/`.
+`sensor_node` and `camera_node` read Wi-Fi, server and device credentials
+from a gitignored `secrets.h`: copy `secrets.h.example` in the sketch
+folder to `secrets.h` and fill it in. Without it the sketch stops at
+compile time with an `#error` naming the example file.
+
+Each Backend service has a `.env.example` listing every variable it reads.
+The backend check scans tracked files for committed credentials (Wi-Fi
+password assignments, device-token literals, JWT-shaped strings,
+service-role references) outside `.example` files and `archive/`.
 Host-side tests for the shared library:
 
 ```bash

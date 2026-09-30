@@ -10,6 +10,10 @@ non-zero if any step failed.
 
 No step contacts a live service: the backend tests stub Supabase, and the
 firmware and mobile checks build and test locally.
+
+The backend suite also scans every tracked file for committed credentials
+(see SECRET_PATTERNS). The firmware compiles use each sketch's
+secrets.h.example, never a developer's real secrets.h.
 """
 from __future__ import annotations
 
@@ -36,6 +40,23 @@ SKETCHES = [
     ("sensor_node", "esp32:esp32:esp32"),
     ("camera_node", "esp32:esp32:esp32cam"),
 ]
+
+
+# Committed-credential scan: (label, pattern). Written so that this file
+# does not match its own patterns.
+SECRET_PATTERNS = [
+    ("Wi-Fi password assignment",
+     re.compile(r'(?i)\b\w*(?:wifi_?pass|password)\w*\s*=\s*"[^"]+"')),
+    ("device token literal", re.compile(r'DEVICE_TOKEN\s*=\s*"')),
+    ("JWT-shaped string",
+     re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    ("service-role reference", re.compile(r"service[_]role")),
+]
+# Template files may hold placeholders. archive/ is frozen superseded code:
+# its real credential values were redacted (and are rotated), but it keeps
+# placeholder device-token lines that the patterns would still flag.
+SECRET_SCAN_SKIP_SUFFIXES = (".example",)
+SECRET_SCAN_SKIP_PREFIXES = ("archive/",)
 
 
 @dataclass
@@ -108,6 +129,39 @@ def python_tool(module: str) -> Optional[list[str]]:
 PYTEST_COUNTS = r"\d+ passed(?:, \d+ \w+)*"
 
 
+def tracked_files(root: Path) -> Optional[list[str]]:
+    """Repo-relative paths git tracks, plus new files it would track (not
+    gitignored), or None if git is unavailable."""
+    git = shutil.which("git")
+    if not git:
+        return None
+    proc = subprocess.run([git, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                          cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if proc.returncode != 0:
+        return None
+    return [p for p in proc.stdout.decode("utf-8", "replace").split("\0") if p]
+
+
+def scan_for_secrets(root: Path, paths: list[str]) -> list[str]:
+    """Returns one "path:line: label" finding per matching line, skipping
+    templates, archive/ and binary files."""
+    findings = []
+    for rel in paths:
+        if rel.endswith(SECRET_SCAN_SKIP_SUFFIXES) or rel.startswith(SECRET_SCAN_SKIP_PREFIXES):
+            continue
+        try:
+            data = (root / rel).read_bytes()
+        except OSError:
+            continue
+        if b"\0" in data[:8192]:
+            continue
+        for lineno, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            for label, pattern in SECRET_PATTERNS:
+                if pattern.search(line):
+                    findings.append(f"{rel}:{lineno}: {label}")
+    return findings
+
+
 def last_match(pattern: str, output: str) -> str:
     matches = re.findall(pattern, output)
     return matches[-1] if matches else ""
@@ -116,7 +170,24 @@ def last_match(pattern: str, output: str) -> str:
 # ---------------------------------------------------------------------
 # Suites
 # ---------------------------------------------------------------------
+def check_secrets(r: Runner) -> None:
+    name = "backend: secret scan"
+    start = time.monotonic()
+    paths = tracked_files(ROOT)
+    if paths is None:
+        r.skip(name, "git")
+        return
+    findings = scan_for_secrets(ROOT, paths)
+    for finding in findings:
+        print(f"  {finding}", flush=True)
+    status = "FAIL" if findings else "PASS"
+    detail = f"{len(findings)} finding(s)" if findings else f"{len(paths)} files"
+    r.record(Result(name, status, time.monotonic() - start, detail))
+
+
 def check_backend(r: Runner) -> None:
+    check_secrets(r)
+
     ruff = python_tool("ruff")
     if ruff:
         r.run("backend: ruff", ruff + ["check", "--config", "Backend/pyproject.toml",
@@ -170,7 +241,23 @@ def check_firmware(r: Runner) -> None:
         r.run(name, [cli, "compile", "--fqbn", fqbn,
                      "--libraries", str(EMBEDDED / "libraries"),
                      "--build-path", str(BUILD / "arduino" / sketch),
-                     str(EMBEDDED / sketch)], ROOT)
+                     str(stage_sketch(sketch))], ROOT)
+
+
+def stage_sketch(sketch: str) -> Path:
+    """Copies a sketch into build/sketches/ for the check compile. A sketch
+    that ships secrets.h.example gets that file as its secrets.h, so the
+    check never reads a developer's real credentials and CI (which has no
+    secrets.h) still compiles."""
+    src = EMBEDDED / sketch
+    dest = BUILD / "sketches" / sketch
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest, ignore=shutil.ignore_patterns("secrets.h"))
+    example = src / "secrets.h.example"
+    if example.exists():
+        shutil.copyfile(example, dest / "secrets.h")
+    return dest
 
 
 def check_mobile(r: Runner) -> None:

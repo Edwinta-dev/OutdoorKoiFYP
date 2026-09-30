@@ -1,7 +1,9 @@
-# Secrets
+# Secrets. Each has a committed .example beside it.
 .env
 *.env
 !.env.example
+secrets.h
+MobileUI/mobile_app/env/*.json
 
 # Python
 __pycache__/

@@ -27,12 +27,13 @@
 #define PCLK_GPIO_NUM  22
 #define FLASH_LED_PIN  4
 
-// --- Network ---
-const char* WIFI_SSID    = "107";
-const char* WIFI_PASS    = "6Casting.";
-const char* UPLOAD_URL   = "https://edwinta.pythonanywhere.com/upload";
-const char* DEVICE_TOKEN = "b1X8_RvUgEl_nfLcJZyleNbhd0SUzA0S";
-const int   USER_ID      = 455;
+// --- Network: WIFI_SSID, WIFI_PASS, UPLOAD_URL, DEVICE_TOKEN, USER_ID ---
+// Kept out of git. Copy secrets.h.example to secrets.h in this folder and fill it in.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "camera_node: secrets.h not found. Copy Embedded/camera_node/secrets.h.example to secrets.h and fill in the values."
+#endif
 
 // Used when Wi-Fi or the server fails. Was 60 s: a dead router would then wake the
 // camera every minute and drain the AAA pack in hours. The server's own error

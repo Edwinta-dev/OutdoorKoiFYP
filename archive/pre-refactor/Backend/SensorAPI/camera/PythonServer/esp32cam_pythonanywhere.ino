@@ -29,7 +29,7 @@
 
 // --- Network ---
 const char* WIFI_SSID    = "107";
-const char* WIFI_PASS    = "6Casting.";
+const char* WIFI_PASS    = "REDACTED_ROTATED";
 const char* UPLOAD_URL   = "https://YOUR_USERNAME.pythonanywhere.com/upload";
 const char* DEVICE_TOKEN = "same-as-DEVICE_TOKEN-in-server-.env";
 const int   USER_ID      = 455;

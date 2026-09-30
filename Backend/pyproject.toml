@@ -24,3 +24,11 @@ known-first-party = [
 ignore_missing_imports = true
 check_untyped_defs = false
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# CI does not install supabase (the tests stub it), so the baseline above
+# treats it as Any. Skip its bundled types when it is installed locally so
+# mypy gives the same result on every machine.
+module = ["supabase", "supabase.*", "postgrest", "postgrest.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

@@ -65,11 +65,13 @@ const int      N_SAMPLES        = 31;
 const int      SAMPLE_GAP_MS    = 20;
 const int      DS_MAX_TRIES     = 3;
 
-// ---- Network (fill in real values before flashing) ----
-const char *WIFI_SSID   = "REPLACE_ME";
-const char *WIFI_PASS   = "REPLACE_ME";
-const char *SUPABASE_URL = "https://mkzfdxhzmrnapvrhshte.supabase.co";
-const char *SUPABASE_ANON_KEY = "REPLACE_ME";   // do not commit a real key here - load from NVS/build flag
+// ---- Network: WIFI_SSID, WIFI_PASS, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY ----
+// Kept out of git. Copy secrets.h.example to secrets.h in this folder and fill it in.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "sensor_node: secrets.h not found. Copy Embedded/sensor_node/secrets.h.example to secrets.h and fill in the values."
+#endif
 const char *TABLE = "SensorData";
 const int   WIFI_MAX_ATTEMPTS         = 2;
 const unsigned long WIFI_ATTEMPT_TIMEOUT_MS = 12000;
@@ -255,7 +257,7 @@ void setup() {
   unsigned long sleepSec = wifiFailSleepSeconds(wifiFailStreak, DEFAULT_SLEEP_ON_FAIL_S);
   if (connectWifi()) {
     wifiFailStreak = 0;
-    db.begin(SUPABASE_URL, SUPABASE_ANON_KEY);
+    db.begin(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
     // Only report a temp reading when the sensor actually produced one - never
     // upload the compensation fallback as if it were real data (that's the

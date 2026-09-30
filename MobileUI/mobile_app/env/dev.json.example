@@ -1,0 +1,6 @@
+{
+  "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "REPLACE_ME",
+  "DIGITAL_TWIN_BASE_URL": "http://YOUR_DEV_MACHINE_LAN_IP:8080",
+  "POND_IMAGE_BUCKET": "imageAnalysisBucket"
+}

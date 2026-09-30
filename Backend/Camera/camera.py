@@ -20,7 +20,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), ov
 # file - the Flutter client builds its own URLs against the same bucket
 # and the two need to agree:
 #   Backend .env   -> POND_IMAGE_BUCKET=imageAnalysisBucket
-#   Flutter build  -> --dart-define=POND_IMAGE_BUCKET=imageAnalysisBucket
+#   Flutter build  -> POND_IMAGE_BUCKET in MobileUI/mobile_app/env/*.json
 # Default matches the bucket in use, so nothing breaks if it is unset.
 IMAGE_BUCKET = os.environ.get("POND_IMAGE_BUCKET", "imageAnalysisBucket")
 

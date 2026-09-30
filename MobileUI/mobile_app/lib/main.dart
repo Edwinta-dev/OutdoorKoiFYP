@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Added for native system bar styling
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Updated import for Supabase Flutter
+import 'config/app_config.dart';
+import 'screens/config_error_screen.dart';
 // Import your screens
 import 'screens/onboarding_screen.dart';
 import 'screens/main_layout.dart';
@@ -9,11 +11,16 @@ import 'screens/main_layout.dart';
 void main() async {
   // Ensure Flutter engine bindings are initialized before async tasks
   WidgetsFlutterBinding.ensureInitialized();
-  const String supabaseURL = String.fromEnvironment('SUPABASE_URL');
-  const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_PUBLISHABLE_KEY',
+  const config = AppConfig.environment;
+  final problems = config.problems;
+  if (problems.isNotEmpty) {
+    runApp(ConfigErrorApp(problems: problems));
+    return;
+  }
+  await Supabase.initialize(
+    url: config.supabaseUrl,
+    publishableKey: config.supabasePublishableKey,
   );
-  await Supabase.initialize(url: supabaseURL, publishableKey: supabaseAnonKey);
   // Configure OS native top status bar & bottom device navigation bar
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
