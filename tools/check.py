@@ -197,7 +197,7 @@ def check_backend(r: Runner) -> None:
 
     mypy = python_tool("mypy")
     if mypy:
-        r.run("backend: mypy", mypy + ["DigitalTwin", "Camera"], BACKEND,
+        r.run("backend: mypy", mypy + ["koi", "tests"], BACKEND,
               summarise=lambda out: last_match(r"(Found \d+ errors?|Success)", out))
     else:
         r.skip("backend: mypy", "mypy")

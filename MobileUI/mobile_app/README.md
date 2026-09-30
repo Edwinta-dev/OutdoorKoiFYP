@@ -15,8 +15,8 @@ flutter run --dart-define-from-file=env/dev.json
 |---|---|
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key; never the secret key |
-| `DIGITAL_TWIN_BASE_URL` | Base URL of the Backend/DigitalTwin service |
-| `POND_IMAGE_BUCKET` | Storage bucket for camera frames; must match `POND_IMAGE_BUCKET` in Backend/Camera/.env |
+| `DIGITAL_TWIN_BASE_URL` | Base URL of the digital twin API (`python -m koi.api`) |
+| `POND_IMAGE_BUCKET` | Storage bucket for camera frames; must match `POND_IMAGE_BUCKET` in Backend/.env |
 
 The real `env/*.json` files are gitignored. There are no built-in
 defaults: a build missing any value opens on a configuration error screen

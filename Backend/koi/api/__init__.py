@@ -1,0 +1,30 @@
+"""Digital twin HTTP API: chemistry, evaporation and algae per pond.
+
+    python -m koi.api          # local run on port 8080
+    koi.api.create_app(...)    # WSGI (PythonAnywhere, gunicorn)
+"""
+from __future__ import annotations
+
+from typing import Optional
+
+from flask import Flask
+from flask_cors import CORS
+
+from koi.settings import Settings, get_settings
+from koi.storage import client
+
+
+def create_app(settings: Optional[Settings] = None) -> Flask:
+    settings = settings or get_settings()
+    client.configure(settings)
+    app = Flask(__name__)
+    app.config["KOI_SETTINGS"] = settings
+    CORS(app, origins=list(settings.cors_origins))
+
+    from koi.api.routes import bp
+
+    app.register_blueprint(bp)
+    return app
+
+
+__all__ = ["create_app"]

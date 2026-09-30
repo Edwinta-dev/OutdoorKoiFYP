@@ -8,6 +8,7 @@ MobileUI/mobile_app/env/*.json
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 
 # Large scraped data dumps (regenerate via the scraper scripts instead of committing)
 PythonSimulatorProject/*.zip

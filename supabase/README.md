@@ -11,8 +11,8 @@ goes in a new file, never in the live project alone.
 ## How 0001 was built, and what to trust
 
 Until issue #5 no SQL was committed, so `0001_baseline.sql` was written
-from how the code uses the database (`Backend/DigitalTwin/state_store.py`,
-`Backend/Camera/camera.py`, `Embedded/sensor_node/sensor_node.ino` and the
+from how the code uses the database (`Backend/koi/storage/state_store.py`,
+`Backend/koi/camera/camera.py`, `Embedded/sensor_node/sensor_node.ino` and the
 Flutter app). Table and column names come straight from the code and are
 reliable. Column types, indexes, the trigger and the function bodies are
 reasoned from what the code reads and writes; every part that could not
@@ -97,7 +97,7 @@ Rules for new migrations:
 
 ## Checks
 
-`Backend/DigitalTwin/test_schema.py` parses every file here and fails if
+`Backend/tests/storage/test_schema.py` parses every file here and fails if
 the Python services, the Flutter app or the sensor sketch name a table,
 column, function parameter or bucket that no migration defines, or if
 either payload function stops building a key the app or poller reads. It

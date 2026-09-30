@@ -1,7 +1,0 @@
-# Tools for `python tools/check.py backend`. The backend tests stub
-# supabase, dotenv and apscheduler, so only Flask is needed at runtime.
-flask>=3.1
-flask-cors>=4.0
-pytest>=8.0
-ruff==0.16.9
-mypy==2.3.1

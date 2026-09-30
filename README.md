@@ -148,8 +148,14 @@ days for the fish in it.**
 ## Repository layout
 
 ```
-Backend/DigitalTwin/                Flask API, three engines, Supabase persistence, tests
-Backend/Camera/                     Camera service, HSV analysis, adaptive capture scheduling
+Backend/koi/                        Python package `koi` (see Backend/README_INTEGRATION.md)
+Backend/koi/models/                 The three engines and the pond orchestrator (pure, no I/O)
+Backend/koi/storage/                Supabase client and persistence
+Backend/koi/api/                    Digital twin Flask API
+Backend/koi/worker/                 Environmental poller
+Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
+Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
+Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
 Embedded/sensor_bench/              ESP32 sensor node, serial-only bench build with service mode
 Embedded/camera_node/               ESP32-CAM capture and upload
@@ -168,7 +174,7 @@ archive/pre-refactor/               Superseded code, kept for traceability only
 **Checks**
 
 ```bash
-pip install -r Backend/requirements-dev.txt
+pip install -e "Backend[dev]"
 python tools/check.py all          # or backend | firmware | mobile
 ```
 
@@ -181,12 +187,18 @@ A missing tool prints `SKIP`; `--strict` (used by CI in
 **Backend**
 
 ```bash
-cd Backend/DigitalTwin
+cd Backend
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY
-python app.py
+pip install -e ".[dev]"
+cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY, KOI_ENV, ...
+python -m koi.api         # digital twin API on :8080 (runs the poller too when KOI_ENV=development)
+python -m koi.worker      # the poller on its own, for any other KOI_ENV
+python -m koi.camera      # camera service on :5000
 ```
+
+Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;
+`Backend/requirements.txt` installs those pins plus the package (used on
+PythonAnywhere, see `Backend/README_INTEGRATION.md`).
 
 **App**
 
@@ -209,7 +221,8 @@ from a gitignored `secrets.h`: copy `secrets.h.example` in the sketch
 folder to `secrets.h` and fill it in. Without it the sketch stops at
 compile time with an `#error` naming the example file.
 
-Each Backend service has a `.env.example` listing every variable it reads.
+`Backend/.env.example` lists every variable the backend reads; all of them
+are loaded through `koi/settings.py`.
 The backend check scans tracked files for committed credentials (Wi-Fi
 password assignments, device-token literals, JWT-shaped strings,
 service-role references) outside `.example` files and `archive/`.
