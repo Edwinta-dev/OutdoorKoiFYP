@@ -46,16 +46,24 @@ rather than from the request. See the write-up.
 """
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
 from koi.models.engine import EventKind, PondConfig, PondEvent, WaterChemistryEngine
-from koi.registry import registry
-from koi.storage import state_store
+from koi.registry import EngineRegistry
+from koi.storage import Storage, fail_soft
 
 bp = Blueprint("twin", __name__)
+
+
+def _storage() -> Storage:
+    return current_app.extensions["koi_storage"]
+
+
+def _registry() -> EngineRegistry:
+    return current_app.extensions["koi_registry"]
 
 
 # ===================================================================
@@ -76,11 +84,11 @@ def _parse_time(body: dict) -> datetime:
 
 def _default_config_for(user_id: int, body: dict) -> PondConfig | None:
     """Bootstraps a PondConfig for a user with no persisted snapshot yet.
-    volume/biomass come from UserData (state_store.fetch_pond_config);
+    volume/biomass come from UserData (Storage.fetch_pond_config);
     fish_type/fish_count aren't stored there, so the caller (Flutter) sends
     them from its own SharedPreferences - see quick_log_modals.dart. Both
     are optional and fall back to PondConfig's own defaults if omitted."""
-    row = state_store.fetch_pond_config(user_id)
+    row = _storage().fetch_pond_config(user_id)
     if row is None:
         return None
     kwargs = dict(row)
@@ -95,7 +103,7 @@ def _environment_for(user_id: int):
     """Fetches the bundled payload once and derives everything the
     engines need from it. Returns (payload, context) where context holds
     the live conditions, forecast days and rain flags."""
-    payload = state_store.fetch_dashboard_payload(user_id) or {}
+    payload = _storage().fetch_dashboard_payload(user_id) or {}
     now_conditions = forecast_utils.current_conditions(payload)
     rain_incoming, rain_intensity = forecast_utils.today_rain_context(payload)
     outlook = (payload.get("nea_forecasts") or {}).get("outlook_4day", [])
@@ -165,7 +173,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
     evaluation row for each, so the UI reflects a just-logged event
     without waiting for the next poll cycle.
 
-    Called INSIDE the twin lock. The Supabase writes happen here rather
+    Called INSIDE the twin lock. The storage writes happen here rather
     than after the lock releases because the caller needs the resulting
     payload as its HTTP response - the alternative would be threading
     three assessment objects back out just to write them a microsecond
@@ -183,7 +191,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
         rain_incoming=ctx["rain_incoming"],
         rain_intensity=ctx["rain_intensity"],
     )
-    state_store.push_evaluation(user_id, chem.to_dict())
+    _storage().push_evaluation(user_id, chem.to_dict())
 
     # --- evaporation ---
     evap_days = None
@@ -196,7 +204,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
     evap = twin.evaporation.assess(
         current_water_temp_c=float(water_temp), days_to_topup=evap_days
     )
-    state_store.push_evaporation_evaluation(user_id, evap.to_dict())
+    fail_soft(lambda: _storage().push_evaporation_evaluation(user_id, evap.to_dict()), None)
 
     # --- algae ---
     algae_dict = None
@@ -214,7 +222,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
         algae = twin.algae.assess(days_to_scrub=algae_days)
         if algae is not None:
             algae_dict = algae.to_dict()
-            state_store.push_algae_evaluation(user_id, algae_dict)
+            fail_soft(lambda: _storage().push_algae_evaluation(user_id, algae_dict), None)
 
     return {
         "chemistry": chem.to_dict(),
@@ -232,7 +240,7 @@ def _handle_event(user_id: int, event: PondEvent, body: dict):
         twin.apply_event(event)
         return _recompute_and_push(user_id, twin, ctx)
 
-    return registry.with_twin(
+    return _registry().with_twin(
         user_id, mutate, default_config=_default_config_for(user_id, body)
     )
 
@@ -345,9 +353,9 @@ def log_algae_rating():
     image_row = None
     inferred = False
     if image_id is not None:
-        image_row = state_store.fetch_image_by_id(user_id, int(image_id))
+        image_row = fail_soft(lambda: _storage().fetch_image_by_id(user_id, int(image_id)), None)
     if image_row is None:
-        rows = state_store.fetch_image_history(user_id, limit=1)
+        rows = _storage().fetch_image_history(user_id, limit=1)
         image_row = rows[0] if rows else None
         inferred = image_id is not None or image_row is not None
 
@@ -358,7 +366,7 @@ def log_algae_rating():
     rated_at = _parse_time(body)
 
     # Persist first, so the engine can carry the row id for undo.
-    stored = state_store.insert_algae_rating(
+    stored = fail_soft(lambda: _storage().insert_algae_rating(
         user_id=user_id,
         severity=None if severity == "obstruction" else severity,
         is_obstructed=(severity == "obstruction"),
@@ -367,7 +375,7 @@ def log_algae_rating():
         green_ratio_at_rating=float(green_at) if green_at is not None else None,
         image_captured_at=str(image_row.get("created_at")) if image_row else None,
         notes=body.get("notes"),
-    )
+    ), None)
     rating_id = stored.get("id") if stored else None
 
     _, ctx = _environment_for(user_id)
@@ -385,7 +393,7 @@ def log_algae_rating():
         return summary
 
     try:
-        result = registry.with_twin(
+        result = _registry().with_twin(
             user_id, mutate, default_config=_default_config_for(user_id, body)
         )
     except ValueError as exc:
@@ -433,7 +441,7 @@ def undo_algae_rating():
             "assessments": assessments,
         }
 
-    result = registry.with_twin(user_id, mutate)
+    result = _registry().with_twin(user_id, mutate)
     if not result.get("undone"):
         return jsonify({
             "undone": False,
@@ -443,7 +451,7 @@ def undo_algae_rating():
         }), 409
 
     if rating_id is not None:
-        state_store.delete_algae_rating(user_id, int(rating_id))
+        fail_soft(lambda: _storage().delete_algae_rating(user_id, int(rating_id)), None)
     return jsonify(result), 200
 
 
@@ -452,7 +460,7 @@ def get_algae_ratings(user_id):
     """Rating history plus the calibration state it produces. Drives the
     rating card's "last time you called this Moderate" anchor and its
     progress hint."""
-    rows = state_store.fetch_algae_ratings(user_id, limit=50)
+    rows = fail_soft(lambda: _storage().fetch_algae_ratings(user_id, limit=50), [])
 
     def read(twin):
         return {
@@ -465,13 +473,13 @@ def get_algae_ratings(user_id):
         }
 
     try:
-        calibration = registry.with_twin(
+        calibration = _registry().with_twin(
             user_id, read, default_config=_default_config_for(user_id, {}), persist=False
         )
     except ValueError:
         calibration = None
 
-    latest_image = state_store.fetch_image_history(user_id, limit=1)
+    latest_image = _storage().fetch_image_history(user_id, limit=1)
     return jsonify({
         "ratings": rows[-20:],
         "latest_rating": rows[-1] if rows else None,
@@ -489,7 +497,7 @@ def get_algae_ratings(user_id):
 def get_latest_assessment(user_id):
     """Most recent chemistry assessment, whether produced by a poll tick
     or by an event endpoint's immediate re-assessment."""
-    assessment = state_store.fetch_latest_evaluation(user_id)
+    assessment = _storage().fetch_latest_evaluation(user_id)
     if assessment is None:
         return jsonify({"error": "no assessment yet for this user"}), 404
     return jsonify(assessment), 200
@@ -497,7 +505,7 @@ def get_latest_assessment(user_id):
 
 @bp.route("/assessment/evaporation/<int:user_id>", methods=["GET"])
 def get_latest_evaporation_assessment(user_id):
-    assessment = state_store.fetch_latest_evaporation_evaluation(user_id)
+    assessment = fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None)
     if assessment is None:
         return jsonify({
             "error": "No evaporation assessment yet. This appears after the first "
@@ -509,7 +517,7 @@ def get_latest_evaporation_assessment(user_id):
 
 @bp.route("/assessment/algae/<int:user_id>", methods=["GET"])
 def get_latest_algae_assessment(user_id):
-    assessment = state_store.fetch_latest_algae_evaluation(user_id)
+    assessment = fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None)
     if assessment is None:
         return jsonify({
             "error": "No algae assessment yet. Needs at least one clean ESP32-CAM "
@@ -525,9 +533,9 @@ def get_all_assessments(user_id):
     populate every outcome card and its alert badge from a single
     request instead of three."""
     return jsonify({
-        "chemistry": state_store.fetch_latest_evaluation(user_id),
-        "evaporation": state_store.fetch_latest_evaporation_evaluation(user_id),
-        "algae": state_store.fetch_latest_algae_evaluation(user_id),
+        "chemistry": _storage().fetch_latest_evaluation(user_id),
+        "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
+        "algae": fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
     }), 200
 
 
@@ -542,7 +550,7 @@ def get_forecast(user_id):
     interventions occur."""
     horizon_days = request.args.get("horizon_days", default=21, type=int)
 
-    feeding_rows = state_store.fetch_recent_feeding_events(user_id, limit=30)
+    feeding_rows = _storage().fetch_recent_feeding_events(user_id, limit=30)
     avg_daily_tan_mg = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
     if avg_daily_tan_mg is None:
         return jsonify({
@@ -551,14 +559,14 @@ def get_forecast(user_id):
                      "time (not all on the same day)."
         }), 422
 
-    temp_stats = state_store.fetch_daily_sensor_stats(user_id, "temp")
+    temp_stats = _storage().fetch_daily_sensor_stats(user_id, "temp")
     if temp_stats is None:
         return jsonify({
             "error": "No historical temperature data available for this pond yet - "
                      "need at least a few days of sensor polling before forecasting."
         }), 422
-    lux_stats = state_store.fetch_daily_sensor_stats(user_id, "LUX") or \
-        state_store.fetch_daily_sensor_stats(user_id, "lux")
+    lux_stats = _storage().fetch_daily_sensor_stats(user_id, "LUX") or \
+        _storage().fetch_daily_sensor_stats(user_id, "lux")
     fallback_lux = lux_stats["avg"] if lux_stats else None
 
     payload, ctx = _environment_for(user_id)
@@ -581,7 +589,7 @@ def get_forecast(user_id):
             horizon_days=horizon_days,
         )
 
-    result = registry.with_twin(
+    result = _registry().with_twin(
         user_id, run, default_config=_default_config_for(user_id, {}), persist=False
     )
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
@@ -601,7 +609,7 @@ def get_evaporation_forecast(user_id):
     horizon_days = request.args.get("horizon_days", default=14, type=int)
     depth_m = request.args.get("depth_m", default=ev.DEFAULT_POND_DEPTH_M, type=float)
 
-    config_row = state_store.fetch_pond_config(user_id)
+    config_row = _storage().fetch_pond_config(user_id)
     if config_row is None:
         return jsonify({
             "error": "No pond configuration for this user - complete onboarding "
@@ -616,7 +624,7 @@ def get_evaporation_forecast(user_id):
             daily_environment=env, horizon_days=horizon_days
         )
 
-    result = registry.with_twin(
+    result = _registry().with_twin(
         user_id,
         run,
         default_config=_default_config_for(user_id, {}),
@@ -626,9 +634,9 @@ def get_evaporation_forecast(user_id):
 
     # Grounding cross-check against the measured TDS trend - two
     # independent sources, so agreement is real corroboration.
-    tds_series = state_store.fetch_daily_sensor_series(user_id, "TDS", days=30) or \
-        state_store.fetch_daily_sensor_series(user_id, "tds", days=30)
-    observed_slope = state_store.slope_per_day(tds_series)
+    tds_series = _storage().fetch_daily_sensor_series(user_id, "TDS", days=30) or \
+        _storage().fetch_daily_sensor_series(user_id, "tds", days=30)
+    observed_slope = forecast_utils.slope_per_day(tds_series)
     current_tds = ctx["now"].get("tds")
     result["tds_cross_check"] = ev.cross_check_against_tds(
         predicted_daily_loss_litres=result["avg_loss_litres_per_day"],
@@ -654,19 +662,19 @@ def get_algae_forecast(user_id):
     payload, ctx = _environment_for(user_id)
     now = ctx["now"]
 
-    lux_stats = state_store.fetch_daily_sensor_stats(user_id, "LUX") or \
-        state_store.fetch_daily_sensor_stats(user_id, "lux")
+    lux_stats = _storage().fetch_daily_sensor_stats(user_id, "LUX") or \
+        _storage().fetch_daily_sensor_stats(user_id, "lux")
     baseline_lux = float(_first(now.get("lux"), lux_stats["avg"] if lux_stats else None, 10000.0))
-    temp_stats = state_store.fetch_daily_sensor_stats(user_id, "temp")
+    temp_stats = _storage().fetch_daily_sensor_stats(user_id, "temp")
     baseline_temp = float(_first(now.get("water_temp_c"), temp_stats["avg"] if temp_stats else None, 29.0))
 
-    feeding_rows = state_store.fetch_recent_feeding_events(user_id, limit=30)
+    feeding_rows = _storage().fetch_recent_feeding_events(user_id, limit=30)
     avg_tan = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
 
     def run(twin):
         # Assimilate any frames that arrived since the last poll, so an
         # on-demand chart refresh is never staler than the camera.
-        fresh = ae.parse_image_rows(state_store.fetch_image_history(user_id, limit=50))
+        fresh = ae.parse_image_rows(_storage().fetch_image_history(user_id, limit=50))
         assimilated = twin.algae.ingest_camera_samples(fresh)
 
         no3_series = []
@@ -700,7 +708,7 @@ def get_algae_forecast(user_id):
     # persist=True here: unlike the other forecast endpoints this one can
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
-    result, assimilated = registry.with_twin(
+    result, assimilated = _registry().with_twin(
         user_id, run, default_config=_default_config_for(user_id, {}), persist=True
     )
 
@@ -708,7 +716,7 @@ def get_algae_forecast(user_id):
         return jsonify(result), 422
 
     result["assimilated_camera_frames"] = assimilated
-    image_rows = state_store.fetch_image_history(user_id, limit=1)
+    image_rows = _storage().fetch_image_history(user_id, limit=1)
     result["latest_image_url"] = image_rows[0].get("imageURL") if image_rows else None
     return jsonify(result), 200
 

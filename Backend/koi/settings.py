@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     env: Literal["development", "production", "test"] = Field(
         default="production", validation_alias=AliasChoices("KOI_ENV", "env"))
 
+    # Where the services keep their data: "supabase" (the live project) or
+    # "memory" (in-process tables, empty at start and lost on exit).
+    storage: Literal["supabase", "memory"] = Field(
+        default="supabase", validation_alias=AliasChoices("KOI_STORAGE", "storage"))
+
     # Supabase project URL and the secret (service-role) key. Server-side
     # only; never put the key in the app or firmware.
     supabase_url: str = Field(default="", validation_alias=AliasChoices("SUPABASE_URL", "supabase_url"))

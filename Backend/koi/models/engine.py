@@ -722,7 +722,7 @@ class WaterChemistryEngine:
     ) -> Optional[float]:
         """feeding_rows: recent FEEDING rows from pondInterventions (most
         recent first), each with food_grams/protein_percentage/
-        event_timestamp - see state_store.fetch_recent_feeding_events.
+        event_timestamp - see Storage.fetch_recent_feeding_events.
         Returns the average TAN mg produced per day across the span the
         sample covers (min(fetched) to max(fetched) timestamp), or None
         if there isn't enough history to establish a meaningful span

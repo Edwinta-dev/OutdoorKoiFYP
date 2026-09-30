@@ -20,7 +20,9 @@ def main(settings: Optional[Settings] = None, run: bool = True):
         # deployment needs a different locking strategy first.
         from koi.worker import poller
 
-        poller.start(settings)
+        # The poller shares the app's storage and registry, so the per-pond
+        # locks cover both the request threads and the poll thread.
+        poller.start(settings, app.extensions["koi_registry"])
     if run:
         app.run(host="0.0.0.0", port=8080, threaded=True)
     return app

@@ -150,7 +150,7 @@ days for the fish in it.**
 ```
 Backend/koi/                        Python package `koi` (see Backend/README_INTEGRATION.md)
 Backend/koi/models/                 The three engines and the pond orchestrator (pure, no I/O)
-Backend/koi/storage/                Supabase client and persistence
+Backend/koi/storage/                Storage interface: Supabase and in-memory implementations
 Backend/koi/api/                    Digital twin Flask API
 Backend/koi/worker/                 Environmental poller
 Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling

@@ -12,14 +12,14 @@ from flask import Flask
 from flask_cors import CORS
 
 from koi.settings import Settings, get_settings
-from koi.storage import client
+from koi.storage import Storage, build_storage
 
 
-def create_app(settings: Optional[Settings] = None) -> Flask:
+def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] = None) -> Flask:
     settings = settings or get_settings()
-    client.configure(settings)
     app = Flask(__name__)
     app.config["KOI_SETTINGS"] = settings
+    app.extensions["koi_storage"] = storage if storage is not None else build_storage(settings)
     CORS(app, origins=list(settings.cors_origins))
 
     from koi.camera.camera import bp

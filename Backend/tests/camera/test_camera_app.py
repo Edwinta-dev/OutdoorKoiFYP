@@ -1,5 +1,5 @@
-"""koi.camera.create_app: the ESP32-CAM upload service, against an
-in-memory stand-in for the shared Supabase client."""
+"""koi.camera.create_app: the ESP32-CAM upload service, against
+MemoryStorage."""
 from datetime import datetime
 
 import cv2
@@ -9,52 +9,7 @@ import pytest
 from conftest import make_settings
 from koi.camera import camera as camera_routes
 from koi.camera import create_app, imageSchedule
-
-
-class _Query:
-    def __init__(self, db, table):
-        self.db, self.table_name = db, table
-
-    def select(self, *_):
-        return self
-
-    def eq(self, *_):
-        return self
-
-    def order(self, *_, **__):
-        return self
-
-    def limit(self, *_):
-        return self
-
-    def insert(self, row):
-        self.db.inserted.append((self.table_name, row))
-        return self
-
-    def execute(self):
-        return type("Res", (), {"data": list(self.db.previous)})()
-
-
-class _Bucket:
-    def __init__(self, db, name):
-        self.db, self.name = db, name
-
-    def upload(self, path, file, file_options):
-        self.db.uploads.append((self.name, path, len(file)))
-
-    def get_public_url(self, path):
-        return f"https://storage.invalid/{self.name}/{path}?"
-
-
-class FakeSupabase:
-    def __init__(self, previous=()):
-        self.previous = previous
-        self.inserted = []
-        self.uploads = []
-        self.storage = type("Storage", (), {"from_": lambda _s, name: _Bucket(self, name)})()
-
-    def table(self, name):
-        return _Query(self, name)
+from koi.storage import MemoryStorage
 
 
 def _jpeg(bgr):
@@ -66,14 +21,12 @@ def _jpeg(bgr):
 
 
 @pytest.fixture
-def fake_db(monkeypatch):
-    db = FakeSupabase()
-    monkeypatch.setattr(camera_routes, "get_client", lambda: db)
-    return db
+def storage():
+    return MemoryStorage()
 
 
-def _client(**overrides):
-    app = create_app(make_settings(**overrides))
+def _client(storage=None, **overrides):
+    app = create_app(make_settings(**overrides), storage=storage)
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -84,36 +37,62 @@ def test_health():
     assert resp.get_data(as_text=True) == "OutdoorKoi camera API OK"
 
 
-def test_upload_rejects_wrong_device_token_with_a_sleep_time(fake_db):
-    resp = _client(device_token="secret").post("/upload", data=b"x", headers={"X-Device-Token": "nope"})
+def test_upload_rejects_wrong_device_token_with_a_sleep_time(storage):
+    resp = _client(storage, device_token="secret").post("/upload", data=b"x", headers={"X-Device-Token": "nope"})
     assert resp.status_code == 401
     assert resp.get_json()["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
-    assert fake_db.uploads == []
+    assert storage.uploads == {}
 
 
-def test_upload_rejects_empty_body(fake_db):
-    resp = _client().post("/upload", data=b"")
+def test_upload_rejects_empty_body(storage):
+    resp = _client(storage).post("/upload", data=b"")
     assert resp.status_code == 400
     assert resp.get_json()["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
 
 
-def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(fake_db):
-    resp = _client(device_token="secret", test_mode=True, pond_image_bucket="frames").post(
+def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(storage):
+    resp = _client(storage, device_token="secret", test_mode=True, pond_image_bucket="frames").post(
         "/upload", data=_jpeg((0, 200, 0)),
         headers={"X-Device-Token": "secret", "X-User-ID": "15"})
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["status"] == "success"
     assert body["sleep_sec"] == imageSchedule.TEST_SLEEP_SEC[body["state"][0]]
-    assert [(b, p.split("/")[0]) for b, p, _ in fake_db.uploads] == [("frames", "15")]
-    table, row = fake_db.inserted[0]
-    assert table == "imageTable"
+    assert [(b, p.split("/")[0]) for b, p in storage.uploads] == [("frames", "15")]
+    [row] = storage.rows("imageTable")
     assert row["user_ID"] == "15"
-    assert row["imageURL"].startswith("https://storage.invalid/frames/15/")
-    assert not row["imageURL"].endswith("?")
+    assert row["imageURL"].startswith("memory://frames/15/")
+    assert row["current_state"] == body["state"]
 
 
-def test_upload_uses_the_configured_time_zone(fake_db, monkeypatch):
+def test_upload_reads_the_previous_frame_state(storage):
+    storage.add_rows("imageTable", [{"user_ID": 15, "green_ratio": 0.2,
+                                     "current_state": ["base", 0.2], "imageURL": "x"}])
+    resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+    assert resp.status_code == 200
+    assert len(storage.rows("imageTable")) == 2
+
+
+def test_upload_survives_a_failed_previous_frame_read(storage):
+    """No previous state is the first-reading case: the default baseline."""
+    storage.failing.add("fetch_image_history")
+    resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+    assert resp.status_code == 200
+    assert len(storage.rows("imageTable")) == 1
+
+
+def test_failed_upload_still_returns_the_computed_sleep(storage, monkeypatch):
+    monkeypatch.setattr(imageSchedule, "sleep_for_state", lambda state, now=None, test_mode=False: 900)
+    storage.failing.add("upload_image")
+    resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+    assert resp.status_code == 500
+    body = resp.get_json()
+    assert body["sleep_sec"] == 900
+    assert "upload_image failed" in body["message"]
+    assert storage.rows("imageTable") == []
+
+
+def test_upload_uses_the_configured_time_zone(storage, monkeypatch):
     seen = []
 
     def fake_sleep(state, now=None, test_mode=False):
@@ -121,7 +100,7 @@ def test_upload_uses_the_configured_time_zone(fake_db, monkeypatch):
         return 600
 
     monkeypatch.setattr(imageSchedule, "sleep_for_state", fake_sleep)
-    resp = _client(timezone="UTC").post("/upload", data=_jpeg((0, 0, 0)))
+    resp = _client(storage, timezone="UTC").post("/upload", data=_jpeg((0, 0, 0)))
     assert resp.get_json()["sleep_sec"] == 600
     assert [(str(tz), tm) for tz, tm in seen] == [("UTC", False)]
 

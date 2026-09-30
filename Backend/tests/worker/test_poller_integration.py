@@ -1,48 +1,54 @@
 """End-to-end integration test for the poll cycle and event endpoints,
-with Supabase mocked by the in-memory FakeStore from conftest.py.
+against the MemoryStorage fixture pond from conftest.py (no patching:
+the poller and the API share the app's own storage and registry).
 
 This is the test that would have caught wiring mistakes the unit tests
-cannot see: a mistyped state_store function name, an argument that never
+cannot see: a mistyped storage method name, an argument that never
 reaches the engine, an evaluation row that is never pushed, or a snapshot
 that is not persisted after a mutation. It drives the real
-poller._poll_user and the real app.py event handlers.
+poller._poll_user and the real event handlers.
 
 The tests walk one pond through a sequence of polls and events, so they
 share module-scoped state and must run in file order (pytest's default).
 Run from Backend/: python -m pytest tests/worker/test_poller_integration.py
 """
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from conftest import USER
-from koi.registry import registry
+from koi.storage import StorageError
 from koi.worker import poller
 
 
 @pytest.fixture(scope="module")
-def store(fake_store):
-    """The fake store seeded with 8 days of feeding and 6 camera frames."""
+def store(pond_app):
+    """The fixture pond's storage, plus 8 days of feeding and 6 camera frames."""
+    storage = pond_app.extensions["koi_storage"]
     base = datetime(2026, 8, 11, tzinfo=timezone.utc)
-    fake_store.feeding_rows = [
-        {"food_grams": 150.0, "protein_percentage": 40.0,
+    storage.add_rows("pondInterventions", [
+        {"userID": USER, "event_type": "FEEDING", "food_grams": 150.0, "protein_percentage": 40.0,
          "event_timestamp": (base + timedelta(days=i)).isoformat()}
         for i in range(8)
-    ][::-1]
-    fake_store.camera_rows = [
+    ])
+    add_frames(storage, [
         {"id": i, "created_at": (base + timedelta(days=i)).isoformat(),
          "green_ratio": round(0.03 * (1.18 ** i), 5),
          "current_state": ["base", round(0.03 * (1.18 ** i), 5)],
          "imageURL": f"https://example/{i}.jpg"}
         for i in range(6)
-    ]
-    return fake_store
+    ])
+    return storage
 
 
 @pytest.fixture(scope="module")
-def client(store, flask_client):
-    return flask_client
+def registry(pond_app):
+    return pond_app.extensions["koi_registry"]
+
+
+@pytest.fixture(scope="module")
+def client(store, pond_app):
+    return pond_app.test_client()
 
 
 @pytest.fixture(scope="module")
@@ -51,15 +57,43 @@ def carried():
     return {}
 
 
-def poll(store):
-    poller._poll_user(USER, store.fetch_active_pond_configs()[0])
+def add_frames(storage, frames):
+    storage.add_rows("imageTable", [{"user_ID": USER, **f} for f in frames])
+
+
+def frames(store):
+    return store.rows("imageTable")
+
+
+def chem_evals(store):
+    return store.rows("pond_chemistry_evaluations")
+
+
+def evap_evals(store):
+    return store.rows("pond_evaporation_evaluations")
+
+
+def algae_evals(store):
+    return store.rows("pond_algae_evaluations")
+
+
+def ratings(store):
+    return store.rows("algae_severity_ratings")
+
+
+def snapshot(store):
+    return store.load_engine_snapshot(USER)
+
+
+def poll(store, registry):
+    poller._poll_user(registry, USER, store.fetch_active_pond_configs()[0])
 
 
 def persisted_green(store):
-    return json.loads(store.snapshots[USER])["algae"]["green_ratio"]
+    return snapshot(store)["algae"]["green_ratio"]
 
 
-def rewind(user_id, days):
+def rewind(registry, user_id, days):
     """Pushes the engines' last-advance times backwards, which is
     equivalent to that many days elapsing between polls."""
     def fn(twin):
@@ -70,20 +104,19 @@ def rewind(user_id, days):
     registry.with_twin(user_id, fn)
 
 
-def test_first_poll_cycle_runs_end_to_end(store):
-    poll(store)
+def test_first_poll_cycle_runs_end_to_end(store, registry):
+    poll(store, registry)
 
-    assert len(store.chem_evals) == 1, f"chemistry evaluation pushed: {len(store.chem_evals)}"
-    assert len(store.evap_evals) == 1, f"evaporation evaluation pushed: {len(store.evap_evals)}"
-    assert len(store.algae_evals) == 1, f"algae evaluation pushed: {len(store.algae_evals)}"
-    assert USER in store.snapshots, "snapshot persisted"
-
-    snap = json.loads(store.snapshots[USER])
+    assert len(chem_evals(store)) == 1, f"chemistry evaluation pushed: {len(chem_evals(store))}"
+    assert len(evap_evals(store)) == 1, f"evaporation evaluation pushed: {len(evap_evals(store))}"
+    assert len(algae_evals(store)) == 1, f"algae evaluation pushed: {len(algae_evals(store))}"
+    snap = snapshot(store)
+    assert snap is not None, "snapshot persisted"
     assert all(k in snap for k in ("chemistry", "evaporation", "algae")), \
         f"snapshot holds all three engines: {sorted(snap.keys())}"
 
-    ev_row = store.evap_evals[-1]
-    al_row = store.algae_evals[-1]
+    ev_row = evap_evals(store)[-1]
+    al_row = algae_evals(store)[-1]
     assert al_row["rate_source"] == "fitted_from_camera", \
         f"algae grounded on camera, not fallback: {al_row['rate_source']}"
     assert al_row["sample_count"] == 6, \
@@ -95,23 +128,23 @@ def test_first_poll_cycle_runs_end_to_end(store):
         f"algae projected a scrub date: {al_row['days_to_scrub']}"
 
 
-def test_second_cycle_advances_state_after_reload(store):
+def test_second_cycle_advances_state_after_reload(store, registry):
     registry.evict(USER)  # force a reload from the persisted snapshot
-    poll(store)
-    assert len(store.chem_evals) == 2, "second chemistry evaluation pushed"
-    assert len(store.evap_evals) == 2, "second evaporation evaluation pushed"
-    al2 = store.algae_evals[-1]
+    poll(store, registry)
+    assert len(chem_evals(store)) == 2, "second chemistry evaluation pushed"
+    assert len(evap_evals(store)) == 2, "second evaporation evaluation pushed"
+    al2 = algae_evals(store)[-1]
     assert al2["sample_count"] == 6, \
         f"no duplicate camera assimilation after reload: {al2['sample_count']}"
 
 
-def test_environmental_change_moves_evaporation_state(store):
-    before_loss = store.evap_evals[-1]["loss_litres"]
+def test_environmental_change_moves_evaporation_state(store, registry):
+    before_loss = evap_evals(store)[-1]["loss_litres"]
     for _ in range(6):
-        rewind(USER, 1)
-        poll(store)
+        rewind(registry, USER, 1)
+        poll(store, registry)
 
-    after_loss = store.evap_evals[-1]["loss_litres"]
+    after_loss = evap_evals(store)[-1]["loss_litres"]
     assert after_loss > before_loss, \
         f"evaporation loss grew across polls: {before_loss} -> {after_loss}"
     assert after_loss < 500, f"loss stays physically plausible: {after_loss} L"
@@ -127,14 +160,14 @@ def test_top_up_endpoint_resets_evaporation(store, client):
         f"top-up cleared accrued evaporation loss: {body['evaporation']['loss_litres']}"
     assert body["evaporation"]["status"] == "Green", \
         f"evaporation status back to Green: {body['evaporation']['status']}"
-    assert store.evap_evals[-1]["loss_litres"] == 0.0, \
+    assert evap_evals(store)[-1]["loss_litres"] == 0.0, \
         "a fresh evaporation row was pushed immediately"
-    assert json.loads(store.snapshots[USER])["evaporation"]["cumulative_loss_litres"] == 0.0, \
+    assert snapshot(store)["evaporation"]["cumulative_loss_litres"] == 0.0, \
         "reset persisted to the snapshot"
 
 
 def test_algal_scrub_endpoint_resets_algae(store, client):
-    green_before = store.algae_evals[-1]["green_ratio"]
+    green_before = algae_evals(store)[-1]["green_ratio"]
     resp = client.post("/events/algal-scrub",
                        json={"user_id": USER, "scrub_type": "Manual Scrub"})
     assert resp.status_code == 200, f"scrub endpoint returns 200: {resp.status_code}"
@@ -182,27 +215,27 @@ def test_forecast_endpoints_compute_from_live_state(store, client):
     assert r.status_code == 200, f"GET /forecast (chemistry) -> 200: {r.status_code}"
 
     # Read-only forecasts must not have changed persisted state.
-    snap_before = store.snapshots[USER]
+    snap_before = store.rows("pond_chemistry_state")
     client.get(f"/forecast/evaporation/{USER}")
     client.get(f"/forecast/{USER}")
-    assert store.snapshots[USER] == snap_before, \
+    assert store.rows("pond_chemistry_state") == snap_before, \
         "evaporation/chemistry forecasts did not rewrite the snapshot"
 
 
-def test_new_camera_frame_corrects_model_through_poller(store):
-    last_t = datetime.fromisoformat(store.camera_rows[-1]["created_at"])
+def test_new_camera_frame_corrects_model_through_poller(store, registry):
+    last_t = datetime.fromisoformat(frames(store)[-1]["created_at"])
     modelled = persisted_green(store)
-    store.camera_rows.append({
+    add_frames(store, [{
         "id": 99, "created_at": (last_t + timedelta(days=7)).isoformat(),
         "green_ratio": 0.004, "current_state": ["base", 0.004],
         "imageURL": "https://example/99.jpg",
-    })
-    rewind(USER, 1)
-    poll(store)
+    }])
+    rewind(registry, USER, 1)
+    poll(store, registry)
     corrected = persisted_green(store)
     assert corrected < modelled, "new frame pulled the model toward the measurement"
-    assert store.algae_evals[-1]["sample_count"] == 7, \
-        f"sample count incremented: {store.algae_evals[-1]['sample_count']}"
+    assert algae_evals(store)[-1]["sample_count"] == 7, \
+        f"sample count incremented: {algae_evals(store)[-1]['sample_count']}"
 
 
 def test_validation_rejects_bad_event_bodies(client):
@@ -220,20 +253,69 @@ def test_validation_rejects_bad_event_bodies(client):
         f"malformed timestamp falls back to server time instead of 500: {r.status_code}"
 
 
-def test_poll_loop_survives_one_broken_user(store, monkeypatch):
-    from koi.storage import state_store
-    monkeypatch.setattr(state_store, "fetch_dashboard_payload", lambda uid: None)
-    error = None
+def test_poll_loop_survives_one_broken_user(store, registry):
+    pushed = len(chem_evals(store))
+    payload = store.fetch_dashboard_payload(USER)
+    store.set_dashboard_payload(USER, None)
     try:
-        poller._poll_once()   # must not raise
-    except Exception as exc:  # noqa: BLE001
-        error = exc
-    assert error is None, f"poll loop tolerates a user with no payload: {error}"
+        poller._poll_once(registry)   # must not raise
+    finally:
+        store.set_dashboard_payload(USER, payload)
+    assert len(chem_evals(store)) == pushed, "a user with no payload is skipped"
+
+
+def test_poll_loop_survives_a_storage_failure(store, registry):
+    pushed = len(chem_evals(store))
+    store.failing.add("fetch_dashboard_payload")
+    try:
+        poller._poll_once(registry)   # must not raise
+    finally:
+        store.failing.discard("fetch_dashboard_payload")
+    assert len(chem_evals(store)) == pushed, "a user whose payload read fails is skipped"
+
+
+def test_optional_evaluation_logs_do_not_stop_a_poll(store, registry):
+    """The evaporation and algae logs are fail-soft; the chemistry row and
+    the snapshot are not optional and still land."""
+    optional = {"push_evaporation_evaluation", "push_algae_evaluation"}
+    before = (len(chem_evals(store)), len(evap_evals(store)), len(algae_evals(store)))
+    snap_before = store.rows("pond_chemistry_state")
+    store.failing |= optional
+    try:
+        rewind(registry, USER, 1)
+        poll(store, registry)
+    finally:
+        store.failing -= optional
+    after = (len(chem_evals(store)), len(evap_evals(store)), len(algae_evals(store)))
+    assert after == (before[0] + 1, before[1], before[2]), f"only the chemistry row was pushed: {after}"
+    assert store.rows("pond_chemistry_state") != snap_before, "snapshot still persisted"
+
+
+def test_snapshot_write_failure_reaches_the_caller(store, client, registry):
+    store.failing.add("save_engine_snapshot")
+    try:
+        with pytest.raises(StorageError, match="save_engine_snapshot"):
+            client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+    finally:
+        store.failing.discard("save_engine_snapshot")
+        registry.evict(USER)  # drop the unsaved top-up; later tests start from the snapshot
+
+
+def test_missing_evaluation_tables_read_as_no_assessment(store, client):
+    """Reads the old state_store swallowed still come back empty, not 500."""
+    store.failing.add("fetch_latest_algae_evaluation")
+    try:
+        r = client.get(f"/assessment/algae/{USER}")
+        allbody = client.get(f"/assessment/all/{USER}").get_json()
+    finally:
+        store.failing.discard("fetch_latest_algae_evaluation")
+    assert r.status_code == 404, f"failed algae read -> 404 no assessment: {r.status_code}"
+    assert allbody["algae"] is None and allbody["chemistry"] is not None
 
 
 def test_severity_rating_endpoint_corrects_the_model(store, client, carried):
     before = persisted_green(store)
-    latest_img = store.camera_rows[-1]
+    latest_img = frames(store)[-1]
     r = client.post("/events/algae-rating", json={
         "user_id": USER, "severity": "none",
         "image_id": latest_img["id"], "green_ratio": latest_img["green_ratio"],
@@ -242,10 +324,10 @@ def test_severity_rating_endpoint_corrects_the_model(store, client, carried):
     body = r.get_json()
     after = body["green_ratio_after"]
     assert abs(after - before) > 1e-9, "rating moved the modelled level"
-    assert len(store.ratings) == 1, f"rating persisted a row: {len(store.ratings)}"
-    assert store.ratings[0]["image_id"] == latest_img["id"], \
-        f"row pins the rated frame: {store.ratings[0]['image_id']}"
-    assert store.ratings[0]["green_ratio_at_rating"] == latest_img["green_ratio"], \
+    assert len(ratings(store)) == 1, f"rating persisted a row: {len(ratings(store))}"
+    assert ratings(store)[0]["image_id"] == latest_img["id"], \
+        f"row pins the rated frame: {ratings(store)[0]['image_id']}"
+    assert ratings(store)[0]["green_ratio_at_rating"] == latest_img["green_ratio"], \
         "row stores the paired measurement"
     assert all(k in body["assessments"] for k in ("chemistry", "evaporation", "algae")), \
         "response carries all three assessments"
@@ -263,20 +345,20 @@ def test_undo_restores_through_the_endpoint(store, client, carried):
     restored = persisted_green(store)
     assert abs(restored - before) < 1e-9, \
         f"level restored to pre-rating value: {restored} vs {before}"
-    assert len(store.ratings) == 0, f"rating row deleted: {len(store.ratings)}"
+    assert len(ratings(store)) == 0, f"rating row deleted: {len(ratings(store))}"
     r = client.post("/events/algae-rating/undo", json={"user_id": USER})
     assert r.status_code == 409, f"second undo is refused with 409: {r.status_code}"
 
 
-def test_obstruction_rating_discards_the_frame(store, client, carried):
-    bad_t = datetime.fromisoformat(store.camera_rows[-1]["created_at"]) + timedelta(days=1)
+def test_obstruction_rating_discards_the_frame(store, client, carried, registry):
+    bad_t = datetime.fromisoformat(frames(store)[-1]["created_at"]) + timedelta(days=1)
     carried["obstructed_frame_time"] = bad_t
-    store.camera_rows.append({
+    add_frames(store, [{
         "id": 500, "created_at": bad_t.isoformat(), "green_ratio": 0.72,
         "current_state": ["base", 0.72], "imageURL": "https://example/leaf.jpg",
-    })
-    rewind(USER, 1)
-    poll(store)
+    }])
+    rewind(registry, USER, 1)
+    poll(store, registry)
     poisoned = persisted_green(store)
     r = client.post("/events/algae-rating", json={
         "user_id": USER, "severity": "obstruction",
@@ -287,7 +369,7 @@ def test_obstruction_rating_discards_the_frame(store, client, carried):
     assert ob["removed_frames"] == 1, f"a frame was removed: {ob['removed_frames']}"
     cleaned = persisted_green(store)
     assert cleaned < poisoned, "level rolled back off the obstructed frame"
-    assert store.ratings[-1]["severity"] is None and store.ratings[-1]["is_obstructed"] is True, \
+    assert ratings(store)[-1]["severity"] is None and ratings(store)[-1]["is_obstructed"] is True, \
         "obstruction row stores severity NULL"
 
 
@@ -313,12 +395,12 @@ def test_calibration_reached_after_enough_labels(store, client, carried):
              ("moderate", 0.09), ("moderate", 0.095), ("severe", 0.25), ("severe", 0.27)]
     for i, (sev, g) in enumerate(pairs):
         iid = 900 + i
-        store.camera_rows.append({
+        add_frames(store, [{
             "id": iid,
             "created_at": (bad_t + timedelta(days=2 + i)).isoformat(),
             "green_ratio": g, "current_state": ["base", g],
             "imageURL": f"https://example/c{i}.jpg",
-        })
+        }])
         rr = client.post("/events/algae-rating", json={
             "user_id": USER, "severity": sev, "image_id": iid, "green_ratio": g,
         })
@@ -334,13 +416,16 @@ def test_calibration_reached_after_enough_labels(store, client, carried):
     assert abs(cal["thresholds"]["watch"] - (0.0315 + 0.0925) / 2) < 0.01, \
         f"watch sits between minor and moderate medians: {round(cal['thresholds']['watch'], 4)}"
 
-    algae_row = store.algae_evals[-1]
-    assert algae_row["label_count"] >= 8, \
-        f"evaluation row reports the label count: {algae_row.get('label_count')}"
+    # label_count is in the API response; pond_algae_evaluations has no
+    # column for it, so the stored row does not carry it.
+    algae_assessment = rr.get_json()["assessments"]["algae"]
+    assert algae_assessment["label_count"] >= 8, \
+        f"assessment reports the label count: {algae_assessment.get('label_count')}"
+    assert "label_count" not in algae_evals(store)[-1], "stored row keeps only table columns"
     carried["calibration"] = cal
 
 
-def test_calibration_survives_a_registry_eviction(client, carried):
+def test_calibration_survives_a_registry_eviction(client, carried, registry):
     cal = carried["calibration"]
     registry.evict(USER)
     cal2 = client.get(f"/ratings/algae/{USER}").get_json()["calibration"]

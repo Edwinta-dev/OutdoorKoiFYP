@@ -30,11 +30,15 @@ from typing import Any, Callable, Optional
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.pond_twin import PondTwin
-from koi.storage import state_store
+from koi.storage import Storage
 
 
 class EngineRegistry:
-    def __init__(self):
+    """One per process, shared by the API routes and the poller when both
+    run in it (see koi.api.create_app and koi.worker)."""
+
+    def __init__(self, storage: Storage):
+        self.storage = storage
         self._twins: dict[int, PondTwin] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above
@@ -54,7 +58,7 @@ class EngineRegistry:
         if user_id in self._twins:
             return self._twins[user_id]
 
-        snapshot = state_store.load_engine_snapshot(user_id)
+        snapshot = self.storage.load_engine_snapshot(user_id)
         if snapshot is not None:
             # from_snapshot transparently upgrades legacy bare-chemistry
             # snapshots, so existing ponds keep their accumulated nitrogen
@@ -72,7 +76,7 @@ class EngineRegistry:
         # before this feature existed (or one truncated by the retention
         # cap) still recovers the full calibration set.
         try:
-            rows = state_store.fetch_algae_ratings(user_id, limit=200)
+            rows = self.storage.fetch_algae_ratings(user_id, limit=200)
             if rows and not twin.algae._ratings:
                 twin.algae.load_ratings(rows)
         except Exception as exc:  # noqa: BLE001 - ratings are optional
@@ -107,7 +111,7 @@ class EngineRegistry:
             twin = self._load_or_create(user_id, default_config, pond_depth_m)
             result = fn(twin)
             if persist:
-                state_store.save_engine_snapshot(user_id, twin.to_snapshot())
+                self.storage.save_engine_snapshot(user_id, twin.to_snapshot())
             return result
 
     # Backwards-compatible alias. Older call sites passed a callback
@@ -129,9 +133,6 @@ class EngineRegistry:
 
     def evict(self, user_id: int) -> None:
         """Drops a user's in-memory twin so the next access reloads from
-        Supabase. Useful after an out-of-band snapshot change."""
+        storage. Useful after an out-of-band snapshot change."""
         with self._registry_lock:
             self._twins.pop(user_id, None)
-
-
-registry = EngineRegistry()

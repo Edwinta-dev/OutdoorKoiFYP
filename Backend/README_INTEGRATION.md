@@ -15,15 +15,23 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/models/algae_engine.py` | `DigitalTwin/algae_engine.py` | Algae engine, camera assimilation |
 | `koi/models/pond_twin.py` | `DigitalTwin/pond_twin.py` | Aggregate holding all three engines per user |
 | `koi/models/forecast_utils.py` | `DigitalTwin/forecast_utils.py` | NEA payload parsing |
-| `koi/storage/client.py` | two separate `create_client` calls | The one Supabase client, built on first use |
-| `koi/storage/state_store.py` | `DigitalTwin/state_store.py` | All digital twin Supabase I/O |
+| `koi/storage/base.py` | | The `Storage` interface, `StorageError`, `fail_soft` |
+| `koi/storage/supabase_storage.py` | `DigitalTwin/state_store.py`, the camera's own client | `SupabaseStorage`: all Supabase I/O, client built on first use |
+| `koi/storage/memory.py` | the tests' fake store | `MemoryStorage`: in-process tables, seedable from JSON |
 | `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user |
 | `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes |
 | `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll |
 | `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
 
-`koi/models/` does no I/O. Everything that talks to Supabase goes through
-`koi/storage/client.py`.
+`koi/models/` does no I/O. The API, the worker and the camera service each
+hold one `Storage` (chosen by `KOI_STORAGE`) and do all database and file
+I/O through it. Every storage failure raises `StorageError`, which names
+the operation; nothing in `koi/storage` prints or swallows an error. The
+caller decides: the snapshot write, the chemistry log and the pond
+config reads propagate, while the evaporation and algae logs, the rating
+history and the camera's previous-frame read are wrapped in `fail_soft`
+(print, carry on with a default), which is what the old `state_store`
+did for those calls.
 
 ## Settings
 
@@ -34,8 +42,9 @@ name in `.env`. Both services read the same file.
 | Variable | Default | Used by |
 |---|---|---|
 | `KOI_ENV` | `production` | `development` runs the poller inside `python -m koi.api` |
-| `SUPABASE_URL` | none | storage client |
-| `SUPABASE_SERVICEROLE_KEY` | none | storage client (server-side only) |
+| `KOI_STORAGE` | `supabase` | `memory` keeps data in process (empty at start, lost on exit) |
+| `SUPABASE_URL` | none | `SupabaseStorage` |
+| `SUPABASE_SERVICEROLE_KEY` | none | `SupabaseStorage` (server-side only) |
 | `KOI_TIMEZONE` | `Asia/Singapore` | camera daylight slots |
 | `KOI_POLL_INTERVAL_MINUTES` | `15` | poller |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
@@ -161,7 +170,7 @@ Tests live in `Backend/tests/`, mirroring the package.
 | File | Asserts | Covers |
 |---|---|---|
 | `models/test_pond_twin.py` | 61 | state resets, snapshots |
-| `worker/test_poller_integration.py` | 91 | real poller + all endpoints |
+| `worker/test_poller_integration.py` | 97 | real poller + all endpoints, storage failures |
 | `models/test_severity_ratings.py` | 63 | rating assimilation |
 | `models/test_new_engines.py` | 49 | engine physics |
 | `api/test_contract.py` | 25 | Python <-> Dart JSON contract |
@@ -169,15 +178,18 @@ Tests live in `Backend/tests/`, mirroring the package.
 | `models/test_algae_history_cache.py` | 7 | algae history cache |
 | `models/test_daily_retention.py` | 9 | daily snapshot retention |
 | `storage/test_schema.py` | | code against `supabase/migrations/` |
+| `storage/test_memory_storage.py` | | `MemoryStorage` behaves like the tables |
+| `storage/test_supabase_storage.py` | | `SupabaseStorage` queries and error wrapping, fake client |
 | `api/test_app_factory.py` | | app factory, CORS, entry points, poller gating |
-| `camera/test_camera_app.py` | | camera upload pipeline against a fake client |
+| `camera/test_camera_app.py` | | camera upload pipeline against `MemoryStorage` |
 | `test_settings.py` | | settings defaults, variable names, validation |
 
 The run ends with an "N assertions passed" line from `conftest.py`.
 All run offline: `conftest.py` stubs supabase and apscheduler before any
 test module is imported, builds `Settings` with `_env_file=None` so a real
-`Backend/.env` is never read, and its `fake_store` fixture replaces every
-`state_store` call with an in-memory store. The poller integration tests
+`Backend/.env` is never read, and runs the services on `MemoryStorage`
+seeded from `tests/fixtures/pond_455.json` (passed to `create_app`, not
+patched in). The poller integration tests
 walk one pond through a sequence of events and must run in file order,
 which is pytest's default. `test_contract.py` reads
 `MobileUI/mobile_app/lib/utils/digital_twin_api.dart` relative to its own

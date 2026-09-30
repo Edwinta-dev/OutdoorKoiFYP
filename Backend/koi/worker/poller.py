@@ -41,9 +41,9 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
 from koi.models.engine import PondConfig, RawSample, WaterChemistryEngine
-from koi.registry import registry
+from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
-from koi.storage import state_store
+from koi.storage import fail_soft
 
 # How far ahead each cycle projects when writing the cached "days until
 # next intervention" figures into the evaluation rows. Kept modest - the
@@ -51,18 +51,19 @@ from koi.storage import state_store
 CACHED_HORIZON_DAYS = 21
 
 
-def _poll_once():
-    configs = state_store.fetch_active_pond_configs()
+def _poll_once(registry: EngineRegistry):
+    configs = registry.storage.fetch_active_pond_configs()
     for row in configs:
         user_id = row["user_id"]
         try:
-            _poll_user(user_id, row)
+            _poll_user(registry, user_id, row)
         except Exception as exc:  # noqa: BLE001 - one user's failure must not kill the poll loop
             print(f"[poller] user {user_id} failed: {exc}")
 
 
-def _poll_user(user_id: int, config_row: dict):
-    payload = state_store.fetch_dashboard_payload(user_id)
+def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
+    storage = registry.storage
+    payload = storage.fetch_dashboard_payload(user_id)
     if not payload or "raw_sensor" not in payload:
         print(f"[poller] user {user_id}: no payload / missing raw_sensor, skipping")
         return
@@ -131,7 +132,7 @@ def _poll_user(user_id: int, config_row: dict):
     camera_samples = []
     try:
         camera_samples = ae.parse_image_rows(
-            state_store.fetch_image_history(user_id, limit=50)
+            storage.fetch_image_history(user_id, limit=50)
         )
     except Exception as exc:  # noqa: BLE001 - camera is optional
         print(f"[poller] user {user_id}: camera history unavailable ({exc})")
@@ -140,7 +141,7 @@ def _poll_user(user_id: int, config_row: dict):
     # Needs the twin, so it is resolved inside the locked section below.
     feeding_rows = []
     try:
-        feeding_rows = state_store.fetch_recent_feeding_events(user_id, limit=30)
+        feeding_rows = storage.fetch_recent_feeding_events(user_id, limit=30)
     except Exception as exc:  # noqa: BLE001
         print(f"[poller] user {user_id}: feeding history unavailable ({exc})")
     avg_tan = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
@@ -222,13 +223,15 @@ def _poll_user(user_id: int, config_row: dict):
         user_id, cycle, default_config=pond_config
     )
 
-    # --- push evaluations (outside the lock: Supabase I/O is slow and
-    #     the twin is already durably snapshotted by with_twin) ---
-    state_store.push_evaluation(user_id, chem.to_dict())
+    # --- push evaluations (outside the lock: storage I/O is slow and
+    #     the twin is already durably snapshotted by with_twin). The
+    #     evaporation and algae logs are optional: a failed write loses
+    #     one cached row, and the forecasts compute from the snapshot. ---
+    storage.push_evaluation(user_id, chem.to_dict())
     if evap is not None:
-        state_store.push_evaporation_evaluation(user_id, evap.to_dict())
+        fail_soft(lambda: storage.push_evaporation_evaluation(user_id, evap.to_dict()), None)
     if algae is not None:
-        state_store.push_algae_evaluation(user_id, algae.to_dict())
+        fail_soft(lambda: storage.push_algae_evaluation(user_id, algae.to_dict()), None)
 
     frames = outcome.get("assimilated_camera_frames", 0)
     print(
@@ -290,8 +293,8 @@ def _algae_forecast_env(forecast_days, baseline_lux, baseline_temp, no3_series, 
     return env
 
 
-def start(settings: Optional[Settings] = None, blocking: bool = False):
-    """Schedules _poll_once every poll_interval_minutes, first run now.
+def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool = False):
+    """Schedules _poll_once(registry) every poll_interval_minutes, first run now.
     blocking=True runs the scheduler in the calling thread (the worker
     process); otherwise it runs on a background thread and this returns
     the scheduler."""
@@ -302,7 +305,8 @@ def start(settings: Optional[Settings] = None, blocking: bool = False):
         from apscheduler.schedulers.background import BackgroundScheduler as Scheduler
     scheduler = Scheduler()
     scheduler.add_job(
-        _poll_once, "interval", minutes=settings.poll_interval_minutes, next_run_time=datetime.now()
+        _poll_once, "interval", args=[registry], minutes=settings.poll_interval_minutes,
+        next_run_time=datetime.now(),
     )
     scheduler.start()
     return scheduler

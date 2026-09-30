@@ -12,6 +12,8 @@ drifting from whatever the forecast endpoint ends up doing.
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 # Rough cloud-cover discount applied to the historical average lux
 # baseline on a forecast day, keyed off the NEA outlook's forecast code.
 # NEA doesn't forecast light directly, so this is a coarse estimate, not
@@ -176,3 +178,46 @@ def daily_forecasts_from_outlook(outlook_4day: list[dict]) -> dict:
         "lux_multiplier": [d["lux_multiplier"] for d in days],
         "rain": [(d["rain_incoming"], d["rain_category"]) for d in days],
     }
+
+def slope_per_day(rows: list[dict], value_key: str = "avg_value") -> float | None:
+    """Least-squares slope in units-per-day over a daily series from
+    Storage.fetch_daily_sensor_series. Returns None with fewer than 3
+    points or less than one day of span.
+
+    Uses real elapsed days from record_date rather than assuming the rows
+    are contiguous - daily_sensor_averages will have gaps whenever the
+    sensor was offline, and treating a gap as one day would inflate the
+    slope.
+    """
+    points = []
+    for r in rows:
+        v = r.get(value_key)
+        d = r.get("record_date")
+        if v is None or d is None:
+            continue
+        if isinstance(d, datetime):
+            dt = d
+        else:
+            try:
+                dt = datetime.fromisoformat(str(d).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+        points.append((dt, float(v)))
+
+    if len(points) < 3:
+        return None
+
+    points.sort(key=lambda p: p[0])
+    t0 = points[0][0]
+    xs = [(p[0] - t0).total_seconds() / 86400.0 for p in points]
+    ys = [p[1] for p in points]
+
+    if xs[-1] - xs[0] < 1.0:
+        return None
+
+    n = len(xs)
+    x_mean = sum(xs) / n
+    y_mean = sum(ys) / n
+    num = sum((xs[i] - x_mean) * (ys[i] - y_mean) for i in range(n))
+    den = sum((xs[i] - x_mean) ** 2 for i in range(n))
+    return None if den == 0 else num / den

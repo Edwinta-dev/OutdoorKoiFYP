@@ -3,16 +3,17 @@ from __future__ import annotations
 
 from typing import Optional
 
+from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
-from koi.storage import client
+from koi.storage import Storage, build_storage
 from koi.worker import poller
 
 
-def main(settings: Optional[Settings] = None) -> None:
+def main(settings: Optional[Settings] = None, storage: Optional[Storage] = None) -> None:
     settings = settings or get_settings()
-    client.configure(settings)
-    print(f"[worker] polling every {settings.poll_interval_minutes} min ({settings.env})")
-    poller.start(settings, blocking=True)
+    storage = storage if storage is not None else build_storage(settings)
+    print(f"[worker] polling every {settings.poll_interval_minutes} min ({settings.env}, {settings.storage} storage)")
+    poller.start(settings, EngineRegistry(storage), blocking=True)
 
 
 if __name__ == "__main__":

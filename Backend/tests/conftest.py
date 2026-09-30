@@ -1,16 +1,17 @@
 """Shared pytest setup for the backend tests.
 
-The Supabase client is built on first use (koi.storage.client), and
-supabase and apscheduler are replaced with inert stubs here before any
-test module is imported, so no test can reach the live database or start
-a real scheduler. The in-memory FakeStore stands in for every state_store
-function the server calls. Settings are built with _env_file=None so a
-developer's real Backend/.env is never read.
+Tests run the services against koi.storage.MemoryStorage, seeded from
+the JSON files in tests/fixtures. supabase and apscheduler are also
+replaced with inert stubs before any test module is imported, so no test
+can reach the live database or start a real scheduler. Settings are built
+with _env_file=None so a developer's real Backend/.env is never read.
 """
+import itertools
 import json
 import sys
 import types
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -49,185 +50,63 @@ def pytest_terminal_summary(terminalreporter):
 
 
 # ---------------------------------------------------------------------
-# In-memory Supabase replacement.
+# In-memory storage seeded from a recorded pond.
 # ---------------------------------------------------------------------
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+POND_FIXTURE = FIXTURES / "pond_455.json"
 USER = 455
 
-DASHBOARD_PAYLOAD = {
-    "raw_sensor": {"pH": 7.64, "TDS": 220, "temp": 29.2, "LUX": 22755},
-    "nea_telemetry": {"air_temp": {"value": 30.8}, "rainfall": {"value": 0},
-                      "wind_speed": {"value": 6.9}},
-    "nea_forecasts": {
-        "forecast_2hr": {"forecast": "Fair (Day)"},
-        "forecast_24hr": {"general": {"relativeHumidity": {"low": 60, "high": 90},
-                                      "temperature": {"low": 26, "high": 33}}},
-        "outlook_4day": [
-            {"data": {"day": "Wednesday", "wind": {"speed": {"low": 10, "high": 20}},
-                      "forecast": {"code": "FA", "text": "Fair (Day)"},
-                      "temperature": {"low": 27, "high": 34},
-                      "relativeHumidity": {"low": 55, "high": 85}}},
-            {"data": {"day": "Thursday", "wind": {"speed": {"low": 10, "high": 20}},
-                      "forecast": {"code": "FA", "text": "Fair (Day)"},
-                      "temperature": {"low": 27, "high": 34},
-                      "relativeHumidity": {"low": 55, "high": 85}}},
-        ],
-    },
+# The get_bundled_dashboard_payload result the fixture pond returns.
+DASHBOARD_PAYLOAD = json.loads(POND_FIXTURE.read_text(encoding="utf-8"))["dashboard_payloads"][str(USER)]
+
+# A complete algae assessment dict (AlgaeAssessment.to_dict() shape).
+ALGAE_ASSESSMENT = {
+    "status": "Green", "category": "clear", "green_ratio": 0.03, "watch_threshold": 0.06,
+    "action_threshold": 0.12, "threshold_mode": "relative", "growth_rate_per_day": 0.1,
+    "intrinsic_rate_per_day": 0.2, "rate_source": "fitted_from_camera", "confidence": "medium",
+    "sample_count": 6, "days_to_scrub": 9, "advisory": "No scrub needed.", "scrub_now": False,
+    "label_count": 3,  # in the API response, but no column in pond_algae_evaluations
 }
 
-# Every state_store function the poller and the API routes call.
-STORE_FUNCTIONS = [
-    "load_engine_snapshot", "save_engine_snapshot", "push_evaluation",
-    "push_evaporation_evaluation", "push_algae_evaluation",
-    "fetch_latest_evaluation", "fetch_latest_evaporation_evaluation",
-    "fetch_latest_algae_evaluation", "fetch_pond_config",
-    "fetch_active_pond_configs", "fetch_dashboard_payload",
-    "fetch_image_history", "fetch_recent_feeding_events",
-    "fetch_daily_sensor_stats", "fetch_daily_sensor_series",
-    "slope_per_day", "fetch_last_intervention_time",
-    "insert_algae_rating", "fetch_algae_ratings", "delete_algae_rating",
-    "fetch_image_by_id",
-]
+
+def ticking_clock(start=datetime(2026, 8, 20, tzinfo=timezone.utc)):
+    """A clock that moves one second per reading, so every stored
+    timestamp is distinct and a run is repeatable."""
+    ticks = itertools.count()
+    return lambda: start + timedelta(seconds=next(ticks))
 
 
-class FakeStore:
-    def __init__(self, user_id=USER, payload=DASHBOARD_PAYLOAD):
-        self.user_id = user_id
-        self.payload = payload
-        self.snapshots = {}
-        self.chem_evals = []
-        self.evap_evals = []
-        self.algae_evals = []
-        self.camera_rows = []
-        self.feeding_rows = []
-        self.ratings = []
-        self._rating_seq = 0
+def make_storage():
+    """A MemoryStorage holding the fixture pond: UserData, 10 days of
+    daily temp, LUX and TDS averages, and the dashboard payload."""
+    from koi.storage import MemoryStorage
 
-    # --- snapshot persistence ---
-    def load_engine_snapshot(self, user_id):
-        raw = self.snapshots.get(user_id)
-        # Round-trip through JSON exactly like Supabase JSONB would, so a
-        # non-serialisable field fails here rather than in production.
-        return json.loads(raw) if raw else None
-
-    def save_engine_snapshot(self, user_id, snapshot):
-        self.snapshots[user_id] = json.dumps(snapshot)
-
-    # --- evaluation pushes ---
-    def push_evaluation(self, user_id, d):
-        self.chem_evals.append(d)
-
-    def push_evaporation_evaluation(self, user_id, d):
-        self.evap_evals.append(d)
-
-    def push_algae_evaluation(self, user_id, d):
-        self.algae_evals.append(d)
-
-    def fetch_latest_evaluation(self, user_id):
-        return self.chem_evals[-1] if self.chem_evals else None
-
-    def fetch_latest_evaporation_evaluation(self, user_id):
-        return self.evap_evals[-1] if self.evap_evals else None
-
-    def fetch_latest_algae_evaluation(self, user_id):
-        return self.algae_evals[-1] if self.algae_evals else None
-
-    # --- config ---
-    def fetch_pond_config(self, user_id):
-        return {"volume_litres": 5000.0, "estimated_biomass_grams": 8000.0}
-
-    def fetch_active_pond_configs(self):
-        return [{"user_id": self.user_id, "volume_litres": 5000.0,
-                 "estimated_biomass_grams": 8000.0}]
-
-    # --- telemetry / history ---
-    def fetch_dashboard_payload(self, user_id):
-        return self.payload
-
-    def fetch_image_history(self, user_id, limit=200):
-        return self.camera_rows[-limit:][::-1]  # newest first, as Supabase returns
-
-    def fetch_recent_feeding_events(self, user_id, limit=30):
-        return self.feeding_rows[:limit]
-
-    def fetch_daily_sensor_stats(self, user_id, sensor_type, days=14):
-        return {"avg": {"temp": 29.0, "TDS": 220.0, "LUX": 18000.0}.get(sensor_type, 20.0),
-                "min": None, "max": None, "sample_days": 10}
-
-    def fetch_daily_sensor_series(self, user_id, sensor_type, days=30):
-        base = datetime(2026, 8, 1, tzinfo=timezone.utc)
-        return [{"avg_value": 220.0 + i * 0.7, "min_value": None, "max_value": None,
-                 "record_date": (base + timedelta(days=i)).isoformat()}
-                for i in range(10)]
-
-    def slope_per_day(self, rows, value_key="avg_value"):
-        return 0.7
-
-    def fetch_last_intervention_time(self, user_id, event_type):
-        return None
-
-    # --- algae severity ratings ---
-    def insert_algae_rating(self, user_id, severity, is_obstructed, image_id,
-                            image_url, green_ratio_at_rating,
-                            image_captured_at=None, notes=None):
-        self._rating_seq += 1
-        row = {
-            "id": self._rating_seq, "userid": user_id, "image_id": image_id,
-            "image_url": image_url, "severity": severity,
-            "is_obstructed": is_obstructed,
-            "green_ratio_at_rating": green_ratio_at_rating,
-            "image_captured_at": image_captured_at,
-            "rated_at": datetime.now(timezone.utc).isoformat(), "notes": notes,
-        }
-        self.ratings.append(row)
-        return row
-
-    def fetch_algae_ratings(self, user_id, limit=200):
-        return self.ratings[-limit:]
-
-    def delete_algae_rating(self, user_id, rating_id):
-        self.ratings = [r for r in self.ratings if r["id"] != rating_id]
-        return True
-
-    def fetch_image_by_id(self, user_id, image_id):
-        for r in self.camera_rows:
-            if r.get("id") == image_id:
-                return r
-        return None
+    return MemoryStorage.from_json(POND_FIXTURE, clock=ticking_clock())
 
 
-@pytest.fixture(scope="module")
-def fake_store():
-    """A FakeStore patched over every state_store function for one test
-    module. Module-scoped so a module's tests can walk one pond through a
-    sequence of polls and events; the patch and the engine registry are
-    both reset when the module finishes."""
-    from koi.registry import registry
-    from koi.storage import state_store
-
-    fake = FakeStore()
-    with pytest.MonkeyPatch.context() as mp:
-        for fn in STORE_FUNCTIONS:
-            mp.setattr(state_store, fn, getattr(fake, fn))
-        registry.evict(fake.user_id)
-        yield fake
-        registry.evict(fake.user_id)
+@pytest.fixture
+def storage():
+    return make_storage()
 
 
 def make_settings(**overrides):
     """Settings that ignore Backend/.env and the process environment's
-    Supabase credentials."""
+    Supabase credentials, with in-memory storage."""
     from koi.settings import Settings
 
-    values = {"env": "test", "supabase_url": "", "supabase_servicerole_key": ""}
+    values = {"env": "test", "storage": "memory", "supabase_url": "", "supabase_servicerole_key": ""}
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
 
 @pytest.fixture(scope="module")
-def flask_client(fake_store):
-    """Flask test client for the digital twin API, backed by the fake store."""
+def pond_app():
+    """The digital twin API over a fixture-pond MemoryStorage, shared by
+    one test module so its tests can walk one pond through a sequence of
+    polls and events. The app's storage and registry are in
+    app.extensions["koi_storage"] and app.extensions["koi_registry"]."""
     from koi.api import create_app
 
-    app = create_app(make_settings())
+    app = create_app(make_settings(), storage=make_storage())
     app.config["TESTING"] = True
-    return app.test_client()
+    return app

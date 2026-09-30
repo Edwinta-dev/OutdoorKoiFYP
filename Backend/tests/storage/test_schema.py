@@ -490,7 +490,7 @@ def test_schema_scan_finds_every_client(refs):
     """Guards against the scanner silently finding nothing: each client
     that talks to Supabase must contribute references."""
     sources = {r.where.split(":")[0] for r in refs}
-    for expected in ["Backend/koi/storage/state_store.py", "Backend/koi/camera/camera.py",
+    for expected in ["Backend/koi/storage/supabase_storage.py",
                      "Embedded/sensor_node/sensor_node.ino",
                      "MobileUI/mobile_app/lib/widgets/modals/quick_log_modals.dart",
                      "MobileUI/mobile_app/lib/screens/onboarding_screen.dart",

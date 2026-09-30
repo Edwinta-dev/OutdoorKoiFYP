@@ -20,7 +20,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from koi.camera import hsvEngine, imageSchedule
 from koi.settings import Settings
-from koi.storage.client import get_client
+from koi.storage import Storage, StorageError, fail_soft
 
 # NEW: sleep time returned whenever something fails, so the ESP32 never loops fast
 FALLBACK_SLEEP_SEC = 7200
@@ -31,6 +31,10 @@ bp = Blueprint("camera", __name__)
 
 def _settings() -> Settings:
     return current_app.config["KOI_SETTINGS"]
+
+
+def _storage() -> Storage:
+    return current_app.extensions["koi_storage"]
 
 
 def error_reply(message: str, code: int):
@@ -49,42 +53,20 @@ def get_prev_image_data(user_id: str):
     itself. The raw ratio is still returned as a fallback for the very
     first reading, when no pair exists yet.
     """
-    try:
-        response = (
-            get_client().table("imageTable")
-            .select("green_ratio, current_state")
-            .eq("user_ID", user_id)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+    rows: list[dict] = fail_soft(lambda: _storage().fetch_image_history(user_id, limit=1), [])
+    if rows:
+        latest = rows[0]
+        prev_green_ratio = latest.get("green_ratio", 0.15)
+        prev_state = latest.get("current_state", hsvEngine.DEFAULT_STATE)
+        return prev_green_ratio, prev_state
 
-        if response.data and len(response.data) > 0:
-            latest = response.data[0]
-            prev_green_ratio = latest.get("green_ratio", 0.15)
-            prev_state = latest.get("current_state", hsvEngine.DEFAULT_STATE)
-            return prev_green_ratio, prev_state
-
-        print("First reading or no previous data found. Defaulting baselines.")
-        return 0.15, hsvEngine.DEFAULT_STATE
-
-    except Exception as e:
-        print(f"[SUPABASE ERROR] get_prev_image_data failed: {str(e)}")
-        return 0.15, hsvEngine.DEFAULT_STATE
+    print("First reading or no previous data found. Defaulting baselines.")
+    return 0.15, hsvEngine.DEFAULT_STATE
 
 
 # Helper Function: Insert Current Reading Record
 def push_current_data(green_ratio: float, user_id: str, state, public_url: str):
-    try:
-        get_client().table("imageTable").insert({
-            "user_ID": user_id,
-            "green_ratio": green_ratio,
-            "current_state": state,
-            "imageURL": public_url
-        }).execute()
-        print("[DATABASE SUCCESS] Current data inserted successfully.")
-    except Exception as e:
-        print(f"[SUPABASE ERROR] push_current_data failed: {str(e)}")
+    fail_soft(lambda: _storage().insert_image(user_id, green_ratio, state, public_url), None)
 
 
 @bp.route('/', methods=['GET'])
@@ -130,27 +112,15 @@ def upload_image():
     print(f"Next scheduled sleep: {time_to_next_image} seconds")
 
     try:
-        # 5. Upload image to Supabase Storage
+        # 5. Upload the frame to the configured bucket.
         # Object path is "{user_id}/{unix_seconds}_photo.jpg" - the same
         # id the app onboards with, so the client can resolve a user's
         # frames without any help from this service.
         filename = f"{user_id}/{int(time.time())}_photo.jpg"
-        bucket_name = settings.pond_image_bucket
-        supabase = get_client()
-
-        supabase.storage.from_(bucket_name).upload(
-            path=filename,
-            file=file_bytes,
-            file_options={"content-type": "image/jpeg", "upsert": "true"}
-        )
-
-        public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
-        # supabase-py has historically appended a bare "?" here, which
-        # makes cache keys inconsistent downstream. Strip it at the source.
-        public_url = public_url.rstrip("?&")
+        public_url = _storage().upload_image(settings.pond_image_bucket, filename, file_bytes)
         print(f"Storage Upload Complete: {public_url}")
 
-        # 6. Save telemetry metrics to Supabase Table
+        # 6. Save the reading to imageTable
         push_current_data(green_ratio, user_id, state, public_url)
 
         # 7. Return payload to ESP32
@@ -160,7 +130,7 @@ def upload_image():
             "sleep_sec": time_to_next_image
         }), 200
 
-    except Exception as e:
+    except StorageError as e:
         # The analysis succeeded, so the computed schedule is still valid
         print(f"[PIPELINE ERROR] Upload pipeline failed: {str(e)}")
         return jsonify({
