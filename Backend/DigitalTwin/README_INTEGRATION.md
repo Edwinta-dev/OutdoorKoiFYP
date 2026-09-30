@@ -79,19 +79,30 @@ the app can refresh every card from one response.
 
 ## Tests
 
-Run from `Backend/DigitalTwin/`:
+Run from `Backend/` (settings in `Backend/pytest.ini`):
 
 ```
-python3 test_pond_twin.py            # 61 checks - state resets, snapshots
-python3 test_poller_integration.py   # 83 checks - real poller + all endpoints
-python3 test_severity_ratings.py     # 63 checks - rating assimilation
-python3 test_new_engines.py          # 49 checks - engine physics
-python3 test_contract.py             # 25 checks - Python <-> Dart JSON contract
-python3 test_projection.py           # chemistry lookahead
-python3 test_algae_history_cache.py  # algae history cache
-python3 test_daily_retention.py      # daily snapshot retention
+python -m pytest -q                                    # whole suite
+python -m pytest -q DigitalTwin/test_pond_twin.py      # one file
 ```
-All run offline with Supabase stubbed. `test_contract.py` reads
+
+| File | Asserts | Covers |
+|---|---|---|
+| `test_pond_twin.py` | 61 | state resets, snapshots |
+| `test_poller_integration.py` | 91 | real poller + all endpoints |
+| `test_severity_ratings.py` | 63 | rating assimilation |
+| `test_new_engines.py` | 49 | engine physics |
+| `test_contract.py` | 25 | Python <-> Dart JSON contract |
+| `test_projection.py` | 29 | chemistry lookahead scenarios |
+| `test_algae_history_cache.py` | 7 | algae history cache |
+| `test_daily_retention.py` | 9 | daily snapshot retention |
+
+The run ends with an "N assertions passed" line from `conftest.py`.
+All run offline: `conftest.py` stubs supabase, dotenv and apscheduler
+before any server module is imported, and its `fake_store` fixture
+replaces every `state_store` call with an in-memory store. The poller
+integration tests walk one pond through a sequence of events and must run
+in file order, which is pytest's default. `test_contract.py` reads
 `MobileUI/mobile_app/lib/utils/digital_twin_api.dart` relative to its own
 location, so it works from any working directory.
 
