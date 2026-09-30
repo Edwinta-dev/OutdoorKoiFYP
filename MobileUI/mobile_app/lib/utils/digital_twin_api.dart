@@ -11,7 +11,7 @@
 // necessary - see engine.py's project_forward().
 //
 // Same LAN-IP-on-a-dev-machine convention as the ESP32-CAM's flask_server
-// constant (Embedded/CameraTest/Camera_Arduino_Sketch/CameraMain.ino) -
+// constant (archive/pre-refactor/Embedded/CameraTest/Camera_Arduino_Sketch/CameraMain.ino) -
 // override at build time with --dart-define=DIGITAL_TWIN_BASE_URL=... if
 // the Flask host changes.
 

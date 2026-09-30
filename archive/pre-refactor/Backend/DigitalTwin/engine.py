@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Callable, Optional
 
@@ -361,26 +361,6 @@ class WaterChemistryEngine:
     RISK_HIGH_THRESHOLD = 6
     NITRITE_OVERRIDE_PPM = 0.5
 
-    # ROUND 2 FIX: _daily previously had no retention cap at all - unlike
-    # EvaporationFeedEngine._recent_env (capped 200) and
-    # AlgaeGrowthEngine._camera_history/_ratings (capped 300/200), it grew
-    # one entry per calendar day for the pond's ENTIRE lifetime, each
-    # holding raw per-sample lists (trusted_ph/trusted_lux/trusted_tds -
-    # up to ~96 appends/day at the poller's 15-minute cadence). Three
-    # compounding costs, all growing without bound as a pond ages:
-    #   1. assess() calls sorted(self._daily.values()) on every single call
-    #      (every 15-minute poll, per user) - O(n log n) over ALL history.
-    #   2. _slope() (the reactivity/TDS trend) averaged over every day ever
-    #      recorded, not a recent window - months-old readings got equal
-    #      weight to yesterday's, which is arguably wrong as well as slow.
-    #   3. to_snapshot() serializes the whole dict and save_engine_snapshot
-    #      does a full-row Supabase upsert - EVERY mutation (every poll
-    #      tick, every logged event) rewrote an ever-growing JSON blob.
-    # 30 days matches the retention window _events already uses just below,
-    # and turns "trend" into an actually-recent trend rather than an
-    # all-time one.
-    DAILY_RETENTION_DAYS = 30
-
     def __init__(self, config: PondConfig):
         self.config = config
         self._events: list[PondEvent] = []
@@ -402,25 +382,6 @@ class WaterChemistryEngine:
             for e in self._events
         )
 
-    def _prune_daily(self, reference_time: datetime) -> None:
-        """Drops DailyAggregate entries older than DAILY_RETENTION_DAYS
-        relative to reference_time. See the DAILY_RETENTION_DAYS comment
-        above for why this exists.
-
-        Compares DailyAggregate.day (a real datetime) rather than the
-        dict's string keys - _day_key()'s "{year}-{month}-{day}" format is
-        NOT zero-padded, so as a string "2026-10-5" sorts BEFORE
-        "2026-9-1" (character-by-character, '1' < '9') even though October
-        is later than September. String comparison here would silently
-        prune the wrong entries around any month/day >= 10 boundary.
-        """
-        # Strictly-greater-than: reference_time counts as "day 0 ago", so a
-        # window of DAILY_RETENTION_DAYS should retain exactly that many
-        # distinct day-buckets (reference_time's own day plus the N-1 before
-        # it), not N+1 from an inclusive boundary at the far edge.
-        cutoff = reference_time - timedelta(days=self.DAILY_RETENTION_DAYS)
-        self._daily = {k: v for k, v in self._daily.items() if v.day > cutoff}
-
     # --------------------------------------------------------
     # Event ingestion
     # --------------------------------------------------------
@@ -430,7 +391,6 @@ class WaterChemistryEngine:
         # and future analytics need recent history, not an unbounded log.
         cutoff = event.time - timedelta(days=30)
         self._events = [e for e in self._events if e.time >= cutoff]
-        self._prune_daily(event.time)
 
         day = self._daily.setdefault(_day_key(event.time), DailyAggregate(event.time))
 
@@ -482,7 +442,6 @@ class WaterChemistryEngine:
                     gated.lux.value if gated.lux.is_trusted else None,
                 )
         self._last_ingest_time = raw.time
-        self._prune_daily(raw.time)
 
         day = self._daily.setdefault(_day_key(raw.time), DailyAggregate(raw.time))
         if gated.ph.is_trusted and gated.lux.is_trusted:
@@ -933,10 +892,6 @@ class WaterChemistryEngine:
         engine = cls(config)
         engine._events = [PondEvent.from_dict(e) for e in snapshot.get("events", [])]
         engine._daily = {k: DailyAggregate.from_dict(v) for k, v in snapshot.get("daily", {}).items()}
-        # Self-heal any snapshot written before DAILY_RETENTION_DAYS existed -
-        # an old unbounded _daily dict shrinks to the rolling window on the
-        # very next load, with no migration needed.
-        engine._prune_daily(datetime.now(timezone.utc))
         engine._tan_mg = snapshot.get("tan_mg", 0.0)
         engine._no2_mg = snapshot.get("no2_mg", 0.0)
         engine._no3_mg = snapshot.get("no3_mg", 0.0)

@@ -1,17 +1,18 @@
 # DigitalTwin — three-domain integration
 
 This service now models all three pond outcome domains, not just water
-chemistry. Drop these files into `Backend/DigitalTwin/`.
+chemistry. The code lives in `Backend/DigitalTwin/`; the Flutter client it
+serves is `MobileUI/mobile_app/`. The version replaced by this one is kept in
+`archive/pre-refactor/Backend/DigitalTwin/`.
 
 ## New / changed files
 
 | File | Status | Notes |
 |---|---|---|
 | `pond_twin.py` | **NEW** | Aggregate holding all three engines per user |
-| `algae_severity_rating_card.dart` | **NEW** | Camera frame + human rating control (Flutter) |
+| `MobileUI/mobile_app/lib/widgets/detail_graph/algae_severity_rating_card.dart` | **NEW** | Camera frame + human rating control (Flutter) |
 | `evaporation_engine.py` | **NEW** | Now stateful (was a stateless projector) |
 | `algae_engine.py` | **NEW** | Now stateful, with camera assimilation |
-| `schema_additions.sql` | **NEW** | Two evaluation tables + indexes |
 | `registry.py` | changed | Holds `PondTwin` instead of a bare chemistry engine |
 | `poller.py` | changed | Advances all three engines per tick |
 | `app.py` | changed | Events fan out; new cached assessment endpoints |
@@ -21,11 +22,11 @@ chemistry. Drop these files into `Backend/DigitalTwin/`.
 
 ## Deploy order
 
-1. Copy all files in.
-2. Run `schema_additions.sql` in the Supabase SQL editor. **Optional to do
+1. `pip install -r requirements.txt` in `Backend/DigitalTwin/`.
+2. Create the two evaluation tables in Supabase. **Optional to do
    first** — the evaluation pushes are fail-soft, so the service runs
-   without it; you just lose the cached `/assessment/*` history until it's
-   applied.
+   without them; you just lose the cached `/assessment/*` history until
+   they exist.
 3. Restart the service. Existing `pond_chemistry_state` rows load fine —
    `PondTwin.from_snapshot` detects the legacy bare-chemistry shape and
    wraps it, preserving accumulated nitrogen state.
@@ -78,6 +79,8 @@ the app can refresh every card from one response.
 
 ## Tests
 
+Run from `Backend/DigitalTwin/`:
+
 ```
 python3 test_pond_twin.py            # 61 checks - state resets, snapshots
 python3 test_poller_integration.py   # 83 checks - real poller + all endpoints
@@ -85,14 +88,17 @@ python3 test_severity_ratings.py     # 63 checks - rating assimilation
 python3 test_new_engines.py          # 49 checks - engine physics
 python3 test_contract.py             # 25 checks - Python <-> Dart JSON contract
 python3 test_projection.py           # chemistry lookahead
+python3 test_algae_history_cache.py  # algae history cache
+python3 test_daily_retention.py      # daily snapshot retention
 ```
-All run offline with Supabase stubbed. `test_contract.py` needs
-`digital_twin_api.dart` beside it.
+All run offline with Supabase stubbed. `test_contract.py` reads
+`MobileUI/mobile_app/lib/utils/digital_twin_api.dart` relative to its own
+location, so it works from any working directory.
 
 ## Still open
 
 - **No auth.** Every endpoint trusts a caller-supplied `user_id`.
 - **Single process only.** The registry lock does not span gunicorn workers.
-- **ESP32 `user_id` mismatch.** `CameraMain.ino` hardcodes `15`; pond data
+- **ESP32 `user_id` mismatch.** The camera firmware hardcoded `15`; pond data
   is `455`. Algae stays `no-camera` for 455 until reconciled.
 - Both new models are uncalibrated against ground truth.

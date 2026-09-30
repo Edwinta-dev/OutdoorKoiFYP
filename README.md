@@ -148,12 +148,18 @@ days for the fish in it.**
 ## Repository layout
 
 ```
-Backend/DigitalTwin/     Flask API, three engines, Supabase persistence, tests
-Backend/Camera/          Camera service, HSV analysis, adaptive capture scheduling
-Firmware/                ESP32 sensor node + ESP32-CAM
-App/                     Flutter client
-PythonSimulatorProject/  Historical simulation study and forecast validation
-docs/                    Design notes, experiment protocols, screenshots
+Backend/DigitalTwin/                Flask API, three engines, Supabase persistence, tests
+Backend/Camera/                     Camera service, HSV analysis, adaptive capture scheduling
+Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
+Embedded/sensor_bench/              ESP32 sensor node, serial-only bench build with service mode
+Embedded/camera_node/               ESP32-CAM capture and upload
+Embedded/bench_tests/               Single-purpose pH bench sketches
+Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
+Embedded/tests/                     Host-side tests for koi_sensing
+MobileUI/mobile_app/                Flutter client
+PythonSimulatorProject/             Historical simulation study and forecast validation
+docs/                               Design notes, experiment protocols, screenshots
+archive/pre-refactor/               Superseded code, kept for traceability only
 ```
 
 ## Running it
@@ -171,7 +177,19 @@ python app.py
 **App**
 
 ```bash
-cd App && flutter pub get && flutter run
+cd MobileUI/mobile_app && flutter pub get && flutter run
+```
+
+**Firmware**
+
+Copy or symlink `Embedded/libraries/koi_sensing` into your Arduino
+`libraries/` folder (or pass `--libraries Embedded/libraries` to
+`arduino-cli compile`), then open a sketch folder under `Embedded/`.
+Host-side tests for the shared library:
+
+```bash
+mkdir -p build
+g++ -std=c++17 -I Embedded/libraries/koi_sensing/src Embedded/tests/test_all.cpp -o build/fw_tests && ./build/fw_tests
 ```
 
 **Simulation study**

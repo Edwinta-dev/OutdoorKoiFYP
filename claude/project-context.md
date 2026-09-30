@@ -38,9 +38,10 @@ Interim report submitted 2026-04-13, which stated the project conclusion is
 | Path | What it is | Status |
 |---|---|---|
 | `Backend/DigitalTwin/` | Flask service: 3 stateful per-pond engines (chemistry, evaporation, algae) + orchestrator + poller + Supabase persistence | Mature, well-tested, **huge uncommitted WIP** (see §4) |
-| `Backend/SensorAPI/camera/` | Middle layer between ESP32-CAM and Supabase: receives photo, runs HSV green-ratio analysis, decides next sleep duration | Core pipeline works; adaptive scheduling is **stubbed/disabled** |
-| `Embedded/TempSensor/TempSensor.ino` | ESP32 sketch: temp (DS18B20), pH (E-201C), TDS (Erudent V1.0), pushes to Supabase `SensorData` table every 5s | Temp/TDS/pH wired but uncalibrated; **LUX hardcoded to 35.0**, no sleep |
-| `Embedded/CameraTest/Camera_Arduino_Sketch/CameraMain.ino` | ESP32-CAM sketch: wake → photo → POST → sleep for server-given duration | Works end-to-end but **never identifies which pond/device it is** |
+| `Backend/Camera/` | Middle layer between ESP32-CAM and Supabase: receives photo, runs HSV green-ratio analysis, decides next sleep duration | Core pipeline works; adaptive scheduling is **stubbed/disabled** |
+| `Embedded/sensor_node/`, `Embedded/sensor_bench/` | ESP32 sensor sketches: temp (DS18B20), pH, TDS, lux (TSL2591). `sensor_node` uploads to Supabase and deep-sleeps; `sensor_bench` is serial-only with service mode. Shared maths in `Embedded/libraries/koi_sensing/` with host tests in `Embedded/tests/` | Not yet flashed; replace the archived `TempSensor.ino` (LUX hardcoded to 35.0, no sleep) and `FullSketch.ino` |
+| `Embedded/camera_node/camera_node.ino` | ESP32-CAM sketch: wake → photo → POST → sleep for server-given duration | Works end-to-end but **never identifies which pond/device it is** |
+| `archive/pre-refactor/` | Code superseded by the refactor promotion; `README.md` there maps each old path to its replacement | Read-only |
 | `MobileUI/mobile_app/` | Flutter app: Dashboard / Fish Tips / Settings tabs + Detail Graph screen + log-event modals | Split-brain architecture (see §4) — newer parts are production-grade, older parts are dead/duplicated |
 | `AquariumScraper/` | One-off scraper of a fish-care website → `fish_characteristics*.csv` feeding the Fish Tips screen | Done, low-risk, not revisited |
 | `PythonSimulatorProject/` | Standalone desktop simulator (CustomTkinter) validating the core thesis against **real historical NEA rainfall**, independent of the live hardware/backend | Phase 1 + 1b done and validated; Phase 2 in progress (see §5) |
@@ -144,9 +145,13 @@ first-principles guess — well-reasoned.
   (e.g. malformed `int(body.get("image_id"))` at `app.py:349`), both
   returning indistinguishable 404s to the client.
 
-### 4.2 Backend/SensorAPI/camera + Embedded camera firmware
+### 4.2 Backend/Camera + Embedded camera firmware
 
-- **[CRITICAL] `Backend/SensorAPI/camera/imageSchedule.py:29-52`** — all
+(Audited before the refactor promotion. `CameraMain.ino` is now
+`archive/pre-refactor/Embedded/CameraTest/Camera_Arduino_Sketch/CameraMain.ino`;
+the maintained camera sketch is `Embedded/camera_node/camera_node.ino`.)
+
+- **[CRITICAL] `Backend/Camera/imageSchedule.py:29-52`** — all
   three schedule functions are testing stubs with the real logic
   commented out immediately above the stub `return`: `get_base_schedule_
   sleep_seconds()` computes `sleep_duration` correctly but line 35's
@@ -204,6 +209,9 @@ first-principles guess — well-reasoned.
   live Supabase data — unusually rigorous for an FYP.
 
 ### 4.3 Embedded/TempSensor/TempSensor.ino
+
+(Now `archive/pre-refactor/Embedded/TempSensor/TempSensor.ino`, replaced by
+`Embedded/sensor_node/sensor_node.ino`. Findings below refer to the archived file.)
 
 - **[CRITICAL] Line 103: `float luxValue = 35.0;` — hardcoded "Testing
   value", not real sensor data.** This isn't just a missing feature: it

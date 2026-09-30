@@ -107,17 +107,7 @@ def dart_keys(path: str, class_name: str) -> set:
     return set(re.findall(r"(?:j|json)\['([^']+)'\]", body))
 
 
-# Round 1 fix: this was a bare filename, which only resolved if the CWD
-# happened to be the Dart file's own directory - `pytest` (run from anywhere
-# else) failed collection outright with FileNotFoundError, and `python
-# test_contract.py` from the normal DigitalTwin/ working directory did too.
-# Resolved relative to this file's own location instead, so it works
-# regardless of CWD.
-import os as _os
-API = _os.path.join(
-    _os.path.dirname(_os.path.abspath(__file__)),
-    "..", "..", "MobileUI", "mobile_app", "lib", "utils", "digital_twin_api.dart",
-)
+API = "digital_twin_api.dart"
 
 cases = [
     ("EvaporationDay", evap_payload["trajectory"][0]),

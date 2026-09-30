@@ -159,20 +159,22 @@ def daily_forecasts_from_outlook(outlook_4day: list[dict]) -> dict:
     Each list is in the same order as the outlook entries (typically
     tomorrow .. +4 days), so index 0 corresponds to project_forward's
     day_index 0 (i.e. "1 day from now").
-
-    ROUND 3 FIX: this used to independently re-walk outlook_4day and
-    re-derive temp midpoint / lux multiplier / rain context with its own
-    copy of the logic daily_environment_from_outlook() already has
-    (notably, its temp midpoint calc did NOT go through _midpoint(), so the
-    two could have silently drifted apart if that helper's None-handling
-    ever changed). app.py's /forecast/<user_id> calls both functions on the
-    SAME outlook list for one request - reshaping one's output into the
-    other's shape removes both the duplicate NEA-parsing logic and the
-    second walk over the (admittedly short, 4-entry) list.
     """
-    days = daily_environment_from_outlook(outlook_4day)
-    return {
-        "temp_c": [d["air_temp_c"] for d in days],
-        "lux_multiplier": [d["lux_multiplier"] for d in days],
-        "rain": [(d["rain_incoming"], d["rain_category"]) for d in days],
-    }
+    temps: list[float | None] = []
+    lux_multipliers: list[float] = []
+    rain: list[tuple[bool, str]] = []
+
+    for entry in outlook_4day or []:
+        data = entry.get("data", {}) if isinstance(entry, dict) else {}
+
+        temp = data.get("temperature") or {}
+        low, high = temp.get("low"), temp.get("high")
+        temps.append((low + high) / 2.0 if low is not None and high is not None else None)
+
+        forecast = data.get("forecast") or {}
+        code = (forecast.get("code") or "").upper()
+        lux_multipliers.append(_CLOUD_LUX_MULTIPLIER.get(code, _DEFAULT_LUX_MULTIPLIER))
+
+        rain.append(rain_context_from_text(forecast.get("text") or forecast.get("summary")))
+
+    return {"temp_c": temps, "lux_multiplier": lux_multipliers, "rain": rain}

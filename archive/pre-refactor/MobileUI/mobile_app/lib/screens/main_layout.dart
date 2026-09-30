@@ -101,17 +101,7 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       ),
 
-      // ROUND 2 FIX: was `body: _screens[_currentIndex]`, which swaps in a
-      // whole different widget subtree on every tab switch. Since the
-      // outgoing screen is a different widget type at that tree position,
-      // Flutter disposes its entire State - for DashboardView that means
-      // its 30s poll Timer is cancelled and its cached _dashboardData is
-      // thrown away, then initState() reruns (a fresh network fetch) every
-      // single time the user comes back to the Dashboard tab, no matter how
-      // recently it last polled. IndexedStack keeps all three screens
-      // mounted (just hides the inactive ones), so switching tabs is free
-      // and the Dashboard's poll cadence/cache actually mean something.
-      body: IndexedStack(index: _currentIndex, children: _screens),
+      body: _screens[_currentIndex],
 
       // DOCKED FLOATING ISLAND NAVIGATION BAR
       bottomNavigationBar: SafeArea(

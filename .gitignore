@@ -19,3 +19,6 @@ PythonSimulatorProject/NEAClimateScraper/*.log
 
 # IDE
 .idea/
+
+# Host-side build output (firmware tests)
+/build/

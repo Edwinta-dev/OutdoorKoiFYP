@@ -159,10 +159,6 @@ class PondTwin:
                     recent_lux=algae_env.lux,
                     recent_temp_c=algae_env.temp_c,
                     recent_no3_ppm=algae_env.no3_ppm,
-                    # ROUND 3 FIX: reuse the list ingest_camera_samples() just
-                    # built instead of having refit_growth_rate re-parse the
-                    # whole camera history a second time.
-                    history_samples=self.algae._last_history_samples,
                 )
 
         # --- 2. chemistry ---

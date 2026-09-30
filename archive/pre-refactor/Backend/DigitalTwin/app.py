@@ -680,13 +680,7 @@ def get_algae_forecast(user_id):
         no3_now = no3_series[0] if no3_series else None
 
         if assimilated:
-            # ROUND 3 FIX: reuse the history list ingest_camera_samples()
-            # just built rather than having refit_growth_rate re-parse the
-            # whole camera history a second time for this same request.
-            twin.algae.refit_growth_rate(
-                baseline_lux, baseline_temp, no3_now,
-                history_samples=twin.algae._last_history_samples,
-            )
+            twin.algae.refit_growth_rate(baseline_lux, baseline_temp, no3_now)
 
         env = _algae_env(ctx, baseline_lux, baseline_temp, no3_series, no3_now)
         projection = twin.algae.project_forward(

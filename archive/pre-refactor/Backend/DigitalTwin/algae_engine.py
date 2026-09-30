@@ -12,7 +12,7 @@ TAN/NO2/NO3 that nobody ever measures directly, and the evaporation
 engine computes a physical rate from weather. Algae is different, and
 better - the ESP32-CAM gives an actual measured observable.
 
-Backend/Camera/camera.py already runs an HSV green-pixel-ratio
+Backend/SensorAPI/camera/camera.py already runs an HSV green-pixel-ratio
 analysis on each frame and writes it to `imageTable` (green_ratio, plus a
 `current_state` JSON pair [state, smoothed_green]). That is a real time
 series of how green the pond has actually become.
@@ -483,11 +483,6 @@ class AlgaeGrowthEngine:
         # kept so the growth-rate fit survives a process restart without
         # having to re-query the whole of imageTable.
         self._camera_history: list = []
-        # ROUND 3 FIX: ephemeral cache of the GreenSample list ingest_camera_
-        # samples() last built from _camera_history - not persisted in
-        # to_snapshot() (it's trivially recomputable via _history_as_samples()
-        # and would just be redundant with _camera_history in the JSONB).
-        self._last_history_samples: list = []
         self._thresholds: dict = {
             "watch": ABSOLUTE_WATCH_RATIO,
             "action": ABSOLUTE_ACTION_RATIO,
@@ -548,17 +543,18 @@ class AlgaeGrowthEngine:
 
         self._sample_count += len(clean)
 
-        # ROUND 3 FIX: this used to be its own inline copy of the same
-        # rebuild _history_as_samples() already does elsewhere in this
-        # class - and refit_growth_rate(), called immediately after this by
-        # every caller (see pond_twin.py, app.py's /forecast/algae), had
-        # its OWN second copy, re-parsing the same up-to-300 ISO timestamps
-        # a second time on every camera frame. Build it once here, reuse it
-        # for resolve_thresholds below, and cache it so refit_growth_rate
-        # can reuse it too instead of re-deriving it from scratch.
-        history_samples = self._history_as_samples()
+        # Rebuild GreenSample objects over the whole retained history so
+        # the fit uses everything, not just this batch.
+        history_samples = [
+            GreenSample(
+                time=datetime.fromisoformat(h["t"]),
+                green_ratio=h["v"],
+                smoothed_green=h["v"],
+                state="base",
+            )
+            for h in self._camera_history
+        ]
         self._thresholds = resolve_thresholds(history_samples)
-        self._last_history_samples = history_samples
 
         measured = clean[-1].smoothed_green
         if measured is None:
@@ -582,25 +578,22 @@ class AlgaeGrowthEngine:
         recent_lux: float,
         recent_temp_c: float,
         recent_no3_ppm: Optional[float],
-        history_samples: Optional[list] = None,
     ) -> None:
         """Re-derives the intrinsic growth rate from the retained camera
         history, dividing out the environmental favourability that
         actually prevailed. This is what turns a trend line into a
         forecast: if the fitted window was overcast and the coming days
         are Fair, re-multiplying by the higher forecast favourability
-        captures a swing straight extrapolation would miss.
-
-        history_samples: ROUND 3 FIX - pass the list ingest_camera_samples()
-        just built (self._last_history_samples) to avoid re-parsing the
-        whole camera history a second time; every real caller does have one
-        available, since this is always called right after
-        ingest_camera_samples() (see pond_twin.py, app.py's
-        /forecast/algae). Defaults to deriving it fresh via
-        _history_as_samples() so standalone callers (tests) keep working
-        unchanged."""
-        if history_samples is None:
-            history_samples = self._history_as_samples()
+        captures a swing straight extrapolation would miss."""
+        history_samples = [
+            GreenSample(
+                time=datetime.fromisoformat(h["t"]),
+                green_ratio=h["v"],
+                smoothed_green=h["v"],
+                state="base",
+            )
+            for h in self._camera_history
+        ]
         realised = fit_specific_growth_rate(history_samples)
         recent_fav = favourability(recent_lux, recent_temp_c, recent_no3_ppm)
 

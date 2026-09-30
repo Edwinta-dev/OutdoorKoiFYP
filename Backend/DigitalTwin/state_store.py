@@ -40,7 +40,7 @@ from supabase import create_client, Client
 
 load_dotenv()
 
-# Same env var names as Backend/DataGovAPI/data.py and Backend/SensorAPI/camera/camera.py
+# Same env var names as Backend/Camera/camera.py
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICEROLE_KEY"]
 

@@ -45,7 +45,7 @@ class PondCameraFrame {
 
 class PondCameraStorage {
   /// Must match `POND_IMAGE_BUCKET` in the backend .env (and the default
-  /// in Backend/SensorAPI/camera/camera.py).
+  /// in Backend/Camera/camera.py).
   static const String bucketName = String.fromEnvironment(
     'POND_IMAGE_BUCKET',
     defaultValue: 'imageAnalysisBucket',
