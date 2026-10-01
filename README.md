@@ -165,6 +165,7 @@ Embedded/tests/                     Host-side tests for koi_sensing
 MobileUI/mobile_app/                Flutter client
 supabase/migrations/                Database schema as numbered SQL migrations (see supabase/README.md)
 PythonSimulatorProject/             Historical simulation study and forecast validation
+analysis/tds_viability/             Offline analysis of the TDS bench tests T1 to T4 (report Section 4.4.3.1)
 docs/                               Design notes, experiment protocols, screenshots
 archive/pre-refactor/               Superseded code, kept for traceability only
 ```
