@@ -8,7 +8,7 @@ database and file I/O through it:
     SupabaseStorage  the live Supabase project (koi/storage/supabase_storage.py)
     MemoryStorage    in-process dicts, for tests and offline runs (koi/storage/memory.py)
 
-Every operation raises StorageError when it fails; nothing is printed or
+Every operation raises StorageError when it fails; nothing is logged or
 swallowed inside storage. The caller decides whether a failure is fatal
 (a lost snapshot write) or can be skipped (a missing evaluation log row);
 fail_soft below is the one way to say "skip".
@@ -19,10 +19,15 @@ get_bundled_dashboard_payload assembles in the database.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional, Protocol, TypeVar
 
+from koi.logs import log_event
+
 T = TypeVar("T")
+
+log = logging.getLogger(__name__)
 
 
 class StorageError(Exception):
@@ -46,13 +51,13 @@ class StaleSnapshotError(StorageError):
 
 
 def fail_soft(call: Callable[[], T], default: T) -> T:
-    """Runs call(); on StorageError prints it and returns default. For
-    the reads and writes a caller can do without, such as an evaluation
-    log row or the rating history."""
+    """Runs call(); on StorageError logs a storage_call_failed warning and
+    returns default. For the reads and writes a caller can do without, such
+    as an evaluation log row or the rating history."""
     try:
         return call()
     except StorageError as exc:
-        print(f"[storage] {exc}")
+        log_event(log, "storage_call_failed", level=logging.WARNING, operation=exc.operation, error=str(exc))
         return default
 
 
@@ -85,6 +90,22 @@ class Storage(Protocol):
     def release_lease(self, name: str, holder: str) -> None:
         """Gives the lease up if holder has it, so a standby can take over
         without waiting for it to expire."""
+        ...
+
+    def fetch_lease(self, name: str) -> Optional[dict]:
+        """The lease row {name, holder, expires_at}, expired or not, or None."""
+        ...
+
+    # --- worker status (worker_status) --------------------------------
+    def record_worker_status(self, name: str, status: dict) -> None:
+        """Replaces the named worker's last-cycle report. status has the
+        worker_status columns other than name (migration 0003)."""
+        ...
+
+    def fetch_worker_status(self, name: str) -> Optional[dict]: ...
+
+    def fetch_snapshot_times(self) -> dict[str, str]:
+        """updated_at of every stored engine snapshot, by user id (as text)."""
         ...
 
     # --- evaluation logs ----------------------------------------------

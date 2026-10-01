@@ -40,14 +40,26 @@ def test_health():
 def test_upload_rejects_wrong_device_token_with_a_sleep_time(storage):
     resp = _client(storage, device_token="secret").post("/upload", data=b"x", headers={"X-Device-Token": "nope"})
     assert resp.status_code == 401
-    assert resp.get_json()["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
+    body = resp.get_json()
+    assert body["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
+    assert set(body["error"]) == {"code", "message", "details"}
     assert storage.uploads == {}
 
 
 def test_upload_rejects_empty_body(storage):
     resp = _client(storage).post("/upload", data=b"")
     assert resp.status_code == 400
-    assert resp.get_json()["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
+    body = resp.get_json()
+    assert body["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
+    assert set(body["error"]) == {"code", "message", "details"}
+
+
+def test_camera_http_not_found_uses_envelope_and_sleep_time():
+    resp = _client().get("/route-that-does-not-exist")
+    assert resp.status_code == 404
+    body = resp.get_json()
+    assert set(body["error"]) == {"code", "message", "details"}
+    assert body["sleep_sec"] == camera_routes.FALLBACK_SLEEP_SEC
 
 
 def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(storage):
@@ -85,10 +97,15 @@ def test_failed_upload_still_returns_the_computed_sleep(storage, monkeypatch):
     monkeypatch.setattr(imageSchedule, "sleep_for_state", lambda state, now=None, test_mode=False: 900)
     storage.failing.add("upload_image")
     resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
-    assert resp.status_code == 500
+    assert resp.status_code == 503
     body = resp.get_json()
     assert body["sleep_sec"] == 900
-    assert "upload_image failed" in body["message"]
+    assert body["error"]["code"] == "storage_unavailable"
+    assert "Try again" in body["error"]["message"]
+    assert body["error"]["details"] == {
+        "operation": "upload_image", "retry_after_sec": 30,
+    }
+    assert resp.headers["Retry-After"] == "30"
     assert storage.rows("imageTable") == []
 
 

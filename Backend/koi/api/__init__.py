@@ -5,7 +5,14 @@
 
 The app holds one Storage (from settings.storage unless one is passed in)
 and one EngineRegistry over it, in app.extensions["koi_storage"] and
-app.extensions["koi_registry"].
+app.extensions["koi_registry"]. Every error response uses the envelope
+in koi.errors.
+
+GET /health is liveness only. GET /ready checks storage and the poller
+(koi/api/health.py) and returns 503 when not ready. GET /metrics is
+Prometheus text: request counts and latency by route, and the poller's
+cycle, failure, sensor-age and snapshot-age gauges. Logs are JSON lines
+(koi.logs) at settings.log_level.
 """
 from __future__ import annotations
 
@@ -14,6 +21,9 @@ from typing import Optional
 from flask import Flask
 from flask_cors import CORS
 
+from koi.errors import register_error_handlers
+from koi.logs import configure_logging
+from koi.observability import instrument_app
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import Storage, build_storage
@@ -21,6 +31,7 @@ from koi.storage import Storage, build_storage
 
 def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] = None) -> Flask:
     settings = settings or get_settings()
+    configure_logging(settings, "api")
     storage = storage if storage is not None else build_storage(settings)
     app = Flask(__name__)
     app.config["KOI_SETTINGS"] = settings
@@ -28,9 +39,12 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
     app.extensions["koi_registry"] = EngineRegistry(storage)
     CORS(app, origins=list(settings.cors_origins))
 
+    from koi.api.health import poller_metrics
     from koi.api.routes import bp
 
-    app.register_blueprint(bp)
+    bp.register(app, {})  # what Flask.register_blueprint does
+    register_error_handlers(app)
+    instrument_app(app, "api", extra_metrics=lambda: poller_metrics(storage))
     return app
 
 

@@ -26,11 +26,11 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 `koi/models/` does no I/O. The API, the worker and the camera service each
 hold one `Storage` (chosen by `KOI_STORAGE`) and do all database and file
 I/O through it. Every storage failure raises `StorageError`, which names
-the operation; nothing in `koi/storage` prints or swallows an error. The
+the operation; nothing in `koi/storage` logs or swallows an error. The
 caller decides: the snapshot write, the chemistry log and the pond
 config reads propagate, while the evaporation and algae logs, the rating
 history and the camera's previous-frame read are wrapped in `fail_soft`
-(print, carry on with a default), which is what the old `state_store`
+(log a warning, carry on with a default), which is what the old `state_store`
 did for those calls.
 
 ## Settings
@@ -52,6 +52,7 @@ name in `.env`. Both services read the same file.
 | `POND_IMAGE_BUCKET` | `imageAnalysisBucket` | camera; must match the app's `env/*.json` |
 | `DEVICE_TOKEN` | empty (uploads unauthenticated) | camera; must match `Embedded/camera_node/secrets.h` |
 | `TEST_MODE` | `0` | camera; `1` = short bench-test sleep times |
+| `KOI_LOG_LEVEL` | `INFO` | all three; lowest level written to the JSON log |
 
 The old camera service loaded its `.env` with `override=True`, so the file
 beat the environment. Settings use the usual order instead: the
@@ -191,6 +192,25 @@ Algae severity ratings:
 
 Every `/events/*` response now returns all three domain assessments, so
 the app can refresh every card from one response.
+
+Operations (`koi/api/health.py`, `koi/observability.py`):
+- `GET /health` — liveness only; 200 while the process answers.
+- `GET /ready` — 200 when storage answers and the poller's last successful
+  cycle finished within two poll intervals; otherwise 503 with the error
+  envelope (code `not_ready`). Both report the last success time and age,
+  the ponds that failed or were skipped in the last cycle and the lease
+  holder. The worker writes this report to `worker_status` (migration
+  0003) after every cycle, so it works with the poller in its own process.
+- `GET /metrics` — Prometheus text: request counts and latency by route
+  pattern, last poll cycle duration, per-pond failures, last-success age,
+  newest sensor reading age and snapshot age per pond. The camera service
+  serves its own `/metrics`: uploads by result, analysis time and state
+  transitions.
+
+Logs are one JSON object per line on stderr with `time`, `level`,
+`service`, `pond_id`, `request_id` and `event`. A request's id comes from
+its `X-Request-ID` header (or is generated) and is returned in the
+response's `X-Request-ID`. `print` is not allowed in `koi/` (ruff T20).
 
 ## Tests
 

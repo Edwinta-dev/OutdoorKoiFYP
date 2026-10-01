@@ -19,6 +19,20 @@ two intervals of the active worker stopping. A worker that shuts down
 cleanly releases it at once.
 
 --------------------------------------------------------------------
+THE CYCLE REPORT
+--------------------------------------------------------------------
+After each cycle the active worker writes one worker_status row
+(Storage.record_worker_status, migration 0003): when the cycle ran, how
+long it took, each pond's result ("ok", "skipped" when there was no
+usable sensor reading, "failed" when polling raised), each pond's
+failure count since the worker started and the recorded_at of the
+sensor reading it used. The API's /ready and /metrics read that row,
+because the worker usually runs in another process. last_success_at
+moves forward when a cycle completes and either no pond failed or at
+least one pond was advanced, so one broken pond does not mark the whole
+poller as down; it is listed in the report instead.
+
+--------------------------------------------------------------------
 WHY ALL THREE, NOT JUST CHEMISTRY
 --------------------------------------------------------------------
 Evaporation and algae are both driven by the environment, not just by
@@ -44,13 +58,16 @@ on a small thread pool (Settings.worker_threads, default 4). Each pond
 still goes through registry.with_twin, so one lock per pond and the
 snapshot version check apply exactly as they do to API requests.
 """
+import logging
 import os
 import socket
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
 
+from koi.logs import log_event, pond_context
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
@@ -65,6 +82,18 @@ from koi.storage import StorageError, fail_soft
 CACHED_HORIZON_DAYS = 21
 
 LEASE_NAME = "poller"
+
+log = logging.getLogger(__name__)
+
+
+class PondSkipped(Exception):
+    """The pond has no usable sensor reading this cycle, so it was not
+    advanced. Not a failure of the poller."""
+
+    def __init__(self, reason: str, sensor_recorded_at: Optional[str] = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.sensor_recorded_at = sensor_recorded_at
 
 
 def lease_seconds(settings: Settings) -> int:
@@ -84,20 +113,58 @@ class Worker:
         self.settings = settings
         self.registry = registry
         self.holder = holder or default_holder()
+        self.failures_total: dict[str, int] = {}
+        self.last_success_at: Optional[str] = None
 
     def run_cycle(self) -> bool:
-        """Takes or renews the lease and, if held, polls every active pond.
-        Returns whether this worker polled."""
+        """Takes or renews the lease and, if held, polls every active pond
+        and writes the cycle report. Returns whether this worker polled."""
         storage = self.registry.storage
         try:
             held = storage.take_lease(LEASE_NAME, self.holder, lease_seconds(self.settings))
         except StorageError as exc:
-            print(f"[worker] {self.holder}: could not take the lease, skipping this cycle ({exc})")
+            log_event(log, "lease_unavailable", level=logging.WARNING, holder=self.holder, error=str(exc))
             return False
         if not held:
-            print(f"[worker] {self.holder}: standby, another worker holds the poller lease")
+            log_event(log, "worker_standby", holder=self.holder)
             return False
-        _poll_once(self.registry, self.settings.worker_threads)
+
+        started_at = datetime.now(timezone.utc)
+        clock = time.perf_counter()
+        completed = True
+        try:
+            results = _poll_once(self.registry, self.settings.worker_threads)
+        except Exception as exc:  # noqa: BLE001 - reported below; the next tick tries again
+            log_event(log, "poll_cycle_failed", level=logging.ERROR, exc_info=True, error=str(exc))
+            results, completed = {}, False
+        duration = time.perf_counter() - clock
+        finished_at = datetime.now(timezone.utc)
+
+        counts = {kind: sum(1 for r in results.values() if r["result"] == kind)
+                  for kind in ("ok", "skipped", "failed")}
+        for pond_id, result in results.items():
+            failures = self.failures_total.get(pond_id, 0) + (1 if result["result"] == "failed" else 0)
+            self.failures_total[pond_id] = result["failures_total"] = failures
+        succeeded = completed and (counts["failed"] == 0 or counts["ok"] > 0)
+        if succeeded:
+            self.last_success_at = finished_at.isoformat()
+        elif self.last_success_at is None:
+            # A worker that has not succeeded yet keeps the previous
+            # worker's last success rather than erasing it.
+            previous = fail_soft(lambda: storage.fetch_worker_status(LEASE_NAME), None)
+            self.last_success_at = (previous or {}).get("last_success_at")
+
+        fail_soft(lambda: storage.record_worker_status(LEASE_NAME, {
+            "holder": self.holder,
+            "cycle_started_at": started_at.isoformat(),
+            "cycle_finished_at": finished_at.isoformat(),
+            "cycle_duration_sec": round(duration, 3),
+            "last_success_at": self.last_success_at,
+            "ponds": results,
+        }), None)
+        log_event(log, "poll_cycle_finished", level=logging.INFO if succeeded else logging.WARNING,
+                  holder=self.holder, duration_sec=round(duration, 3), succeeded=succeeded,
+                  ponds_ok=counts["ok"], ponds_skipped=counts["skipped"], ponds_failed=counts["failed"])
         return True
 
     def stop(self) -> None:
@@ -105,30 +172,44 @@ class Worker:
         fail_soft(lambda: self.registry.storage.release_lease(LEASE_NAME, self.holder), None)
 
 
-def _poll_once(registry: EngineRegistry, threads: int = 1):
-    """Polls every active pond, up to `threads` at a time."""
+def _poll_once(registry: EngineRegistry, threads: int = 1) -> dict[str, dict]:
+    """Polls every active pond, up to `threads` at a time. Returns each
+    pond's result by user id (as text): {"result", "reason",
+    "sensor_recorded_at"}. Raises only if the pond list cannot be read."""
     configs = registry.storage.fetch_active_pond_configs()
     with ThreadPoolExecutor(max_workers=threads, thread_name_prefix="poll") as pool:
-        list(pool.map(lambda row: _poll_user_safely(registry, row), configs))
+        return dict(pool.map(lambda row: _poll_user_safely(registry, row), configs))
 
 
-def _poll_user_safely(registry: EngineRegistry, row: dict) -> None:
+def _poll_user_safely(registry: EngineRegistry, row: dict) -> tuple[str, dict]:
     user_id = row["user_id"]
-    try:
-        _poll_user(registry, user_id, row)
-    except Exception as exc:  # noqa: BLE001 - one user's failure must not kill the poll loop
-        print(f"[poller] user {user_id} failed: {exc}")
+    with pond_context(user_id):
+        try:
+            sensor_recorded_at = _poll_user(registry, user_id, row)
+        except PondSkipped as exc:
+            log_event(log, "pond_poll_skipped", level=logging.WARNING, reason=exc.reason)
+            return str(user_id), {"result": "skipped", "reason": exc.reason,
+                                  "sensor_recorded_at": exc.sensor_recorded_at}
+        except Exception as exc:  # noqa: BLE001 - one user's failure must not kill the poll loop
+            log_event(log, "pond_poll_failed", level=logging.ERROR, exc_info=True, error=str(exc))
+            return str(user_id), {"result": "failed", "reason": f"{type(exc).__name__}: {exc}"[:200],
+                                  "sensor_recorded_at": None}
+    return str(user_id), {"result": "ok", "reason": None,
+                          "sensor_recorded_at": sensor_recorded_at if isinstance(sensor_recorded_at, str) else None}
 
 
-def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
+def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict) -> Optional[str]:
+    """Advances one pond. Returns the recorded_at of the sensor reading it
+    used; raises PondSkipped when there is no usable reading."""
     storage = registry.storage
     payload = storage.fetch_dashboard_payload(user_id)
     if not payload or "raw_sensor" not in payload:
-        print(f"[poller] user {user_id}: no payload / missing raw_sensor, skipping")
-        return
+        raise PondSkipped("no sensor reading in the dashboard payload")
 
     now = datetime.now(timezone.utc)
     raw = payload["raw_sensor"]
+    recorded_at = raw.get("recorded_at") if isinstance(raw, dict) else None
+    sensor_recorded_at = str(recorded_at) if recorded_at is not None else None
 
     # --- sensor sample for the chemistry engine -----------------
     try:
@@ -140,8 +221,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
             lux=float(raw["LUX"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        print(f"[poller] user {user_id}: unusable raw_sensor ({exc}), skipping")
-        return
+        raise PondSkipped(f"unusable sensor reading ({type(exc).__name__}: {exc})", sensor_recorded_at) from exc
 
     # fish_type/fish_count aren't in UserData (they live in the phone's
     # SharedPreferences, which the poller has no way to read) - PondConfig
@@ -194,7 +274,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
             storage.fetch_image_history(user_id, limit=50)
         )
     except Exception as exc:  # noqa: BLE001 - camera is optional
-        print(f"[poller] user {user_id}: camera history unavailable ({exc})")
+        log_event(log, "camera_history_unavailable", level=logging.WARNING, error=str(exc))
 
     # --- nitrate for the algae nutrient term ---------------------
     # Needs the twin, so it is resolved inside the locked section below.
@@ -202,7 +282,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
     try:
         feeding_rows = storage.fetch_recent_feeding_events(user_id, limit=30)
     except Exception as exc:  # noqa: BLE001
-        print(f"[poller] user {user_id}: feeding history unavailable ({exc})")
+        log_event(log, "feeding_history_unavailable", level=logging.WARNING, error=str(exc))
     avg_tan = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
 
     water_temp = sample.temp_c
@@ -254,7 +334,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
             )
             evap_days = evap_proj.get("predicted_topup_days_from_now")
         except Exception as exc:  # noqa: BLE001
-            print(f"[poller] user {user_id}: evaporation projection failed ({exc})")
+            log_event(log, "evaporation_projection_failed", level=logging.WARNING, error=str(exc))
 
         if twin.algae.has_measurement:
             algae_forecast_env = _algae_forecast_env(
@@ -267,7 +347,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
                 )
                 algae_days = algae_proj.get("predicted_scrub_days_from_now")
             except Exception as exc:  # noqa: BLE001
-                print(f"[poller] user {user_id}: algae projection failed ({exc})")
+                log_event(log, "algae_projection_failed", level=logging.WARNING, error=str(exc))
 
         # Re-assess with the projected day counts folded in, so the cached
         # rows carry both current status and next predicted intervention.
@@ -292,13 +372,10 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict):
     if algae is not None:
         fail_soft(lambda: storage.push_algae_evaluation(user_id, algae.to_dict()), None)
 
-    frames = outcome.get("assimilated_camera_frames", 0)
-    print(
-        f"[poller] user {user_id}: chem={chem.status}/{chem.category} "
-        f"evap={evap.status if evap else 'n/a'} "
-        f"algae={algae.status if algae else 'no-camera'} "
-        f"({frames} new camera frame(s))"
-    )
+    log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
+              evaporation=evap.status if evap else None, algae=algae.status if algae else None,
+              new_camera_frames=outcome.get("assimilated_camera_frames", 0))
+    return sensor_recorded_at
 
 
 # ---------------------------------------------------------------

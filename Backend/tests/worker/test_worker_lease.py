@@ -87,7 +87,8 @@ def test_memory_lease_is_taken_renewed_refused_and_expires():
     assert storage.take_lease("poller", "a", 60) is True, "released lease is free"
 
 
-def test_two_workers_never_poll_the_same_pond_in_the_same_cycle(monkeypatch, capsys):
+def test_two_workers_never_poll_the_same_pond_in_the_same_cycle(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="koi.worker")
     polls = record_polls(monkeypatch)
     clock = Clock()
     storage = pond_storage(clock)
@@ -118,7 +119,7 @@ def test_two_workers_never_poll_the_same_pond_in_the_same_cycle(monkeypatch, cap
         clock.now += timedelta(minutes=15)
 
     assert len(set(per_cycle)) == 1, f"the lease holder stays active across cycles: {per_cycle}"
-    assert "standby, another worker holds the poller lease" in capsys.readouterr().out
+    assert any(getattr(r, "koi_event", None) == "worker_standby" for r in caplog.records)
 
 
 def test_standby_worker_takes_over_after_the_lease_holder_stops(monkeypatch):

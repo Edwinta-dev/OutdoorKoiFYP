@@ -44,6 +44,8 @@ from koi.storage.base import (
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
     "worker_lease": ("name", "holder", "expires_at"),
+    "worker_status": ("name", "holder", "cycle_started_at", "cycle_finished_at", "cycle_duration_sec",
+                      "last_success_at", "ponds"),
     "pond_chemistry_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "tan_ppm", "no2_ppm", "no3_ppm",
         "ph_reactivity", "reactivity_trend", "tds_trend", "sensor_warnings", "advisory",
@@ -269,6 +271,40 @@ class MemoryStorage:
         with self._lock:
             table = self._tables["worker_lease"]
             table[:] = [r for r in table if not (r["name"] == name and r["holder"] == holder)]
+
+    def fetch_lease(self, name: str) -> Optional[dict]:
+        self._check("fetch_lease")
+        with self._lock:
+            row = next((r for r in self._tables["worker_lease"] if r["name"] == name), None)
+            return _copy(row) if row else None
+
+    # --- worker status ------------------------------------------------
+    def record_worker_status(self, name: str, status: dict) -> None:
+        self._check("record_worker_status")
+        columns = TABLE_COLUMNS["worker_status"]
+        row = {c: status.get(c) for c in columns if c != "name"}
+        row["name"] = name
+        row["ponds"] = row["ponds"] or {}
+        try:
+            row = _copy(row)
+        except (TypeError, ValueError) as exc:
+            raise StorageError("record_worker_status", exc) from exc
+        with self._lock:
+            table = self._tables["worker_status"]
+            table[:] = [r for r in table if r["name"] != name]
+            table.append(row)
+
+    def fetch_worker_status(self, name: str) -> Optional[dict]:
+        self._check("fetch_worker_status")
+        with self._lock:
+            row = next((r for r in self._tables["worker_status"] if r["name"] == name), None)
+            return _copy(row) if row else None
+
+    def fetch_snapshot_times(self) -> dict[str, str]:
+        self._check("fetch_snapshot_times")
+        with self._lock:
+            return {str(r["user_id"]): r["updated_at"] for r in self._tables["pond_chemistry_state"]
+                    if r.get("updated_at")}
 
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:

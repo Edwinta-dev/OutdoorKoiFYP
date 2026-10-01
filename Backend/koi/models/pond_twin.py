@@ -47,12 +47,15 @@ namespaced per engine.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine
+
+log = logging.getLogger(__name__)
 
 SNAPSHOT_VERSION = 2
 
@@ -234,7 +237,7 @@ class PondTwin:
             )
             return [d["no3_ppm"] for d in projection.get("trajectory", [])]
         except Exception as exc:  # noqa: BLE001 - nutrient input is optional
-            print(f"[pond_twin] NO3 projection unavailable: {exc}")
+            log.warning("no3_projection_unavailable", extra={"error": str(exc)})
             return []
 
     # ==========================================================

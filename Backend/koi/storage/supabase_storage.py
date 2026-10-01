@@ -132,6 +132,47 @@ class SupabaseStorage:
         with _operation("release_lease"):
             self._db().table("worker_lease").delete().eq("name", name).eq("holder", holder).execute()
 
+    def fetch_lease(self, name: str) -> Optional[dict]:
+        with _operation("fetch_lease"):
+            res = (
+                self._db().table("worker_lease")
+                .select("name, holder, expires_at")
+                .eq("name", name)
+                .limit(1)
+                .execute()
+            )
+            return res.data[0] if res.data else None
+
+    # --- worker status (migration 0003) -------------------------------
+    def record_worker_status(self, name: str, status: dict) -> None:
+        with _operation("record_worker_status"):
+            self._db().table("worker_status").upsert({
+                "name": name,
+                "holder": status["holder"],
+                "cycle_started_at": status["cycle_started_at"],
+                "cycle_finished_at": status["cycle_finished_at"],
+                "cycle_duration_sec": status["cycle_duration_sec"],
+                "last_success_at": status.get("last_success_at"),
+                "ponds": status.get("ponds") or {},
+            }, on_conflict="name").execute()
+
+    def fetch_worker_status(self, name: str) -> Optional[dict]:
+        with _operation("fetch_worker_status"):
+            res = (
+                self._db().table("worker_status")
+                .select("name, holder, cycle_started_at, cycle_finished_at, cycle_duration_sec, "
+                        "last_success_at, ponds")
+                .eq("name", name)
+                .limit(1)
+                .execute()
+            )
+            return res.data[0] if res.data else None
+
+    def fetch_snapshot_times(self) -> dict[str, str]:
+        with _operation("fetch_snapshot_times"):
+            res = self._db().table("pond_chemistry_state").select("user_id, updated_at").execute()
+            return {str(r["user_id"]): r["updated_at"] for r in res.data or [] if r.get("updated_at")}
+
     # --- evaluation logs (append-only time series) ---------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:
         with _operation("push_evaluation"):

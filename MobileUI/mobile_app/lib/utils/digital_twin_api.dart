@@ -20,6 +20,19 @@ import '../config/app_config.dart';
 
 final String _digitalTwinBaseUrl = AppConfig.environment.digitalTwinBaseUrl;
 
+/// The message from a DigitalTwin error body. The service sends
+/// {"error": {"code", "message", "details"}}; a service not yet
+/// redeployed sends {"error": "<message>"}. Anything else gives fallback.
+String errorMessageFrom(Object? body, String fallback) {
+  if (body is! Map) return fallback;
+  final error = body['error'];
+  if (error is Map && error['message'] is String) {
+    return error['message'] as String;
+  }
+  if (error is String && error.isNotEmpty) return error;
+  return fallback;
+}
+
 /// Mirrors WaterChemistryAssessment.to_dict() in Backend/DigitalTwin/engine.py
 class WaterChemistryAssessment {
   final String status; // "Green" | "Amber" | "Red"
@@ -831,7 +844,7 @@ class DigitalTwinApi {
       }
       return (
         forecast: null,
-        error: body['error']?.toString() ?? 'Unavailable',
+        error: errorMessageFrom(body, 'Unavailable'),
       );
     } catch (_) {
       return (forecast: null, error: 'DigitalTwin service unreachable');
@@ -879,7 +892,7 @@ class DigitalTwinApi {
       }
       return (
         forecast: null,
-        error: body['error']?.toString() ?? 'Forecast unavailable',
+        error: errorMessageFrom(body, 'Forecast unavailable'),
       );
     } catch (_) {
       return (forecast: null, error: 'DigitalTwin service unreachable');
@@ -910,7 +923,7 @@ class DigitalTwinApi {
       }
       return (
         forecast: null,
-        error: body['error']?.toString() ?? 'Forecast unavailable',
+        error: errorMessageFrom(body, 'Forecast unavailable'),
       );
     } catch (_) {
       return (forecast: null, error: 'DigitalTwin service unreachable');
@@ -969,7 +982,7 @@ class DigitalTwinApi {
       }
       return (
         result: null,
-        error: body['error']?.toString() ?? 'Could not save rating',
+        error: errorMessageFrom(body, 'Could not save rating'),
       );
     } catch (_) {
       return (result: null, error: 'DigitalTwin service unreachable');

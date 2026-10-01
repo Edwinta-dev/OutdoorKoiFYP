@@ -155,10 +155,33 @@ def test_make_storage_loads_the_fixture_pond():
     assert len(s.rows("daily_sensor_averages")) == 30
 
 
-def test_fail_soft_returns_the_default_and_reports_the_failure(storage, capsys):
+def test_fail_soft_returns_the_default_and_reports_the_failure(storage, caplog):
     storage.failing.add("fetch_algae_ratings")
-    assert fail_soft(lambda: storage.fetch_algae_ratings(USER), []) == []
-    assert "fetch_algae_ratings failed: simulated failure" in capsys.readouterr().out
+    with caplog.at_level("WARNING"):
+        assert fail_soft(lambda: storage.fetch_algae_ratings(USER), []) == []
+    [record] = [r for r in caplog.records if getattr(r, "koi_event", None) == "storage_call_failed"]
+    assert record.koi_fields["operation"] == "fetch_algae_ratings"
+    assert "fetch_algae_ratings failed: simulated failure" in record.koi_fields["error"]
     storage.failing.clear()
     storage.insert_algae_rating(USER, "none", False, None, None, 0.01)
     assert len(fail_soft(lambda: storage.fetch_algae_ratings(USER), [])) == 1
+
+
+def test_worker_status_and_lease_reads_round_trip():
+    storage = MemoryStorage(clock=ticking_clock())
+    assert storage.fetch_worker_status("poller") is None and storage.fetch_lease("poller") is None
+    status = {"holder": "w1", "cycle_started_at": "2026-08-20T00:00:00+00:00",
+              "cycle_finished_at": "2026-08-20T00:00:02+00:00", "cycle_duration_sec": 2.0,
+              "last_success_at": "2026-08-20T00:00:02+00:00",
+              "ponds": {"455": {"result": "ok", "failures_total": 0, "sensor_recorded_at": None, "reason": None}}}
+    storage.record_worker_status("poller", status)
+    storage.record_worker_status("poller", {**status, "holder": "w2"})
+    assert storage.rows("worker_status") == [{"name": "poller", **status, "holder": "w2"}]
+    assert storage.fetch_worker_status("poller")["holder"] == "w2"
+    storage.take_lease("poller", "w2", 60)
+    assert storage.fetch_lease("poller")["holder"] == "w2"
+    storage.save_engine_snapshot(USER, {"n": 1})
+    assert list(storage.fetch_snapshot_times()) == [str(USER)]
+    storage.failing.add("fetch_worker_status")
+    with pytest.raises(StorageError):
+        storage.fetch_worker_status("poller")

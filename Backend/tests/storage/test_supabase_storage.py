@@ -159,3 +159,24 @@ def test_upload_image_strips_the_trailing_query_marker():
     url = storage.upload_image("frames", "15/1_photo.jpg", b"jpeg")
     assert url == "https://storage.invalid/frames/15/1_photo.jpg"
     assert client.uploads == [("frames", "15/1_photo.jpg", 4, "image/jpeg")]
+
+
+def test_worker_status_is_upserted_by_name_and_read_back():
+    row = {"name": "poller", "holder": "w1", "cycle_started_at": "a", "cycle_finished_at": "b",
+           "cycle_duration_sec": 1.5, "last_success_at": None, "ponds": {}}
+    storage, client = _storage(data={"worker_status": [row],
+                                     "worker_lease": [{"name": "poller", "holder": "w1", "expires_at": "c"}],
+                                     "pond_chemistry_state": [{"user_id": 455, "updated_at": "d"}]})
+    storage.record_worker_status("poller", {k: v for k, v in row.items() if k != "name"})
+    upsert = client.queries[-1]
+    assert upsert.table == "worker_status"
+    assert upsert.calls[0] == ("upsert", (row,), {"on_conflict": "name"})
+    assert storage.fetch_worker_status("poller") == row
+    assert storage.fetch_lease("poller")["holder"] == "w1"
+    assert storage.fetch_snapshot_times() == {"455": "d"}
+
+
+def test_worker_status_read_failure_is_a_storage_error():
+    storage, _ = _storage(error=RuntimeError("down"))
+    with pytest.raises(StorageError, match="fetch_worker_status"):
+        storage.fetch_worker_status("poller")
