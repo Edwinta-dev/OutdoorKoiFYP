@@ -37,6 +37,11 @@ ENDPOINT SHAPES
                  state. What the detail graph screens want. Read-only:
                  projections run on local copies and never mutate state.
 
+Request bodies and query strings are validated by the models in
+koi.api.schemas. Every non-2xx response is the koi.errors envelope,
+{"error": {"code", "message", "details"}}; routes raise ApiError or
+PondNotConfigured rather than building error responses themselves.
+
 Auth note: every endpoint below trusts a caller-supplied user_id (in the
 body for events, in the path for reads). That is NOT safe for production
 - anyone who can reach this service can read or write state for any user.
@@ -44,10 +49,13 @@ Before shipping, verify the caller's Supabase JWT (Flutter already holds
 one from its own auth session) and derive user_id from the verified token
 rather than from the request. See the write-up.
 """
-from datetime import datetime, timezone
+from typing import Optional, TypeVar
 
 from flask import Blueprint, current_app, jsonify, request
+from pydantic import BaseModel
 
+from koi.api import schemas
+from koi.errors import ApiError, PondNotConfigured
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
@@ -56,6 +64,8 @@ from koi.registry import EngineRegistry
 from koi.storage import Storage, fail_soft
 
 bp = Blueprint("twin", __name__)
+
+M = TypeVar("M", bound=BaseModel)
 
 
 def _storage() -> Storage:
@@ -70,19 +80,27 @@ def _registry() -> EngineRegistry:
 # Helpers
 # ===================================================================
 
-def _parse_time(body: dict) -> datetime:
-    ts = body.get("timestamp")
-    if ts:
-        try:
-            return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        except ValueError:
-            # A malformed client timestamp should not 500 the whole log -
-            # fall back to server time and carry on.
-            print(f"[app] unparseable timestamp {ts!r}, using server time")
-    return datetime.now(timezone.utc)
+def _parse_body(model: type[M]) -> M:
+    """The JSON body validated against model; a ValidationError becomes
+    a 400 with field-level detail (koi.errors)."""
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    return model.model_validate(body)
 
 
-def _default_config_for(user_id: int, body: dict) -> PondConfig | None:
+def _parse_query(model: type[M]) -> M:
+    return model.model_validate(request.args.to_dict())
+
+
+def _require_pond(user_id: int) -> None:
+    """Raises PondNotConfigured unless the pond has a stored snapshot or
+    a UserData config to start one from."""
+    if _storage().fetch_snapshot_version(user_id) == 0 and _storage().fetch_pond_config(user_id) is None:
+        raise PondNotConfigured(user_id)
+
+
+def _default_config_for(user_id: int, body: Optional[schemas.EventBody] = None) -> PondConfig | None:
     """Bootstraps a PondConfig for a user with no persisted snapshot yet.
     volume/biomass come from UserData (Storage.fetch_pond_config);
     fish_type/fish_count aren't stored there, so the caller (Flutter) sends
@@ -92,10 +110,10 @@ def _default_config_for(user_id: int, body: dict) -> PondConfig | None:
     if row is None:
         return None
     kwargs = dict(row)
-    if body.get("fish_type") is not None:
-        kwargs["fish_type"] = body["fish_type"]
-    if body.get("fish_count") is not None:
-        kwargs["fish_count"] = body["fish_count"]
+    if body is not None and body.fish_type is not None:
+        kwargs["fish_type"] = body.fish_type
+    if body is not None and body.fish_count is not None:
+        kwargs["fish_count"] = body.fish_count
     return PondConfig(**kwargs)
 
 
@@ -231,9 +249,11 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
     }
 
 
-def _handle_event(user_id: int, event: PondEvent, body: dict):
+def _handle_event(event: PondEvent, body: schemas.EventBody):
     """Shared path for every /events/* endpoint: apply across all engines
     under the lock, re-assess, push, return."""
+    user_id = body.user_id
+    _require_pond(user_id)
     _, ctx = _environment_for(user_id)
 
     def mutate(twin):
@@ -256,65 +276,46 @@ def _handle_event(user_id: int, event: PondEvent, body: dict):
 
 @bp.route("/events/feeding", methods=["POST"])
 def log_feeding():
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
-    try:
-        event = PondEvent(
-            kind=EventKind.FEEDING,
-            time=_parse_time(body),
-            food_grams=float(body["food_grams"]),
-            protein_percent=float(body["protein_percent"]),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        return jsonify({"error": f"food_grams and protein_percent required: {exc}"}), 400
-    if event.food_grams < 0 or not (0 <= event.protein_percent <= 100):
-        return jsonify({"error": "food_grams must be >= 0 and protein_percent 0-100"}), 400
+    body = _parse_body(schemas.FeedingEvent)
+    event = PondEvent(
+        kind=EventKind.FEEDING,
+        time=body.event_time(),
+        food_grams=body.food_grams,
+        protein_percent=body.protein_percent,
+    )
+    return jsonify(_handle_event(event, body)), 200
 
-    return jsonify(_handle_event(user_id, event, body)), 200
+
+def _log_volume_event(kind: EventKind):
+    body = _parse_body(schemas.VolumeEvent)
+    event = PondEvent(
+        kind=kind,
+        time=body.event_time(),
+        volume_percent=body.volume_percent,
+        volume_litres=body.volume_litres,
+    )
+    return jsonify(_handle_event(event, body)), 200
 
 
 @bp.route("/events/water-change", methods=["POST"])
 def log_water_change():
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
-    event = PondEvent(
-        kind=EventKind.WATER_CHANGE,
-        time=_parse_time(body),
-        volume_percent=body.get("volume_percent"),
-        volume_litres=body.get("volume_litres"),
-    )
-    if event.volume_percent is None and event.volume_litres is None:
-        return jsonify({"error": "volume_percent or volume_litres required"}), 400
-
-    return jsonify(_handle_event(user_id, event, body)), 200
+    return _log_volume_event(EventKind.WATER_CHANGE)
 
 
 @bp.route("/events/top-up", methods=["POST"])
 def log_top_up():
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
-    event = PondEvent(
-        kind=EventKind.TOP_UP,
-        time=_parse_time(body),
-        volume_percent=body.get("volume_percent"),
-        volume_litres=body.get("volume_litres"),
-    )
-    if event.volume_percent is None and event.volume_litres is None:
-        return jsonify({"error": "volume_percent or volume_litres required"}), 400
-
-    return jsonify(_handle_event(user_id, event, body)), 200
+    return _log_volume_event(EventKind.TOP_UP)
 
 
 @bp.route("/events/algal-scrub", methods=["POST"])
 def log_algal_scrub():
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
+    body = _parse_body(schemas.AlgalScrubEvent)
     event = PondEvent(
         kind=EventKind.ALGAL_SCRUB,
-        time=_parse_time(body),
-        scrub_type=body.get("scrub_type", "unspecified"),
+        time=body.event_time(),
+        scrub_type=body.scrub_type,
     )
-    return jsonify(_handle_event(user_id, event, body)), 200
+    return jsonify(_handle_event(event, body)), 200
 
 
 # ===================================================================
@@ -340,30 +341,27 @@ def log_algae_rating():
     corrupts the calibration set. When omitted the server falls back to
     the newest frame and says so in the response.
     """
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
-    severity = str(body.get("severity", "")).strip().lower()
-
-    valid = ae.SEVERITY_LEVELS + ["obstruction"]
-    if severity not in valid:
-        return jsonify({"error": f"severity must be one of {valid}"}), 400
+    body = _parse_body(schemas.AlgaeRatingEvent)
+    user_id = body.user_id
+    severity = body.severity
+    _require_pond(user_id)
 
     # Resolve the frame being rated.
-    image_id = body.get("image_id")
+    image_id = body.image_id
     image_row = None
     inferred = False
     if image_id is not None:
-        image_row = fail_soft(lambda: _storage().fetch_image_by_id(user_id, int(image_id)), None)
+        image_row = fail_soft(lambda: _storage().fetch_image_by_id(user_id, image_id), None)
     if image_row is None:
         rows = _storage().fetch_image_history(user_id, limit=1)
         image_row = rows[0] if rows else None
         inferred = image_id is not None or image_row is not None
 
-    green_at = body.get("green_ratio")
+    green_at = body.green_ratio
     if green_at is None and image_row is not None:
         green_at = image_row.get("green_ratio")
 
-    rated_at = _parse_time(body)
+    rated_at = body.event_time()
 
     # Persist first, so the engine can carry the row id for undo.
     stored = fail_soft(lambda: _storage().insert_algae_rating(
@@ -374,7 +372,7 @@ def log_algae_rating():
         image_url=image_row.get("imageURL") if image_row else None,
         green_ratio_at_rating=float(green_at) if green_at is not None else None,
         image_captured_at=str(image_row.get("created_at")) if image_row else None,
-        notes=body.get("notes"),
+        notes=body.notes,
     ), None)
     rating_id = stored.get("id") if stored else None
 
@@ -392,16 +390,13 @@ def log_algae_rating():
         summary["assessments"] = assessments
         return summary
 
-    try:
-        result = _registry().with_twin(
-            user_id, mutate, default_config=_default_config_for(user_id, body)
-        )
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    result = _registry().with_twin(
+        user_id, mutate, default_config=_default_config_for(user_id, body)
+    )
 
     result["rating_id"] = rating_id
     result["rated_image_id"] = image_row.get("id") if image_row else None
-    result["image_inferred"] = inferred and body.get("image_id") is None
+    result["image_inferred"] = inferred and body.image_id is None
     if stored is None:
         # The engine still assimilated it, but it will not survive a
         # restart and will not join the calibration set. Say so plainly
@@ -422,9 +417,10 @@ def undo_algae_rating():
     level, thresholds, growth fit and camera history it had beforehand,
     and the persisted row is deleted so it leaves the calibration set too.
     """
-    body = request.get_json(force=True)
-    user_id = body["user_id"]
-    rating_id = body.get("rating_id")
+    body = _parse_body(schemas.AlgaeRatingUndo)
+    user_id = body.user_id
+    rating_id = body.rating_id
+    _require_pond(user_id)
 
     _, ctx = _environment_for(user_id)
 
@@ -443,15 +439,13 @@ def undo_algae_rating():
 
     result = _registry().with_twin(user_id, mutate)
     if not result.get("undone"):
-        return jsonify({
-            "undone": False,
-            "error": "Nothing to undo, or that rating is no longer the most "
-                     "recent one. Older ratings can be removed but their "
-                     "level correction has already been overtaken."
-        }), 409
+        raise ApiError(
+            "Nothing to undo, or that rating is no longer the most recent one. "
+            "Older ratings can be removed but their level correction has already been overtaken.",
+            status=409, code="nothing_to_undo")
 
     if rating_id is not None:
-        fail_soft(lambda: _storage().delete_algae_rating(user_id, int(rating_id)), None)
+        fail_soft(lambda: _storage().delete_algae_rating(user_id, rating_id), None)
     return jsonify(result), 200
 
 
@@ -460,6 +454,7 @@ def get_algae_ratings(user_id):
     """Rating history plus the calibration state it produces. Drives the
     rating card's "last time you called this Moderate" anchor and its
     progress hint."""
+    _require_pond(user_id)
     rows = fail_soft(lambda: _storage().fetch_algae_ratings(user_id, limit=50), [])
 
     def read(twin):
@@ -472,12 +467,9 @@ def get_algae_ratings(user_id):
             "green_ratio": twin.algae.green_ratio,
         }
 
-    try:
-        calibration = _registry().with_twin(
-            user_id, read, default_config=_default_config_for(user_id, {}), persist=False
-        )
-    except ValueError:
-        calibration = None
+    calibration = _registry().with_twin(
+        user_id, read, default_config=_default_config_for(user_id), persist=False
+    )
 
     latest_image = _storage().fetch_image_history(user_id, limit=1)
     return jsonify({
@@ -493,13 +485,23 @@ def get_algae_ratings(user_id):
 # Cached assessment reads (dashboard cards + alert badges)
 # ===================================================================
 
+def _no_assessment(user_id: int, message: str):
+    """Raises the 404 for a cached assessment that does not exist yet:
+    pond_not_configured when the pond itself is unknown, otherwise
+    no_assessment_yet. Checked only on a miss, so a normal read stays one
+    query."""
+    _require_pond(user_id)
+    raise ApiError(message, status=404, code="no_assessment_yet")
+
+
 @bp.route("/assessment/<int:user_id>", methods=["GET"])
 def get_latest_assessment(user_id):
     """Most recent chemistry assessment, whether produced by a poll tick
     or by an event endpoint's immediate re-assessment."""
     assessment = _storage().fetch_latest_evaluation(user_id)
     if assessment is None:
-        return jsonify({"error": "no assessment yet for this user"}), 404
+        _no_assessment(user_id, "No water chemistry assessment yet. This appears after the first poll cycle "
+                                "or the first logged event.")
     return jsonify(assessment), 200
 
 
@@ -507,11 +509,9 @@ def get_latest_assessment(user_id):
 def get_latest_evaporation_assessment(user_id):
     assessment = fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None)
     if assessment is None:
-        return jsonify({
-            "error": "No evaporation assessment yet. This appears after the first "
-                     "poll cycle, or once pond_evaporation_evaluations exists "
-                     "(apply supabase/migrations/0001_baseline.sql)."
-        }), 404
+        _no_assessment(user_id, "No evaporation assessment yet. This appears after the first "
+                                "poll cycle, or once pond_evaporation_evaluations exists "
+                                "(apply supabase/migrations/0001_baseline.sql).")
     return jsonify(assessment), 200
 
 
@@ -519,11 +519,9 @@ def get_latest_evaporation_assessment(user_id):
 def get_latest_algae_assessment(user_id):
     assessment = fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None)
     if assessment is None:
-        return jsonify({
-            "error": "No algae assessment yet. Needs at least one clean ESP32-CAM "
-                     "frame in imageTable, and pond_algae_evaluations to exist "
-                     "(apply supabase/migrations/0001_baseline.sql)."
-        }), 404
+        _no_assessment(user_id, "No algae assessment yet. Needs at least one clean ESP32-CAM "
+                                "frame in imageTable, and pond_algae_evaluations to exist "
+                                "(apply supabase/migrations/0001_baseline.sql).")
     return jsonify(assessment), 200
 
 
@@ -532,11 +530,14 @@ def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
     populate every outcome card and its alert badge from a single
     request instead of three."""
-    return jsonify({
+    assessments = {
         "chemistry": _storage().fetch_latest_evaluation(user_id),
         "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
         "algae": fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
-    }), 200
+    }
+    if all(a is None for a in assessments.values()):
+        _require_pond(user_id)
+    return jsonify(assessments), 200
 
 
 # ===================================================================
@@ -548,23 +549,23 @@ def get_forecast(user_id):
     """Water chemistry lookahead: projects TAN/NO2/NO3 assuming feeding
     continues at this pond's recent average rate and no further
     interventions occur."""
-    horizon_days = request.args.get("horizon_days", default=21, type=int)
+    horizon_days = _parse_query(schemas.ForecastQuery).horizon_days
+    _require_pond(user_id)
 
     feeding_rows = _storage().fetch_recent_feeding_events(user_id, limit=30)
     avg_daily_tan_mg = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
     if avg_daily_tan_mg is None:
-        return jsonify({
-            "error": "Not enough recent feeding history to estimate an average feed "
-                     "rate yet - need at least 2 logged FEEDING events spanning some "
-                     "time (not all on the same day)."
-        }), 422
+        raise ApiError(
+            "Not enough recent feeding history to estimate an average feed "
+            "rate yet - need at least 2 logged FEEDING events spanning some "
+            "time (not all on the same day).", status=422, code="not_enough_history")
 
     temp_stats = _storage().fetch_daily_sensor_stats(user_id, "temp")
     if temp_stats is None:
-        return jsonify({
-            "error": "No historical temperature data available for this pond yet - "
-                     "need at least a few days of sensor polling before forecasting."
-        }), 422
+        raise ApiError(
+            "No historical temperature data available for this pond yet - "
+            "need at least a few days of sensor polling before forecasting.",
+            status=422, code="not_enough_history")
     lux_stats = _storage().fetch_daily_sensor_stats(user_id, "LUX") or \
         _storage().fetch_daily_sensor_stats(user_id, "lux")
     fallback_lux = lux_stats["avg"] if lux_stats else None
@@ -590,7 +591,7 @@ def get_forecast(user_id):
         )
 
     result = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id, {}), persist=False
+        user_id, run, default_config=_default_config_for(user_id), persist=False
     )
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
     result["temp_baseline"] = temp_stats
@@ -606,29 +607,22 @@ def get_evaporation_forecast(user_id):
     running integral the poller has been building against real weather -
     rather than re-estimating it from a timestamp at request time.
     """
-    horizon_days = request.args.get("horizon_days", default=14, type=int)
-    depth_m = request.args.get("depth_m", default=ev.DEFAULT_POND_DEPTH_M, type=float)
-
-    config_row = _storage().fetch_pond_config(user_id)
-    if config_row is None:
-        return jsonify({
-            "error": "No pond configuration for this user - complete onboarding "
-                     "(volume and biomass) before forecasting."
-        }), 422
+    query = _parse_query(schemas.EvaporationForecastQuery)
+    _require_pond(user_id)
 
     payload, ctx = _environment_for(user_id)
     env = _evaporation_env(ctx)
 
     def run(twin):
         return twin.evaporation.project_forward(
-            daily_environment=env, horizon_days=horizon_days
+            daily_environment=env, horizon_days=query.horizon_days
         )
 
     result = _registry().with_twin(
         user_id,
         run,
-        default_config=_default_config_for(user_id, {}),
-        pond_depth_m=depth_m,
+        default_config=_default_config_for(user_id),
+        pond_depth_m=query.depth_m,
         persist=False,
     )
 
@@ -657,7 +651,8 @@ def get_algae_forecast(user_id):
     forecast. Nitrate comes from the chemistry engine so the two
     lookaheads stay coupled.
     """
-    horizon_days = request.args.get("horizon_days", default=21, type=int)
+    horizon_days = _parse_query(schemas.ForecastQuery).horizon_days
+    _require_pond(user_id)
 
     payload, ctx = _environment_for(user_id)
     now = ctx["now"]
@@ -709,11 +704,11 @@ def get_algae_forecast(user_id):
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
     result, assimilated = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id, {}), persist=True
+        user_id, run, default_config=_default_config_for(user_id), persist=True
     )
 
     if "error" in result:
-        return jsonify(result), 422
+        raise ApiError(result.get("detail") or result["error"], status=422, code=result["error"])
 
     result["assimilated_camera_frames"] = assimilated
     image_rows = _storage().fetch_image_history(user_id, limit=1)
@@ -722,11 +717,6 @@ def get_algae_forecast(user_id):
 
 
 # ===================================================================
-
-@bp.app_errorhandler(ValueError)
-def handle_missing_config(err):
-    return jsonify({"error": str(err)}), 404
-
 
 @bp.route("/health", methods=["GET"])
 def health():

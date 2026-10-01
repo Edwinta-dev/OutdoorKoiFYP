@@ -5,7 +5,8 @@
 
 The app holds one Storage (from settings.storage unless one is passed in)
 and one EngineRegistry over it, in app.extensions["koi_storage"] and
-app.extensions["koi_registry"].
+app.extensions["koi_registry"]. Every error response uses the envelope
+in koi.errors.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from typing import Optional
 from flask import Flask
 from flask_cors import CORS
 
+from koi.errors import register_error_handlers
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import Storage, build_storage
@@ -31,6 +33,7 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
     from koi.api.routes import bp
 
     app.register_blueprint(bp)
+    register_error_handlers(app)
     return app
 
 

@@ -32,6 +32,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from koi.errors import PondNotConfigured
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.pond_twin import PondTwin
@@ -83,9 +84,7 @@ class EngineRegistry:
         elif default_config is not None:
             twin = PondTwin.create(default_config, pond_depth_m=pond_depth_m)
         else:
-            raise ValueError(
-                f"No persisted state and no PondConfig supplied for user {user_id}"
-            )
+            raise PondNotConfigured(user_id)
 
         # Rehydrate the human rating history. Ratings live in their own
         # table rather than only inside the snapshot, so a snapshot written

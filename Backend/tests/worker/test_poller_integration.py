@@ -17,7 +17,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from conftest import USER
-from koi.storage import StorageError
 from koi.worker import poller
 
 
@@ -249,8 +248,8 @@ def test_validation_rejects_bad_event_bodies(client):
     r = client.post("/events/feeding",
                     json={"user_id": USER, "food_grams": 150, "protein_percent": 40,
                           "timestamp": "not-a-timestamp"})
-    assert r.status_code == 200, \
-        f"malformed timestamp falls back to server time instead of 500: {r.status_code}"
+    assert r.status_code == 400, f"malformed timestamp is rejected, not replaced: {r.status_code}"
+    assert r.get_json()["error"]["details"]["fields"][0]["field"] == "timestamp"
 
 
 def test_poll_loop_survives_one_broken_user(store, registry):
@@ -294,8 +293,11 @@ def test_optional_evaluation_logs_do_not_stop_a_poll(store, registry):
 def test_snapshot_write_failure_reaches_the_caller(store, client, registry):
     store.failing.add("save_engine_snapshot")
     try:
-        with pytest.raises(StorageError, match="save_engine_snapshot"):
-            client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+        r = client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+        assert r.status_code == 503, f"lost snapshot write -> 503: {r.status_code}"
+        error = r.get_json()["error"]
+        assert (error["code"], error["details"]["operation"]) == ("storage_unavailable", "save_engine_snapshot")
+        assert r.headers["Retry-After"] == str(error["details"]["retry_after_sec"])
     finally:
         store.failing.discard("save_engine_snapshot")
         registry.evict(USER)  # drop the unsaved top-up; later tests start from the snapshot

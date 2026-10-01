@@ -19,6 +19,7 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request
 
 from koi.camera import hsvEngine, imageSchedule
+from koi.errors import STORAGE_RETRY_AFTER_SEC, error_response
 from koi.settings import Settings
 from koi.storage import Storage, StorageError, fail_soft
 
@@ -37,11 +38,15 @@ def _storage() -> Storage:
     return current_app.extensions["koi_storage"]
 
 
-def error_reply(message: str, code: int):
-    """Every error still carries a sleep time for the ESP32."""
+def error_reply(status: int, code: str, message: str, sleep_sec: int = FALLBACK_SLEEP_SEC,
+                details: dict | None = None, headers: dict | None = None):
+    """The koi.errors envelope; every error still carries a sleep time
+    for the ESP32."""
     print(f"[ERROR] {message}")
-    return jsonify({"status": "error", "message": message,
-                    "sleep_sec": FALLBACK_SLEEP_SEC}), code
+    response, status = error_response(status, code, message, details, sleep_sec=sleep_sec)
+    if headers:
+        response.headers.update(headers)
+    return response, status
 
 
 # Helper Function: Fetch Previous Image Data
@@ -79,13 +84,14 @@ def upload_image():
     settings = _settings()
     device_token = settings.device_token.get_secret_value()
     if device_token and request.headers.get("X-Device-Token") != device_token:
-        return error_reply("unauthorised", 401)
+        return error_reply(401, "unauthorised", "Missing or wrong X-Device-Token.")
 
     file_bytes = request.data
     if not file_bytes:
-        return error_reply("Empty data packet from ESP32", 400)
+        return error_reply(400, "empty_body", "Empty data packet from ESP32")
     if len(file_bytes) > MAX_UPLOAD_BYTES:
-        return error_reply(f"Payload too large ({len(file_bytes)} bytes)", 413)
+        return error_reply(413, "payload_too_large",
+                           f"Payload too large ({len(file_bytes)} bytes, limit {MAX_UPLOAD_BYTES})")
 
     user_id = request.headers.get('X-User-ID', 'default_user')
     print(f"Processing upload for User_ID: {user_id}")
@@ -96,7 +102,7 @@ def upload_image():
     try:
         green_ratio = hsvEngine.analyze_image_bytes(file_bytes)
     except Exception as e:
-        return error_reply(f"Image analysis failed: {e}", 422)
+        return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
 
     # 2. Fetch historical state & baseline
     prev_green_ratio, prev_state = get_prev_image_data(user_id)
@@ -132,10 +138,11 @@ def upload_image():
 
     except StorageError as e:
         # The analysis succeeded, so the computed schedule is still valid
-        print(f"[PIPELINE ERROR] Upload pipeline failed: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "sleep_sec": time_to_next_image
-        }), 500
+        return error_reply(
+            503, "storage_unavailable",
+            f"The pond database could not be reached. Try again in {STORAGE_RETRY_AFTER_SEC} seconds.",
+            sleep_sec=time_to_next_image,
+            details={"operation": e.operation, "retry_after_sec": STORAGE_RETRY_AFTER_SEC},
+            headers={"Retry-After": str(STORAGE_RETRY_AFTER_SEC)},
+        )
 
