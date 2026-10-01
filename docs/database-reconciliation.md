@@ -43,6 +43,28 @@ cron jobs or deployed service versions.
 | Deployed backend, worker and camera versions | Needed for #74's deployment ledger. | Commit hash running on PythonAnywhere |
 | Enabled API schemas | Not in the dump. | Supabase dashboard, API settings |
 
+## 2a. Owner-reported firmware state
+
+Reported by the owner on 2026-10-01, not yet verified in this repository:
+the owner's newest sensor node sketch already sends `userID` with each
+`SensorData` reading. The sketch is on another machine and account and is
+not committed here, so `Embedded/sensor_node/sensor_node.ino` still shows
+the old payload.
+
+Effect on #5: the missing pond id is not a blocker. Live `SensorData`
+already has a nullable `"userID"` column, so rows from the newer sketch
+are stored with their pond and per-pond readers see them. Rows written
+before that sketch was flashed may still have a null `userID`; the count
+query in section 2 still applies to them (D1).
+
+When the sketch is committed:
+
+- The new observed baseline must define `SensorData."userID"` (it is an
+  **E** item in section 5.1). Until then `Backend/tests/storage/test_schema.py`
+  will fail, because it checks firmware JSON keys against the migrations
+  and the current `0001` has no such column.
+- Record in #17 which pond id the board sends and how it is configured.
+
 ## 3. Disposition key
 
 | Code | Meaning |
@@ -79,7 +101,7 @@ cron jobs or deployed service versions.
 | `"userID"` | `bigint`, nullable | **absent** | E. Readers that filter by pond depend on it. | #5 |
 | Index `(sensor_type, created_at desc)` | absent | present | R. A `("userID", sensor_type, created_at desc)` index is wanted; add as N. | #17 |
 | Table comment | `'Data from ESP32 temp sensor'` | none | E | #5 |
-| Firmware does not send `userID` | n/a | n/a | C. The sensor node payload has no pond id, so new rows have `userID` null and every per-pond reader skips them (D1). | #17 |
+| Firmware does not send `userID` | n/a | n/a | C. The committed sensor node (`Embedded/sensor_node/sensor_node.ino`) sends no pond id, so its rows have `userID` null and every per-pond reader skips them (D1). The owner reports that a newer sketch, not yet in this repository, already sends `userID` (see section 2a). Not a blocker for #5. | #17 |
 
 ### 5.2 `UserData`
 
@@ -209,7 +231,7 @@ separate migration owned by the named issue.
 
 | ID | Defect | Effect | Owner |
 |---|---|---|---|
-| D1 | `aggregate_daily_sensor_data` groups by `"userID"` and inserts into `daily_sensor_averages.userid`, which is `not null`. Any `SensorData` row with a null `userID` (the sensor node sends none) makes the whole insert fail. | `get_historical_graph_payload` errors whenever such a row exists. Row counts are in section 2. | #17 (pond id in payload and backfill), #5 (test) |
+| D1 | `aggregate_daily_sensor_data` groups by `"userID"` and inserts into `daily_sensor_averages.userid`, which is `not null`. Any `SensorData` row with a null `userID` (the committed sensor node sends none; the owner's newer sketch reportedly does, section 2a) makes the whole insert fail. | `get_historical_graph_payload` errors whenever such a row exists. Row counts are in section 2. | #17 (pond id in payload and backfill), #5 (test) |
 | D2 | `anon` holds `ALL` on every table and on `http_get`/`http_post` etc. | Anyone with the publishable key can read or change any pond's data and make the database send HTTP requests. | #12 |
 | D3 | `SECURITY DEFINER` RPCs take any `p_user_id`, are executable by `anon`, and set no `search_path`. | Any caller can read any pond's dashboard. A mutable `search_path` lets objects in other schemas shadow the ones the functions mean to use. | #12 |
 | D4 | Dashboard history substitutes 7.4 pH, 180 ppm TDS, 26 °C and 500 lx for missing values. | Charts show readings that were never measured. | #50 |
