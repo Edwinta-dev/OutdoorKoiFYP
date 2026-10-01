@@ -33,6 +33,9 @@ dev = [
     "pytest>=8.0",
     "ruff==0.16.9",
     "mypy==2.3.1",
+    # SQL tests against the local Supabase stack (tests/sql); they skip
+    # when no local database is reachable.
+    "psycopg[binary]>=3.2",
 ]
 wsgi = ["gunicorn>=22.0"]
 

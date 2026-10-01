@@ -222,6 +222,10 @@ def test_forecast_endpoints_compute_from_live_state(store, client):
 
 
 def test_new_camera_frame_corrects_model_through_poller(store, registry):
+    # `pytest -k camera` selects this test without the earlier ones, so
+    # run the first poll here when no snapshot has been persisted yet.
+    if snapshot(store) is None:
+        poll(store, registry)
     last_t = datetime.fromisoformat(frames(store)[-1]["created_at"])
     modelled = persisted_green(store)
     add_frames(store, [{

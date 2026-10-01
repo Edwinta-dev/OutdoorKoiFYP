@@ -1,5 +1,5 @@
 // ESP32-CAM (AI-Thinker) -> PythonAnywhere /upload -> (server) HSV analysis + Supabase
-// Wake -> capture -> camera off -> Wi-Fi -> POST JPEG -> read sleep_sec -> deep sleep
+// Wake -> capture -> camera off -> Wi-Fi -> POST JPEG -> read sleep_sec, reason, next_at -> deep sleep
 
 #include "esp_camera.h"
 #include <WiFi.h>
@@ -35,11 +35,26 @@
 #error "camera_node: secrets.h not found. Copy Embedded/camera_node/secrets.h.example to secrets.h and fill in the values."
 #endif
 
+// Next-wake parsing and clamps (camera_wake.h), shared with the host tests.
+#include <koi_sensing.h>
+#include <sys/time.h>
+
+// Lower clamp on the server's sleep, from secrets.h (issue #38). An older
+// secrets.h without it gets 15 min; under 15 min needs CAMERA_TEST_BUILD.
+#ifndef CAMERA_MIN_SLEEP_SEC
+#define CAMERA_MIN_SLEEP_SEC CAMERA_MIN_SLEEP_DEFAULT_SEC
+#endif
+#ifdef CAMERA_TEST_BUILD
+const bool TEST_BUILD = true;
+#else
+const bool TEST_BUILD = false;
+#endif
+
 // Used when Wi-Fi or the server fails. Was 60 s: a dead router would then wake the
 // camera every minute and drain the AAA pack in hours. The server's own error
 // replies carry sleep_sec, so this only applies when no reply arrives at all.
 const unsigned long DEFAULT_SLEEP_SEC = 1800;
-const unsigned long MIN_SLEEP_SEC     = 30;
+const unsigned long MIN_SLEEP_SEC     = cameraMinSleepSeconds(CAMERA_MIN_SLEEP_SEC, TEST_BUILD);
 const unsigned long MAX_SLEEP_SEC     = 86400;
 
 RTC_DATA_ATTR uint32_t bootCount     = 0;
@@ -70,6 +85,7 @@ void setup() {
   bootCount++;
   if (esp_reset_reason() == ESP_RST_BROWNOUT) brownoutCount++;
   Serial.printf("\n--- Wake #%u (brownout resets so far: %u) ---\n", bootCount, brownoutCount);
+  Serial.printf("Shortest accepted sleep: %lu s%s\n", MIN_SLEEP_SEC, TEST_BUILD ? " (test build)" : "");
 
   rtc_gpio_hold_dis(GPIO_NUM_4);
   rtc_gpio_hold_dis(GPIO_NUM_32);
@@ -175,8 +191,10 @@ bool connectWifi() {
   return false;
 }
 
-// Returns the server's sleep_sec. Reads it from ANY reply that contains it,
-// including the server's 4xx/5xx error replies (the old code only read it on 200).
+// Returns the seconds to sleep. Reads sleep_sec, reason and next_at from ANY
+// reply that contains them, including the server's 4xx/5xx error replies.
+// When the reply has a Date header the clock is set from it and the node
+// sleeps until next_at; otherwise it sleeps for sleep_sec.
 unsigned long uploadPhoto() {
   unsigned long s = DEFAULT_SLEEP_SEC;
   HTTPClient http;
@@ -185,22 +203,44 @@ unsigned long uploadPhoto() {
   http.addHeader("Content-Type", "application/octet-stream");
   http.addHeader("X-User-ID", String(USER_ID));
   http.addHeader("X-Device-Token", DEVICE_TOKEN);
+  const char* replyHeaders[] = {"Date"};
+  http.collectHeaders(replyHeaders, 1);
 
   Serial.println("Posting photo...");
+  bool haveServerNow = false, haveNextAt = false;
+  int64_t serverNow = 0, nextAt = 0;
   int code = http.POST(jpgBuf, jpgLen);
   if (code > 0) {
     String body = http.getString();
     Serial.printf("Server %d: %s\n", code, body.c_str());
+
+    String date = http.header("Date");
+    haveServerNow = parseHttpDate(date.c_str(), serverNow);
+    if (haveServerNow) {
+      struct timeval tv;
+      tv.tv_sec = (time_t)serverNow;
+      tv.tv_usec = 0;
+      settimeofday(&tv, nullptr);
+      Serial.printf("Clock set from Date: %s\n", date.c_str());
+    }
+
     JsonDocument doc;
-    if (!deserializeJson(doc, body) && doc["sleep_sec"].is<unsigned long>())
-      s = doc["sleep_sec"].as<unsigned long>();
+    if (!deserializeJson(doc, body)) {
+      if (doc["sleep_sec"].is<unsigned long>()) s = doc["sleep_sec"].as<unsigned long>();
+      const char* reason = doc["reason"] | "none";
+      const char* nextAtText = doc["next_at"] | "";
+      haveNextAt = parseIsoTime(nextAtText, nextAt);
+      Serial.printf("Reason: %s, next_at: %s\n", reason, haveNextAt ? nextAtText : "(missing)");
+    }
   } else {
     Serial.printf("HTTP error %d: %s\n", code, http.errorToString(code).c_str());
   }
   http.end();
 
-  s = constrain(s, MIN_SLEEP_SEC, MAX_SLEEP_SEC);
-  Serial.printf("Next wake in %lu s\n", s);
+  // The clock was just set to serverNow, so next_at - serverNow is next_at - now.
+  s = cameraWakeSleepSeconds(haveServerNow, serverNow, haveNextAt, nextAt, s, MIN_SLEEP_SEC, MAX_SLEEP_SEC);
+  Serial.printf("Next wake in %lu s (%s)\n", s,
+                haveServerNow && haveNextAt ? "to next_at" : "from sleep_sec");
   return s;
 }
 

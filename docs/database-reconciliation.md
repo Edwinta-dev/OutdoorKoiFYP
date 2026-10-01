@@ -4,8 +4,12 @@ Issue #5. Compares the supplied schema snapshot (the observed database)
 with the committed migrations, and records what to do about each
 difference. Deployment of the result is tracked in issue #74.
 
-Status: comparison complete; corrective migrations not yet written; SQL
-rehearsal not run (see section 10).
+Status (2026-10-01): live evidence collected (section 2b); baseline
+corrected in place (section 9); fresh-path and dump-upgrade-path
+rehearsal and SQL tests pass on the local Supabase stack (section 10).
+`0002`-`0005` were applied to the live project on 2026-10-01 after a
+verified backup, a rehearsal on a restored copy of live and a tested
+rollback (section 11).
 
 ## 1. Observed source
 
@@ -28,28 +32,44 @@ The dump records the schema at one moment, defects included. It says
 nothing about row contents, applied-migration history, storage buckets,
 cron jobs or deployed service versions.
 
-## 2. Evidence still needed from the owner
+## 2. Evidence
+
+Collected from the live project on 2026-10-01 with the read-only
+Supabase MCP server, at the owner's request in an attended session.
+Section 2b has the results. Still open:
 
 | Evidence | Why | How to get it |
 |---|---|---|
-| Applied-migration history | Decides whether `0001` may be corrected in place or must stay and be followed by a corrective migration (section 7). | `supabase migration list --linked`, or `select * from supabase_migrations.schema_migrations;` |
-| Whether `0002` and `0003` are applied | The dump has none of their objects. | Same query; also `\d public.worker_lease` |
-| Count of `SensorData` rows with no pond | Decides whether daily aggregation fails today (defect D1) and what backfill is needed. | `select count(*) filter (where "userID" is null), count(*) from public."SensorData";` |
-| Distinct `imageTable.current_state` and `"user_ID"` values | The column is `text` and `integer`; the camera code writes a JSON pair and may fall back to a string user id. | `select current_state, count(*) from public."imageTable" group by 1 order by 2 desc limit 20;` |
-| `weather_telemetry` and `weather_forecasts` sample rows | The `data` and `valid_period` JSON shapes are not in a schema dump. | One row per `metric_type` and per `forecast_type` |
-| Storage buckets and policies | Not in the dump. `0001` inserts `imageAnalysisBucket` and `pond-images` without evidence. | `select id, public, file_size_limit, allowed_mime_types from storage.buckets;` and the storage policies |
-| `pg_cron` jobs | The extension is installed; jobs are not in the dump. The NEA weather writer may be one. | `select jobname, schedule, command from cron.job;` |
-| External weather writer | Nothing in this repository writes the two weather tables. | Owner description of the job, its schedule and where it runs |
 | Deployed backend, worker and camera versions | Needed for #74's deployment ledger. | Commit hash running on PythonAnywhere |
-| Enabled API schemas | Not in the dump. | Supabase dashboard, API settings |
+| Enabled API schemas | Not in the dump or the MCP queries. | Supabase dashboard, API settings |
+| Edge function source for `fetch-NEA-Realtime` and `fetch-NEA-forecasts` | They write the weather cache; their code is not in this repository. | Supabase dashboard, Edge Functions (#24) |
+
+## 2b. Live evidence (read-only, 2026-10-01)
+
+| Question | Answer | Consequence |
+|---|---|---|
+| Applied-migration history | None: no `supabase_migrations` schema exists. | `0001` was never applied, so the baseline is corrected in place (section 9). |
+| `0002`, `0003` applied? | No: no `worker_lease`, `worker_status` or `snapshot_version`. | Pending owner deployment (#74). |
+| `algae_severity_ratings` | Absent. | Moved to `0005` (N). Rating endpoints fail on live until it is applied. |
+| Postgres version | 17.6 | Matches the local stack (`major_version = 17`). |
+| Do live functions match the dump? | Six of seven `pg_get_functiondef` md5 sums match exactly. `get_bundled_dashboard_payload` differs only by one comment line live has (`-- 6. FETCH CATEGORY 5: ...`). | The dump is behaviourally exact; `0001` adds that line so all seven match live. |
+| `SensorData` rows with no pond | 0 of 108; all rows have `userID` 455 (2026-08-12 to 2026-10-01). | D1 does not occur today. |
+| `imageTable.current_state` | 40 rows, all JSON-array text such as `["base",0.0009]`; all `user_ID` 455. | Text column kept; readers parse the JSON text. |
+| Storage buckets | `imageAnalysisBucket` (public, `image/jpeg`), `FishImages` (public). No `pond-images`. | Recorded in `0004` (E). App references to `pond-images` are defect D10. |
+| Storage policies | Eight: anon select, insert, update and delete `.jpg` objects under a top-level `public/` folder, four per bucket. | Recorded in `0004` (E); tightening is #12. |
+| `pg_cron` jobs | `fetch-nea-realtime-5min` (`*/5`) and `fetch-nea-forecasts-30min` (`*/30`), each `net.http_post` to the edge functions `fetch-NEA-Realtime` and `fetch-NEA-forecasts`. | This is the external weather writer. Jobs are not part of the schema migrations; #24 owns them. |
+| Weather cache shapes | `weather_telemetry`: one `realtime_sensor` row per station, `data` = `{"rainfall", "wind_speed", "air_temperature"}`, `valid_start`/`valid_end` current. `weather_forecasts`: `2hr` per area (`{"forecast"}`), `24hr` per region and `GENERAL` (NEA blocks with `relativeHumidity`), `4day` per weekday, `uv` per hour (`{"uv"}`). | Used in the SQL tests. `weather_telemetry.updated_at` stays at 2026-08-21 because the writer's upsert does not set it (D13); the data itself is current. |
+| Row counts | `UserData` 8, `SensorData` 108, `imageTable` 40, `pondInterventions` 40, `daily_sensor_averages` 205, `WeatherStationLookup` 134, `Fish_Database` 62. | Small; `0002`-`0005` add objects only. |
+| Security advisors | Errors: RLS disabled on ten public tables. Warnings: seven functions with mutable `search_path`, five `SECURITY DEFINER` functions executable by `anon` and `authenticated`, `http` extension in `public`. | Confirms D2 and D3; #12. |
+| `anon` privileges | `SELECT`, `INSERT`, `DELETE` on every public table; `EXECUTE` on `http_get`. | Confirms D2. |
 
 ## 2a. Owner-reported firmware state
 
-Reported by the owner on 2026-10-01, not yet verified in this repository:
-the owner's newest sensor node sketch already sends `userID` with each
-`SensorData` reading. The sketch is on another machine and account and is
-not committed here, so `Embedded/sensor_node/sensor_node.ino` still shows
-the old payload.
+Reported by the owner on 2026-10-01 and since confirmed: the owner's
+newest sensor sketch, committed as `Embedded/full_sketch/full_sketch.ino`,
+sends `userID` 455 with every `SensorData` reading, and every live row
+carries it (section 2b). `Embedded/sensor_node/sensor_node.ino` still shows
+the older payload without it.
 
 Effect on #5: the missing pond id is not a blocker. Live `SensorData`
 already has a nullable `"userID"` column, so rows from the newer sketch
@@ -57,13 +77,10 @@ are stored with their pond and per-pond readers see them. Rows written
 before that sketch was flashed may still have a null `userID`; the count
 query in section 2 still applies to them (D1).
 
-When the sketch is committed:
-
-- The new observed baseline must define `SensorData."userID"` (it is an
-  **E** item in section 5.1). Until then `Backend/tests/storage/test_schema.py`
-  will fail, because it checks firmware JSON keys against the migrations
-  and the current `0001` has no such column.
-- Record in #17 which pond id the board sends and how it is configured.
+The corrected `0001` defines `SensorData."userID"`. The sketch sets the
+key through a constant (`COL_USER_ID`), which the text-based schema check
+does not follow, so that check does not cover it; the SQL tests do. #17
+records which pond id the board sends and how it is configured.
 
 ## 3. Disposition key
 
@@ -81,7 +98,7 @@ When the sketch is committed:
 
 | Object | Dump | `0001` | Disposition | Owner |
 |---|---|---|---|---|
-| `pg_cron` (pg_catalog) | installed | absent | E. Jobs unknown (U). | #5, #24 |
+| `pg_cron` (pg_catalog) | installed | absent | E. Two jobs call the NEA edge functions (section 2b); jobs are data, not schema. | #5, #24 |
 | `pg_net` (extensions) | installed | absent | E | #5 |
 | `http` (**public** schema) | installed; all its functions granted to `anon` | absent | E in baseline; C to revoke from `anon`/`authenticated` (D2) and to stop calling it from a trigger (D6). | #5 (baseline), #12 (revoke) |
 | `pg_stat_statements`, `pgcrypto`, `uuid-ossp`, `supabase_vault` | installed | absent | E. Supabase installs these by default; the baseline records them with `if not exists`. | #5 |
@@ -178,28 +195,28 @@ No code reads it. Every other column matches.
 
 ### 5.10 `algae_severity_ratings`
 
-Only in `0001`. The backend reads and writes it
-(`koi/storage/supabase_storage.py`, `koi/api/routes.py`). Disposition **N**:
-move it out of the baseline into its own migration, because live does not
-have it. Until that migration is applied, rating endpoints fail against
-live. Owner #5 (move it), #74 (deploy).
+Only in the reconstructed `0001`; absent on live. The backend reads and
+writes it (`koi/storage/supabase_storage.py`, `koi/api/routes.py`).
+Disposition **N**: now `0005_algae_severity_ratings.sql`, with RLS on and
+the default grants to `anon` and `authenticated` revoked. Until it is
+applied, rating endpoints fail against live. Owner #5 (done), #74 (deploy).
 
 ### 5.11 Storage buckets
 
-`0001` inserts `imageAnalysisBucket` and `pond-images` as public buckets.
-The dump cannot confirm or deny this. Disposition U. Remove the insert
-from the baseline and add it back as its own migration once the owner
-supplies the bucket list. Owner #5.
+The reconstructed `0001` inserted `imageAnalysisBucket` and
+`pond-images`. Live has `imageAnalysisBucket` and `FishImages`, with eight
+anon policies (section 2b). Disposition E: `0004_observed_storage.sql`
+records them as they are; on live it is a no-op. `pond-images` is R; the
+app still uploads species photos to it (D10). Owner #5 (done).
 
 ### 5.12 Objects from `0002` and `0003`
 
 `pond_chemistry_state.snapshot_version`, `worker_lease`,
 `save_pond_snapshot`, `take_worker_lease` (`0002`) and `worker_status`
-(`0003`) are absent from the dump. Either they were never applied or the
-dump predates them (U, section 2). They are N relative to the observed
-baseline. Their SQL only adds objects and does not depend on any
-disputed `0001` definition, so it applies on top of either baseline.
-The rehearsal in section 10 must prove that. Owner #74.
+(`0003`) are absent from the dump and from live (section 2b): never applied.
+They are N relative to the observed baseline and unchanged. The
+rehearsal (section 10) applies them on top of the restored dump with
+legacy rows, without error and without changing any row. Owner #74.
 
 ## 6. Functions and triggers
 
@@ -239,48 +256,60 @@ separate migration owned by the named issue.
 | D6 | Two `UserData` triggers do the same station lookup, and one makes a blocking OneMap HTTP request inside the write. | Onboarding writes are slow and fail or hang when OneMap is slow. | #53 |
 | D7 | `raw_sensor` has no `recorded_at`. | The poller's `sensor_recorded_at`, `/metrics` sensor age and stale-reading checks get null against live. | #13 or #18 |
 | D8 | Duplicate index on `pond_chemistry_evaluations (userid, evaluated_at desc)`. | Extra write cost. | #22 |
-| D9 | `get_pond_telemetry_history` returns `date_trunc('hour', created_at at time zone 'UTC')`, a `timestamp`, as `timestamptz`. | Correct only while the session time zone is UTC (the Supabase default). | #15 |
+| D9 | `get_pond_telemetry_history` returns `date_trunc('hour', created_at at time zone 'UTC')`, a `timestamp`, as `timestamptz`. | Correct only while the session time zone is UTC (the Supabase default). | #15: fixed by `0006_hourly_history_utc_instants.sql` (tested under UTC and Asia/Singapore sessions) |
+| D10 | The app uploads and reads species photos in a `pond-images` bucket (`fish_image_helper.dart`, `image_controller.dart`, `fish_tips_view.dart`); live has no such bucket (it has `FishImages`, whose policies also require a `public/` folder). | Species photo uploads fail on live. Listed in `KNOWN_UNDEFINED` in `test_schema.py`. | Owner decision: point the app at `FishImages` or add a `pond-images` bucket with policies (not yet assigned) |
+| D11 | The app reads `nea_forecasts.two_hr_forecast` and `nea_forecasts.rainfall_mm` (`ph_outcome_card.dart`, `solar_outcome_card.dart`); live never returns them (the reconstruction invented them). | Those cards use their fallbacks. Listed in `KNOWN_MISSING_PAYLOAD_KEYS` in `test_schema.py`. | #13 |
+| D12 | `algae_engine.parse_image_rows` drops the label of a bare-string `current_state` such as `base`: the failed `json.loads` sets it to `None` before the string branch runs. | None today: every live row is a JSON array (section 2b). | #38 |
+| D13 | The NEA realtime writer's upsert does not set `weather_telemetry.updated_at`, which stays at its first insert (2026-08-21). | Misleading freshness column; no reader uses it. | #24 |
 
 ## 9. Migration strategy
 
-Which path applies depends on the applied-migration history (section 2).
+Live has no migration history (section 2b), so `0001` was never applied
+and is corrected in place:
 
-**If `0001` was never applied anywhere** and the owner confirms it:
-
-1. Move the current `0001_baseline.sql` to
-   `archive/pre-refactor/supabase/0001_baseline_reconstructed.sql` with a
-   header pointing at this report.
-2. Write a new `0001_baseline.sql` containing the dump's objects as
-   observed (sections 4 to 7, every **E** item), including grants, so a
-   fresh database matches live.
-3. Keep `0002` and `0003` unchanged.
-4. Add `0004_algae_severity_ratings.sql` (**N**, section 5.10) and a
-   storage-bucket migration once the bucket list is known.
+1. The reconstruction is kept at
+   `archive/pre-refactor/supabase/0001_baseline_reconstructed.sql`.
+2. `0001_baseline.sql` is the supplied dump, statement for statement, plus
+   the one comment line live has, so all seven public function bodies
+   have the same `pg_get_functiondef` md5 as live. `.gitattributes` keeps
+   its bytes (the function bodies use CRLF, as on live).
+3. `0002` and `0003` are unchanged.
+4. `0004_observed_storage.sql` (E) records the live buckets and storage
+   policies; `0005_algae_severity_ratings.sql` (N) adds the ratings table.
 5. Each **C** item goes in a later migration under its owning issue.
 
-**If `0001` was applied** (or the history is unclear):
-
-1. Leave `0001` unchanged.
-2. Add `0004_reconcile_observed_baseline.sql`. It must bring a database
-   built from `0001` to the observed shape: rename and retype columns,
-   replace the invented weather tables and functions, and add the missing
-   objects. It must do nothing on a database restored from the dump.
-3. Continue as steps 4 and 5 above.
-
-In both cases the reconstructed `0001` is never run against the live
-database (`create table if not exists` does not fix existing columns, and
-`create or replace function` would overwrite the working RPCs), and no
-migration is marked applied just because objects with the same names
-exist.
+Never run `0001` against live: its objects already exist there. Bringing
+live in line means applying `0002`-`0005` only, which the rehearsal
+covers. supabase/README.md gives the owner's procedure.
 
 ## 10. Verification status
 
-| Check | Status |
-|---|---|
-| Fresh path: empty database, then committed migrations, reaches the target | **Not run.** No Docker, PostgreSQL or Supabase CLI on the development machine. |
-| Upgrade path: restore `schema.sql` with synthetic rows, then apply migrations, reaches the same target with rows kept | **Not run**, same reason |
-| SQL tests: two ponds never mixed, empty pond, missing TDS, old `current_state` strings, old snapshot, weather cache shapes | **Not written yet** |
-| `pytest -k schema` (text parsing only) | Exists in `Backend/tests/storage/test_schema.py`; it parses SQL text and cannot show the SQL runs. |
+Local Supabase stack (CLI 2.119.0, Postgres 17), 2026-10-01.
 
-Until a disposable PostgreSQL is available, the SQL gate is reported as
-SKIP and issue #5 stays open.
+| Check | Command | Result |
+|---|---|---|
+| Fresh path: clean database, then `0001`-`0005` | `supabase db reset` | PASS, no errors |
+| Function bodies match live | md5 of `pg_get_functiondef` for the seven public functions, local against live | PASS, all seven equal |
+| Upgrade path: clean database, `schema.sql`, synthetic legacy rows (`tools/rehearsal/legacy_rows.sql`), then `0002`-`0005`; compared with the fresh path | `python tools/db_rehearsal.py` | PASS: every legacy row kept (13 tables); public schema (definitions, grants, policies, publication membership) and storage buckets and policies identical, ignoring comment lines |
+| The rehearsal can fail | same script with `0005` left out of path B | FAIL as expected, reporting the missing `algae_severity_ratings` |
+| SQL tests: two ponds never mixed (dashboard and graph), empty and unknown pond, hours without TDS dropped, substituted temperature and light (D4), Singapore dates and dark-LUX filter, weather cache shapes through `forecast_utils.current_conditions`, 4-day order, JSON-text image states through `parse_image_rows`, pre-`0002` snapshot saved with version 1 and a stale save refused, backend-only objects closed to `anon` | `cd Backend && python -m pytest -q tests/sql` | PASS, 12 tests; they skip without a local database and refuse a non-local `KOI_TEST_DB_URL` |
+| Text-based schema check | `cd Backend && python -m pytest -q -k schema` | PASS, 12 tests, with D10 and D11 listed as known gaps that fail the suite once fixed |
+
+Not verified: the edge functions that write the weather cache.
+
+## 11. Live application (2026-10-01)
+
+| Step | Result |
+|---|---|
+| Full backup of live (`pg_dump -Fc`, all schemas), plus the Supabase CLI roles, schema and data dumps | Taken twice, the second immediately before the push; checksummed; stored off-repo by the owner |
+| Backup restored into the local stack | PASS: one transaction, no errors; row counts equal the dump in all 15 tables with data |
+| `0002`-`0005` rehearsed on the restored copy of live | PASS: about 0.5 s each; no row changed; SQL tests pass on the real data |
+| Rollback script (drops only what `0002`, `0003` and `0005` add, plus the history schema) tested locally | PASS: schema after rollback identical to live's pre-migration schema apart from blank lines |
+| `supabase migration repair --status applied 0001`, `supabase db push --dry-run` (listed exactly `0002`-`0005`), `supabase db push` | PASS |
+| Read-only check afterwards | History `0001`-`0005`; new objects present with RLS on and closed to `anon`; snapshot of pond 455 at `snapshot_version` 1; 2 buckets and 8 storage policies; all seven function md5 sums unchanged; sensor rows kept arriving during and after the push |
+
+Backup finding: the Supabase CLI's `db dump` omits storage policies (it
+dumps `public` only for the schema) and drops comment lines that start in
+column 0 inside function bodies, which is why the supplied dump lacked
+one line of `get_bundled_dashboard_payload`. A raw `pg_dump -Fc` of the
+whole database has both. Use the raw dump as the restore source.

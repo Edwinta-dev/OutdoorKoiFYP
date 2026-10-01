@@ -1,0 +1,2 @@
+schema.sql -text
+supabase/migrations/0001_baseline.sql -text

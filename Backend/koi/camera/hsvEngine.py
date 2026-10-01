@@ -60,6 +60,14 @@ here; each is marked [FIX n] at the site.
     off the lens un-sticks the state instead of pinning the camera on
     the obstruction schedule indefinitely.
 
+[Issue #38] Hysteresis on the dynamic state.
+    One raised frame used to enter dynamic and one stable frame left it.
+    Dynamic is now entered after DYNAMIC_ENTER_FRAMES consecutive raised
+    frames and left after DYNAMIC_EXIT_FRAMES consecutive stable ones.
+    The two streak counters are stored with the state, so current_state
+    is now [label, smoothed, raised_frames, stable_frames]. Rows written
+    before the change ([label, smoothed]) load with both counters at 0.
+
 Also note: analyze_image_bytes' docstring said it "extracts the ROI" but
 used the whole frame. Rather than silently change behaviour, the ROI is
 now an explicit optional argument defaulting to the full frame, and the
@@ -81,6 +89,10 @@ ALPHA = 0.2                       # Low-pass filter smoothing factor (EMA)
 ANOMALY_THRESHOLD = 0.40          # 40% jump triggers OBSTRUCTION state
 DYNAMIC_RATE_THRESHOLD = 0.05     # 5% step triggers DYNAMIC schedule
 CLEAR_THRESHOLD = 0.15            # [FIX 4] back within 15% of baseline = clear
+
+# Hysteresis (issue #38), overridable through Settings
+DYNAMIC_ENTER_FRAMES = 2          # consecutive raised frames to enter DYNAMIC
+DYNAMIC_EXIT_FRAMES = 3           # consecutive stable frames to leave DYNAMIC
 
 
 def analyze_image_bytes(image_bytes: bytes, roi_bounds: tuple | None = None) -> float:
@@ -160,28 +172,60 @@ def _coerce_baseline(current_state, fallback: float) -> float:
         return float(fallback)
 
 
+def _coerce_counters(current_state) -> tuple[int, int]:
+    """(raised_frames, stable_frames) stored after the baseline, or (0, 0)
+    for a row written before issue #38 or a malformed one."""
+    if isinstance(current_state, str) and current_state.strip().startswith("["):
+        try:
+            import json
+            current_state = json.loads(current_state)
+        except (ValueError, TypeError):
+            return 0, 0
+    if not isinstance(current_state, (list, tuple)) or len(current_state) < 4:
+        return 0, 0
+    try:
+        return max(0, int(current_state[2])), max(0, int(current_state[3]))
+    except (TypeError, ValueError):
+        return 0, 0
+
+
+def frame_rise(current_green_ratio: float, last_smoothed_green: float, current_state=DEFAULT_STATE) -> float:
+    """Green-ratio rise of this frame over the smoothed baseline: the rate
+    of change per frame that sets the dynamic capture interval."""
+    return current_green_ratio - _coerce_baseline(current_state, last_smoothed_green)
+
+
 def evalstate(
     current_green_ratio: float,
     last_smoothed_green: float,
     current_state=DEFAULT_STATE,
+    enter_frames: int = DYNAMIC_ENTER_FRAMES,
+    exit_frames: int = DYNAMIC_EXIT_FRAMES,
 ) -> tuple:
     """Evaluates state transitions and updates the low-pass baseline.
 
-    Returns (new_state, updated_smoothed_green).
+    Returns (new_state, updated_smoothed_green, raised_frames, stable_frames).
 
     Priority order, now genuinely exclusive ([FIX 1] if/elif/else):
       1. obstruction - a physically implausible jump, or still latched
          from a previous frame and not yet cleared
-      2. dynamic     - real biological acceleration, poll faster
+      2. dynamic     - real biological acceleration, poll faster. Entered
+         after enter_frames consecutive raised frames (rise above
+         DYNAMIC_RATE_THRESHOLD), left after exit_frames consecutive
+         stable ones
       3. base        - nothing unusual, keep the fixed daily schedule
+
+    raised_frames and stable_frames are the current streaks of raised and
+    stable frames; at most one is non-zero. An obstruction frame resets both.
 
     last_smoothed_green should be the SMOOTHED baseline from the previous
     row, not its raw green_ratio. If the caller passes the stored
-    (state, smoothed) pair as current_state, the correct baseline is
-    recovered from it automatically ([FIX 3]).
+    (state, smoothed, ...) list as current_state, the correct baseline and
+    counters are recovered from it automatically ([FIX 3]).
     """
     state_label = _coerce_state(current_state)
     baseline = _coerce_baseline(current_state, last_smoothed_green)
+    raised, stable = _coerce_counters(current_state)
 
     delta_g = current_green_ratio - baseline
 
@@ -189,26 +233,32 @@ def evalstate(
     if delta_g > ANOMALY_THRESHOLD:
         # A jump this large is not algae growing - it is something in
         # front of the lens. Do NOT let it touch the baseline.
-        return ("obstruction", round(baseline, 4))
+        return ("obstruction", round(baseline, 4), 0, 0)
 
     if state_label == "obstruction":
         # [FIX 4] Latched from a previous frame - stay latched until the
         # view returns close to the trusted baseline.
         if abs(delta_g) > CLEAR_THRESHOLD:
-            return ("obstruction", round(baseline, 4))
-        # Cleared. Resume smoothing from this frame.
-        smoothed = (ALPHA * current_green_ratio) + ((1 - ALPHA) * baseline)
-        return ("base", round(smoothed, 4))
+            return ("obstruction", round(baseline, 4), 0, 0)
+        # Cleared. Resume smoothing from this frame; the streaks restart here.
+        state_label, raised, stable = "base", 0, 0
 
-    # --- PRIORITY 2: DYNAMIC -------------------------------------
     smoothed = round((ALPHA * current_green_ratio) + ((1 - ALPHA) * baseline), 4)
 
-    if delta_g > DYNAMIC_RATE_THRESHOLD or state_label == "dynamic":
-        # Stay in dynamic while the pond is still moving; drop back to
-        # base once the step change settles below the threshold.
-        if delta_g > DYNAMIC_RATE_THRESHOLD:
-            return ("dynamic", smoothed)
-        return ("base", smoothed)
+    # --- PRIORITY 2: DYNAMIC (with hysteresis) --------------------
+    if delta_g > DYNAMIC_RATE_THRESHOLD:
+        raised, stable = raised + 1, 0
+    else:
+        raised, stable = 0, stable + 1
+
+    if state_label == "dynamic":
+        # Stay in dynamic until the pond has held still for exit_frames.
+        if stable >= exit_frames:
+            return ("base", smoothed, raised, stable)
+        return ("dynamic", smoothed, raised, stable)
+
+    if raised >= enter_frames:
+        return ("dynamic", smoothed, raised, stable)
 
     # --- PRIORITY 3: BASE ----------------------------------------
-    return ("base", smoothed)
+    return ("base", smoothed, raised, stable)

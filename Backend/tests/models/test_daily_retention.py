@@ -62,10 +62,12 @@ def test_month_boundary_pruning_compares_dates_not_key_strings():
     # The reference day itself, so pruning has something recent to anchor to.
     engine2.ingest_sensor_sample(sample_at(reference))
 
+    # Keys are now zero-padded local (SGT) dates; 08:00 UTC is 16:00 SGT on
+    # the same date. Legacy unpadded keys are covered in test_local_days.py.
     keys = set(engine2._daily.keys())
-    assert "2026-9-10" in keys, f"Sept 10 (25 days old, inside window) survives pruning: {sorted(keys)}"
-    assert "2026-9-1" not in keys, f"Sept 1 (34 days old, outside window) is pruned: {sorted(keys)}"
-    assert "2026-10-5" in keys, f"the reference day itself is present: {sorted(keys)}"
+    assert "2026-09-10" in keys, f"Sept 10 (25 days old, inside window) survives pruning: {sorted(keys)}"
+    assert "2026-09-01" not in keys, f"Sept 1 (34 days old, outside window) is pruned: {sorted(keys)}"
+    assert "2026-10-05" in keys, f"the reference day itself is present: {sorted(keys)}"
 
 
 def test_from_snapshot_self_heals_an_unbounded_snapshot():

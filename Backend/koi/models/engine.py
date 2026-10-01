@@ -19,11 +19,16 @@ comes out unchanged).
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Callable, Optional
+
+from koi.models.local_time import DEFAULT_POND_TIME_ZONE, local_date, local_day_key
+
+log = logging.getLogger(__name__)
 
 # ============================================================
 # 1. SENSOR GATING LAYER
@@ -241,11 +246,31 @@ class PondConfig:
     fish_count: int = 0
     tap_tds_ppm: float = 30.0
     tap_nitrate_ppm: float = 0.0
+    # IANA zone whose local midnight starts each calendar day in _daily,
+    # matching aggregate_daily_sensor_data(). Snapshots written before this
+    # field existed load with the default.
+    time_zone: str = DEFAULT_POND_TIME_ZONE
 
 
 # ============================================================
 # 3. CHEMISTRY STATE + ASSESSMENT
 # ============================================================
+
+# How a DailyAggregate's day was bounded.
+#   local  - local midnight to local midnight in PondConfig.time_zone.
+#   legacy - written before daily snapshot version 2: bounded by the
+#            calendar fields of each timestamp's own offset, which was UTC
+#            for poller samples. The samples carry no timestamps, so these
+#            cannot be re-bucketed into local days; they are kept as they
+#            were and age out of the retention window.
+DAY_BASIS_LOCAL = "local"
+DAY_BASIS_LEGACY = "legacy"
+LEGACY_KEY_PREFIX = "legacy:"
+
+# Version of the chemistry snapshot's "daily" representation. Absent in
+# snapshots written before local-day keys (treated as version 1).
+DAILY_SNAPSHOT_VERSION = 2
+
 
 @dataclass
 class DailyAggregate:
@@ -253,8 +278,16 @@ class DailyAggregate:
     trusted_ph: list = field(default_factory=list)
     trusted_lux: list = field(default_factory=list)
     trusted_tds: list = field(default_factory=list)
+    # Per calendar day, so one night spans two entries. No model reads it.
     night_ph: list = field(default_factory=list)
     had_volume_event: bool = False
+    basis: str = DAY_BASIS_LOCAL
+    # The calendar date this bucket covers, in its basis. When None,
+    # calendar_date() derives it from day.
+    calendar_day: Optional[date] = None
+
+    def calendar_date(self, time_zone: str = DEFAULT_POND_TIME_ZONE) -> date:
+        return self.calendar_day if self.calendar_day is not None else local_date(self.day, time_zone)
 
     @property
     def has_enough_data(self) -> bool:
@@ -282,10 +315,13 @@ class DailyAggregate:
             "trusted_tds": self.trusted_tds,
             "night_ph": self.night_ph,
             "had_volume_event": self.had_volume_event,
+            "basis": self.basis,
+            "calendar_day": self.calendar_day.isoformat() if self.calendar_day is not None else None,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "DailyAggregate":
+        stored_date = d.get("calendar_day")
         return cls(
             day=datetime.fromisoformat(d["day"]),
             trusted_ph=list(d.get("trusted_ph", [])),
@@ -293,7 +329,22 @@ class DailyAggregate:
             trusted_tds=list(d.get("trusted_tds", [])),
             night_ph=list(d.get("night_ph", [])),
             had_volume_event=d.get("had_volume_event", False),
+            basis=d.get("basis", DAY_BASIS_LOCAL),
+            calendar_day=date.fromisoformat(stored_date) if stored_date else None,
         )
+
+    @classmethod
+    def from_legacy_dict(cls, key: str, d: dict) -> "DailyAggregate":
+        """An entry from a version 1 snapshot, keyed "{year}-{month}-{day}"
+        (not zero-padded) on its own timestamp's calendar fields."""
+        agg = cls.from_dict(d)
+        agg.basis = DAY_BASIS_LEGACY
+        try:
+            y, m, dd = (int(part) for part in key.split("-"))
+            agg.calendar_day = date(y, m, dd)
+        except ValueError:
+            agg.calendar_day = agg.day.date()
+        return agg
 
 
 @dataclass
@@ -315,8 +366,10 @@ class WaterChemistryAssessment:
         return dict(self.__dict__)
 
 
-def _day_key(t: datetime) -> str:
-    return f"{t.year}-{t.month}-{t.day}"
+def _day_key(t: datetime, time_zone: str = DEFAULT_POND_TIME_ZONE) -> str:
+    """Local calendar-day key (YYYY-MM-DD), the same date
+    aggregate_daily_sensor_data() gives a sample with this created_at."""
+    return local_day_key(t, time_zone)
 
 
 # Ammonia (TAN) production per gram of protein fed - ~16% of protein mass
@@ -406,19 +459,54 @@ class WaterChemistryEngine:
         relative to reference_time. See the DAILY_RETENTION_DAYS comment
         above for why this exists.
 
-        Compares DailyAggregate.day (a real datetime) rather than the
-        dict's string keys - _day_key()'s "{year}-{month}-{day}" format is
-        NOT zero-padded, so as a string "2026-10-5" sorts BEFORE
-        "2026-9-1" (character-by-character, '1' < '9') even though October
-        is later than September. String comparison here would silently
-        prune the wrong entries around any month/day >= 10 boundary.
+        Compares calendar dates, not the dict's string keys (legacy keys
+        are not zero-padded and carry a prefix, so they do not sort by
+        date) and not the first-sample datetime (which would make the
+        window depend on the time of day each bucket started).
         """
-        # Strictly-greater-than: reference_time counts as "day 0 ago", so a
-        # window of DAILY_RETENTION_DAYS should retain exactly that many
-        # distinct day-buckets (reference_time's own day plus the N-1 before
-        # it), not N+1 from an inclusive boundary at the far edge.
-        cutoff = reference_time - timedelta(days=self.DAILY_RETENTION_DAYS)
-        self._daily = {k: v for k, v in self._daily.items() if v.day > cutoff}
+        # Strictly-greater-than: reference_time's local date counts as "day 0
+        # ago", so the window retains exactly DAILY_RETENTION_DAYS calendar
+        # dates (that day plus the N-1 before it), not N+1.
+        tz = self.config.time_zone
+        cutoff = local_date(reference_time, tz) - timedelta(days=self.DAILY_RETENTION_DAYS)
+        self._daily = {k: v for k, v in self._daily.items() if v.calendar_date(tz) > cutoff}
+
+    def _day_for(self, t: datetime) -> DailyAggregate:
+        """The bucket for t's local calendar day, created on first use."""
+        tz = self.config.time_zone
+        return self._daily.setdefault(_day_key(t, tz), DailyAggregate(t, calendar_day=local_date(t, tz)))
+
+    def daily_provenance(self) -> dict:
+        """How the retained day buckets were bounded. legacy_days lists the
+        dates of buckets from before local-day keys; their boundaries are
+        UTC midnight (08:00 SGT), not local midnight."""
+        legacy = sorted(
+            v.calendar_date().isoformat() for v in self._daily.values() if v.basis == DAY_BASIS_LEGACY
+        )
+        return {
+            "time_zone": self.config.time_zone,
+            "local_days": len(self._daily) - len(legacy),
+            "legacy_days": legacy,
+        }
+
+    @staticmethod
+    def _load_daily(snapshot: dict) -> dict[str, DailyAggregate]:
+        """The "daily" map of a chemistry snapshot in the current key form.
+
+        Version 1 (no "daily_version"): keys were "{year}-{month}-{day}" of
+        each timestamp's own offset (UTC for poller samples). The stored
+        samples have no timestamps, so they cannot be re-bucketed into local
+        days or merged with local buckets; each is kept unchanged under a
+        "legacy:YYYY-MM-DD" key, marked legacy, and ages out of the window.
+        """
+        raw = snapshot.get("daily", {}) or {}
+        if snapshot.get("daily_version", 1) >= DAILY_SNAPSHOT_VERSION:
+            return {k: DailyAggregate.from_dict(v) for k, v in raw.items()}
+        daily = {}
+        for key, value in raw.items():
+            agg = DailyAggregate.from_legacy_dict(key, value)
+            daily[LEGACY_KEY_PREFIX + agg.calendar_date().isoformat()] = agg
+        return daily
 
     # --------------------------------------------------------
     # Event ingestion
@@ -431,7 +519,7 @@ class WaterChemistryEngine:
         self._events = [e for e in self._events if e.time >= cutoff]
         self._prune_daily(event.time)
 
-        day = self._daily.setdefault(_day_key(event.time), DailyAggregate(event.time))
+        day = self._day_for(event.time)
 
         if event.kind == EventKind.WATER_CHANGE:
             pct = self._resolve_percent(event.volume_percent, event.volume_litres)
@@ -483,7 +571,7 @@ class WaterChemistryEngine:
         self._last_ingest_time = raw.time
         self._prune_daily(raw.time)
 
-        day = self._daily.setdefault(_day_key(raw.time), DailyAggregate(raw.time))
+        day = self._day_for(raw.time)
         if gated.ph.is_trusted and gated.lux.is_trusted:
             day.trusted_ph.append(gated.ph.value)
             day.trusted_lux.append(gated.lux.value)
@@ -916,6 +1004,7 @@ class WaterChemistryEngine:
         return {
             "config": self.config.__dict__,
             "events": [e.to_dict() for e in self._events],
+            "daily_version": DAILY_SNAPSHOT_VERSION,
             "daily": {k: v.to_dict() for k, v in self._daily.items()},
             "tan_mg": self._tan_mg,
             "no2_mg": self._no2_mg,
@@ -931,11 +1020,15 @@ class WaterChemistryEngine:
         config = PondConfig(**snapshot["config"])
         engine = cls(config)
         engine._events = [PondEvent.from_dict(e) for e in snapshot.get("events", [])]
-        engine._daily = {k: DailyAggregate.from_dict(v) for k, v in snapshot.get("daily", {}).items()}
+        engine._daily = cls._load_daily(snapshot)
         # Self-heal any snapshot written before DAILY_RETENTION_DAYS existed -
         # an old unbounded _daily dict shrinks to the rolling window on the
         # very next load, with no migration needed.
         engine._prune_daily(datetime.now(timezone.utc))
+        legacy_days = engine.daily_provenance()["legacy_days"]
+        if legacy_days:
+            log.info("legacy_daily_aggregates_kept",
+                     extra={"legacy_days": len(legacy_days), "time_zone": config.time_zone})
         engine._tan_mg = snapshot.get("tan_mg", 0.0)
         engine._no2_mg = snapshot.get("no2_mg", 0.0)
         engine._no3_mg = snapshot.get("no3_mg", 0.0)
