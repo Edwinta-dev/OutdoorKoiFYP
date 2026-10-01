@@ -24,7 +24,15 @@ the working rules for agents.
   PythonAnywhere.
 - Database changes follow supabase/README.md: new numbered migration only,
   never edit an applied one, never run `migration repair` or `db push`.
-- No Supabase MCP or local Supabase stack here; don't assume DB access.
+- A local Supabase stack is available for SQL tests (Docker Desktop must be
+  running): `supabase start` from the repo root, database at
+  `postgresql://postgres:postgres@127.0.0.1:54322/postgres`. It is
+  disposable: `supabase db reset` rebuilds it from `supabase/migrations`.
+  Use only the local stack in tests and scripts. If Docker is not running,
+  report SQL tests as SKIP.
+- A read-only Supabase MCP server for the live project may be configured on
+  this machine (local scope, not committed). Use it only when the owner asks
+  in an attended session, for read-only evidence; never in unattended runs.
 
 ## Stale material
 - `claude/project-context.md` is a 2026-08-20 snapshot: `Backend/DigitalTwin/`
