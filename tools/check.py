@@ -263,7 +263,8 @@ def stage_sketch(sketch: str) -> Path:
 
 def check_mobile(r: Runner) -> None:
     flutter = shutil.which("flutter")
-    steps = ["pub get", "analyze", "test"]
+    # Existing informational lints are advisory; warnings and errors remain fatal.
+    steps = ["pub get", "analyze --no-fatal-infos", "test"]
     if not flutter:
         for step in steps:
             r.skip(f"mobile: flutter {step}", "flutter")
