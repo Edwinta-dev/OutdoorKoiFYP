@@ -7,7 +7,9 @@ difference. Deployment of the result is tracked in issue #74.
 Status (2026-10-01): live evidence collected (section 2b); baseline
 corrected in place (section 9); fresh-path and dump-upgrade-path
 rehearsal and SQL tests pass on the local Supabase stack (section 10).
-Applying `0002`-`0005` to the live project is the owner's step (#74).
+`0002`-`0005` were applied to the live project on 2026-10-01 after a
+verified backup, a rehearsal on a restored copy of live and a tested
+rollback (section 11).
 
 ## 1. Observed source
 
@@ -293,5 +295,21 @@ Local Supabase stack (CLI 2.119.0, Postgres 17), 2026-10-01.
 | SQL tests: two ponds never mixed (dashboard and graph), empty and unknown pond, hours without TDS dropped, substituted temperature and light (D4), Singapore dates and dark-LUX filter, weather cache shapes through `forecast_utils.current_conditions`, 4-day order, JSON-text image states through `parse_image_rows`, pre-`0002` snapshot saved with version 1 and a stale save refused, backend-only objects closed to `anon` | `cd Backend && python -m pytest -q tests/sql` | PASS, 12 tests; they skip without a local database and refuse a non-local `KOI_TEST_DB_URL` |
 | Text-based schema check | `cd Backend && python -m pytest -q -k schema` | PASS, 12 tests, with D10 and D11 listed as known gaps that fail the suite once fixed |
 
-Not verified: anything on the live project after applying `0002`-`0005`
-(owner step, #74), and the edge functions that write the weather cache.
+Not verified: the edge functions that write the weather cache.
+
+## 11. Live application (2026-10-01)
+
+| Step | Result |
+|---|---|
+| Full backup of live (`pg_dump -Fc`, all schemas), plus the Supabase CLI roles, schema and data dumps | Taken twice, the second immediately before the push; checksummed; stored off-repo by the owner |
+| Backup restored into the local stack | PASS: one transaction, no errors; row counts equal the dump in all 15 tables with data |
+| `0002`-`0005` rehearsed on the restored copy of live | PASS: about 0.5 s each; no row changed; SQL tests pass on the real data |
+| Rollback script (drops only what `0002`, `0003` and `0005` add, plus the history schema) tested locally | PASS: schema after rollback identical to live's pre-migration schema apart from blank lines |
+| `supabase migration repair --status applied 0001`, `supabase db push --dry-run` (listed exactly `0002`-`0005`), `supabase db push` | PASS |
+| Read-only check afterwards | History `0001`-`0005`; new objects present with RLS on and closed to `anon`; snapshot of pond 455 at `snapshot_version` 1; 2 buckets and 8 storage policies; all seven function md5 sums unchanged; sensor rows kept arriving during and after the push |
+
+Backup finding: the Supabase CLI's `db dump` omits storage policies (it
+dumps `public` only for the schema) and drops comment lines that start in
+column 0 inside function bodies, which is why the supplied dump lacked
+one line of `get_bundled_dashboard_payload`. A raw `pg_dump -Fc` of the
+whole database has both. Use the raw dump as the restore source.

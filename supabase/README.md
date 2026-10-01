@@ -3,13 +3,13 @@
 `migrations/` contains the repository's numbered schema changes. Every schema
 change belongs in a migration; do not make an unrecorded live-only change.
 
-| File | What it contains | Live status (2026-10-01) |
+| File | What it contains | Live status |
 |---|---|---|
-| `0001_baseline.sql` | The live schema as observed: the supplied dump (`schema.sql`) plus one comment line, so every public function matches live exactly. Defects included. | Matches live. Never run it there; record it as applied (below). |
-| `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and `save_pond_snapshot` / `take_worker_lease` used by the separated API and poller (issue #8). | Not applied. |
-| `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Not applied. Until it is, the worker logs a failed status write each cycle and `/ready` returns 503. |
-| `0004_observed_storage.sql` | The live storage buckets (`imageAnalysisBucket`, `FishImages`) and their eight anon policies, as observed. | Matches live; applying it changes nothing there. |
-| `0005_algae_severity_ratings.sql` | The `algae_severity_ratings` table for the app's rating card. | Not applied. Until it is, the backend's rating endpoints fail. |
+| `0001_baseline.sql` | The live schema as observed: the supplied dump (`schema.sql`) plus one comment line, so every public function matches live exactly. Defects included. | Recorded as applied on 2026-10-01 (`migration repair`); never run it there. |
+| `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and `save_pond_snapshot` / `take_worker_lease` used by the separated API and poller (issue #8). | Applied 2026-10-01. |
+| `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Applied 2026-10-01. |
+| `0004_observed_storage.sql` | The live storage buckets (`imageAnalysisBucket`, `FishImages`) and their eight anon policies, as observed. | Applied 2026-10-01 (no change on live). |
+| `0005_algae_severity_ratings.sql` | The `algae_severity_ratings` table for the app's rating card. | Applied 2026-10-01. |
 
 How each file was derived, the live evidence and every known difference
 and defect are in
@@ -55,6 +55,15 @@ Tests, scripts and CI never contact the live project, the NEA API or
 PythonAnywhere.
 
 ## Bringing the live project in line (owner, issue #74)
+
+Done on 2026-10-01 with the steps below, after a full backup of live was
+taken, restored and checked locally, the upgrade rehearsed on that copy,
+and a rollback script tested (backups and rollback are kept off-repo by
+the owner). Verified afterwards: history shows `0001`-`0005`, the new
+objects exist with RLS on and closed to `anon`, the existing snapshot has
+`snapshot_version` 1, and all seven public function checksums are
+unchanged. Keep the steps for any future project built from the same
+dump.
 
 Live needs `0002`, `0003` and `0005` (`0004` is a no-op there). `0001`
 must not run on live; it is recorded as applied because it matches live,
