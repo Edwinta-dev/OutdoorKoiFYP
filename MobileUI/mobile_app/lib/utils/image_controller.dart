@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:io';
 
 Future<void> handleImageManagement(
   BuildContext context,
@@ -125,14 +124,6 @@ Future<void> _pickAndUploadImage(
           fileBytes,
           fileOptions: const FileOptions(upsert: true),
         );
-
-    // Retrieve public publicUrl
-    final imageUrl = Supabase.instance.client.storage
-        .from('pond-images')
-        .getPublicUrl(storagePath);
-
-    // Optionally update your local user profile or database record with this new URL string
-    // e.g., updating user inventory database table if required.
 
     if (context.mounted) Navigator.pop(context); // Dismiss loading dialog
 

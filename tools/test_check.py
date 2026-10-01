@@ -89,7 +89,8 @@ LEAKS = {
     "token.ino": ("const char* DEVICE_" + 'TOKEN = "abc";', "device token literal"),
     "key.dart": ("const k = 'eyJ" + "hbGciOiJIUzI1.eyJ" + "pc3MiOiJzdXBh.c2lnbmF0dXJl';",
                  "JWT-shaped string"),
-    "notes.md": ("use the service" + "_role key", "service-role reference"),
+    "notes.md": ("const k = 'SUPABASE_SERVICE" + "_ROLE_KEY = \"abc\"';",
+                 "service-role credential assignment"),
 }
 
 
@@ -122,6 +123,7 @@ def test_secret_scan_passes_config_that_reads_from_secrets_h(tmp_path):
         "a.ino": '#include "secrets.h"\nWiFi.begin(WIFI_SSID, WIFI_PASS);',
         "b.py": 'DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "")',
         "c.dart": "final String bucketName = AppConfig.environment.pondImageBucket;",
+        "schema.sql": 'GRANT ALL ON TABLE pond_data TO "service_role";',
     })
     assert check.scan_for_secrets(tmp_path, paths) == []
 

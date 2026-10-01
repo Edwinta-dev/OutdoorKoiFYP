@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/config/app_config.dart';
 import 'package:mobile_app/screens/config_error_screen.dart';
