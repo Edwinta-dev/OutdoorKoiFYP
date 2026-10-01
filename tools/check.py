@@ -51,7 +51,7 @@ SECRET_PATTERNS = [
     ("JWT-shaped string",
      re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
     ("service-role credential assignment",
-     re.compile(r'''(?i)\b(?:supabase[_\s-]*)?service[_\s-]*role[_\s-]*(?:key|token)\s*[:=]\s*["'][^"']+["']''')),
+     re.compile(r'''(?i)\b(?:supabase[_\s-]*)?service[_\s-]+role[_\s-]*(?:key|token)\s*[:=]\s*["'][^"']+["']''')),
 ]
 # Template files may hold placeholders. archive/ is frozen superseded code:
 # its real credential values were redacted (and are rotated), but it keeps
