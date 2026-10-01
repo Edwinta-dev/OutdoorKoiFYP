@@ -39,6 +39,8 @@ values (455, 'FEEDING', null, null, 40, now() - interval '1 day'),
 insert into public.daily_sensor_averages (userid, sensor_type, avg_value, min_value, max_value, record_date)
 values (455, 'pH', 7.35, 7.1, 7.6, '2026-09-30');
 
+-- Opaque to the rehearsal, which only checks the row survives; it is not
+-- a snapshot the engine can load (that needs the engine's "config" block).
 insert into public.pond_chemistry_state (user_id, snapshot, updated_at)
 values (455, '{"version": 1, "chemistry": {"tan_ppm": 0.12}}', '2026-08-20 00:00+00');
 
