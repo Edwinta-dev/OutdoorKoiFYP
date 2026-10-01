@@ -1,17 +1,23 @@
 # mobile_app
 
-A new Flutter project.
+Flutter client for OutdoorKoi.
 
-## Getting Started
+## Configuration
 
-This project is a starting point for a Flutter application.
+Every environment value is passed at build time from a JSON file:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+cp env/dev.json.example env/dev.json     # or env/prod.json.example
+flutter run --dart-define-from-file=env/dev.json
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+| Key | Value |
+|---|---|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key; never the secret key |
+| `DIGITAL_TWIN_BASE_URL` | Base URL of the digital twin API (`python -m koi.api`) |
+| `POND_IMAGE_BUCKET` | Storage bucket for camera frames; must match `POND_IMAGE_BUCKET` in Backend/.env |
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The real `env/*.json` files are gitignored. There are no built-in
+defaults: a build missing any value opens on a configuration error screen
+that lists what is missing (see `lib/config/app_config.dart`).

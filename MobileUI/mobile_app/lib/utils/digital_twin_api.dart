@@ -10,18 +10,15 @@
 // interventions occur, to estimate when a water change would become
 // necessary - see engine.py's project_forward().
 //
-// Same LAN-IP-on-a-dev-machine convention as the ESP32-CAM's flask_server
-// constant (Embedded/CameraTest/Camera_Arduino_Sketch/CameraMain.ino) -
-// override at build time with --dart-define=DIGITAL_TWIN_BASE_URL=... if
-// the Flask host changes.
+// The service address is DIGITAL_TWIN_BASE_URL in env/*.json - see
+// lib/config/app_config.dart.
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const String _digitalTwinBaseUrl = String.fromEnvironment(
-  'DIGITAL_TWIN_BASE_URL',
-  defaultValue: 'http://192.168.68.65:8080',
-);
+import '../config/app_config.dart';
+
+final String _digitalTwinBaseUrl = AppConfig.environment.digitalTwinBaseUrl;
 
 /// Mirrors WaterChemistryAssessment.to_dict() in Backend/DigitalTwin/engine.py
 class WaterChemistryAssessment {

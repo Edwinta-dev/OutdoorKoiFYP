@@ -1,0 +1,67 @@
+# The OutdoorKoi backend as one package, `koi`.
+#   pip install -e .[dev]          # from Backend/
+#   python tools/check.py backend  # from the repo root
+# Pinned versions for deployment are in requirements.lock (regenerate with
+# the command at its top); requirements.txt installs them on PythonAnywhere.
+# pytest settings stay in pytest.ini.
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "koi"
+version = "0.1.0"
+description = "OutdoorKoi digital twin, poller and camera service"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.1",
+    "flask-cors>=4.0",
+    "apscheduler>=3.11,<4",
+    "supabase>=2.0",
+    "pydantic-settings>=2.7",
+    "python-dotenv>=1.0",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    # Windows has no system time zone database for zoneinfo.
+    "tzdata>=2024.1; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff==0.16.9",
+    "mypy==2.3.1",
+]
+wsgi = ["gunicorn>=22.0"]
+
+[tool.setuptools.packages.find]
+include = ["koi*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# F: pyflakes, E: pycodestyle errors, I: isort, B: flake8-bugbear.
+select = ["F", "E", "I", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["koi", "conftest"]
+# The repository's supabase/ folder (SQL migrations) would otherwise make
+# ruff treat the supabase client library as first-party.
+known-third-party = ["supabase"]
+
+[tool.mypy]
+# Lenient baseline: untyped function bodies are not checked yet.
+ignore_missing_imports = true
+check_untyped_defs = false
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# The tests stub supabase, and a machine without it installed treats it as
+# Any. Skip its bundled types when it is installed so mypy gives the same
+# result on every machine.
+module = ["supabase", "supabase.*", "postgrest", "postgrest.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

@@ -1,0 +1,7 @@
+# PythonAnywhere install, run from Backend/:
+#   pip install --user -r requirements.txt
+# Installs the pinned dependencies from requirements.lock, then the koi
+# package in editable mode so koi/settings.py finds Backend/.env.
+# For development use `pip install -e ".[dev]"` instead.
+-r requirements.lock
+-e .

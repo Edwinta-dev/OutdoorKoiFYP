@@ -20,6 +20,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/app_config.dart';
+
 /// One analysed camera frame.
 class PondCameraFrame {
   final int? id;
@@ -44,12 +46,9 @@ class PondCameraFrame {
 }
 
 class PondCameraStorage {
-  /// Must match `POND_IMAGE_BUCKET` in the backend .env (and the default
-  /// in Backend/SensorAPI/camera/camera.py).
-  static const String bucketName = String.fromEnvironment(
-    'POND_IMAGE_BUCKET',
-    defaultValue: 'imageAnalysisBucket',
-  );
+  /// POND_IMAGE_BUCKET from env/*.json; must match POND_IMAGE_BUCKET in
+  /// Backend/Camera/.env.
+  static final String bucketName = AppConfig.environment.pondImageBucket;
 
   static const String tableName = 'imageTable';
 

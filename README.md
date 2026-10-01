@@ -148,30 +148,89 @@ days for the fish in it.**
 ## Repository layout
 
 ```
-Backend/DigitalTwin/     Flask API, three engines, Supabase persistence, tests
-Backend/Camera/          Camera service, HSV analysis, adaptive capture scheduling
-Firmware/                ESP32 sensor node + ESP32-CAM
-App/                     Flutter client
-PythonSimulatorProject/  Historical simulation study and forecast validation
-docs/                    Design notes, experiment protocols, screenshots
+Backend/koi/                        Python package `koi` (see Backend/README_INTEGRATION.md)
+Backend/koi/models/                 The three engines and the pond orchestrator (pure, no I/O)
+Backend/koi/storage/                Storage interface: Supabase and in-memory implementations
+Backend/koi/api/                    Digital twin Flask API
+Backend/koi/worker/                 Environmental poller
+Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
+Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
+Backend/tests/                      Backend tests, mirroring the package
+Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
+Embedded/sensor_bench/              ESP32 sensor node, serial-only bench build with service mode
+Embedded/camera_node/               ESP32-CAM capture and upload
+Embedded/bench_tests/               Single-purpose pH bench sketches
+Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
+Embedded/tests/                     Host-side tests for koi_sensing
+MobileUI/mobile_app/                Flutter client
+supabase/migrations/                Database schema as numbered SQL migrations (see supabase/README.md)
+PythonSimulatorProject/             Historical simulation study and forecast validation
+docs/                               Design notes, experiment protocols, screenshots
+archive/pre-refactor/               Superseded code, kept for traceability only
 ```
 
 ## Running it
 
+**Checks**
+
+```bash
+pip install -e "Backend[dev]"
+python tools/check.py all          # or backend | firmware | mobile
+```
+
+Runs ruff, mypy and pytest for the backend; the firmware host tests (g++)
+and, if `arduino-cli` is installed, ESP32 compiles of `sensor_bench`,
+`sensor_node` and `camera_node`; and `flutter analyze` and `flutter test`.
+A missing tool prints `SKIP`; `--strict` (used by CI in
+`.github/workflows/ci.yml`) makes it a failure.
+
 **Backend**
 
 ```bash
-cd Backend/DigitalTwin
+cd Backend
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env      # SUPABASE_URL, SUPABASE_KEY, NEA_BASE_URL
-python app.py
+pip install -e ".[dev]"
+cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY, KOI_ENV, ...
+python -m koi.api         # digital twin API on :8080 (runs the poller too when KOI_ENV=development)
+python -m koi.worker      # the poller on its own, for any other KOI_ENV
+python -m koi.camera      # camera service on :5000
 ```
+
+Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;
+`Backend/requirements.txt` installs those pins plus the package (used on
+PythonAnywhere, see `Backend/README_INTEGRATION.md`).
 
 **App**
 
 ```bash
-cd App && flutter pub get && flutter run
+cd MobileUI/mobile_app && flutter pub get
+cp env/dev.json.example env/dev.json   # fill in every value
+flutter run --dart-define-from-file=env/dev.json
+```
+
+A build without these values opens on a configuration error screen that
+names each missing value.
+
+**Firmware**
+
+Copy or symlink `Embedded/libraries/koi_sensing` into your Arduino
+`libraries/` folder (or pass `--libraries Embedded/libraries` to
+`arduino-cli compile`), then open a sketch folder under `Embedded/`.
+`sensor_node` and `camera_node` read Wi-Fi, server and device credentials
+from a gitignored `secrets.h`: copy `secrets.h.example` in the sketch
+folder to `secrets.h` and fill it in. Without it the sketch stops at
+compile time with an `#error` naming the example file.
+
+`Backend/.env.example` lists every variable the backend reads; all of them
+are loaded through `koi/settings.py`.
+The backend check scans tracked files for committed credentials (Wi-Fi
+password assignments, device-token literals, JWT-shaped strings,
+service-role references) outside `.example` files and `archive/`.
+Host-side tests for the shared library:
+
+```bash
+mkdir -p build
+g++ -std=c++17 -I Embedded/libraries/koi_sensing/src Embedded/tests/test_all.cpp -o build/fw_tests && ./build/fw_tests
 ```
 
 **Simulation study**

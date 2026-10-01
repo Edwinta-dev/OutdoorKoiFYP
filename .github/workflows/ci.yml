@@ -1,0 +1,60 @@
+# Every job runs the same command a developer runs locally:
+#   python tools/check.py <suite> --strict
+# --strict turns a missing tool into a failure. No job contacts Supabase,
+# PythonAnywhere or the NEA API.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: Backend/pyproject.toml
+      - run: pip install -e "Backend[dev]"
+      - run: python tools/check.py backend --strict
+
+  firmware:
+    runs-on: ubuntu-latest
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Cache Arduino cores and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-esp32-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+      - name: Install the ESP32 core and sketch libraries
+        run: |
+          arduino-cli config init --overwrite --additional-urls "$ESP32_INDEX"
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install OneWire ArduinoJson ESPSupabase
+      - run: python tools/check.py firmware --strict
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: python tools/check.py mobile --strict

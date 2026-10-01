@@ -1,11 +1,14 @@
-# Secrets
+# Secrets. Each has a committed .example beside it.
 .env
 *.env
 !.env.example
+secrets.h
+MobileUI/mobile_app/env/*.json
 
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 
 # Large scraped data dumps (regenerate via the scraper scripts instead of committing)
 PythonSimulatorProject/*.zip
@@ -19,3 +22,6 @@ PythonSimulatorProject/NEAClimateScraper/*.log
 
 # IDE
 .idea/
+
+# Host-side build output (firmware tests)
+/build/

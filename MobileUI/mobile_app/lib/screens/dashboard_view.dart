@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/pond_heuristics.dart';
+import '../utils/digital_twin_api.dart';
 import '../widgets/dashboard/nea_weather_ribbon.dart';
 import '../widgets/dashboard/temperature_outcome_card.dart';
 import '../widgets/dashboard/solar_outcome_card.dart';
@@ -24,6 +25,20 @@ class DashboardViewState extends State<DashboardView> {
   bool _isLoading = true;
   bool _isFetching = false;
   Map<String, dynamic> _dashboardData = {};
+  // ROUND 2 FIX: was re-parsed on every build() (see the old
+  // _parseTelemetryHistory call site there) - a DateTime.parse + several
+  // double.tryParse per sample, over the whole telemetry_history list, on
+  // every rebuild, even the ones this data had nothing to do with (a parent
+  // rebuild, an animation tick, etc.). build() should be cheap; parsing now
+  // happens once, right when new data actually arrives.
+  List<PondSample> _telemetryHistory = const [];
+  // ROUND 3 FIX: the pH card now prefers this (already computed, already
+  // cached server-side) assessment over recomputing an equivalent risk
+  // model from raw telemetry on every poll - see ph_outcome_card.dart's
+  // resolvePhCardData(). Null until the first successful fetch, or if the
+  // DigitalTwin service is unreachable / this pond has no assessment yet -
+  // PhOutcomeCard falls back to the old client-side heuristic in that case.
+  WaterChemistryAssessment? _phAssessment;
 
   @override
   void initState() {
@@ -56,14 +71,31 @@ class DashboardViewState extends State<DashboardView> {
       final prefs = await SharedPreferences.getInstance();
       final String userid = prefs.getString('userID') ?? '0';
 
-      final response = await Supabase.instance.client.rpc(
-        'get_bundled_dashboard_payload',
-        params: {'p_user_id': userid},
-      );
+      // Independent sources (Supabase RPC vs the DigitalTwin Flask service)
+      // - fetched concurrently so one's latency doesn't serialize behind
+      // the other. A failure in fetchLatestAssessment resolves to null
+      // (see its own doc comment) rather than throwing, so it can never
+      // take down the bundled-payload fetch that already worked before
+      // this backend assessment existed.
+      final results = await Future.wait<dynamic>([
+        Supabase.instance.client.rpc(
+          'get_bundled_dashboard_payload',
+          params: {'p_user_id': userid},
+        ),
+        DigitalTwinApi.fetchLatestAssessment(int.tryParse(userid) ?? 0),
+      ]);
+      final response = results[0];
+      final assessment = results[1] as WaterChemistryAssessment?;
 
       if (mounted && response != null) {
+        final data = Map<String, dynamic>.from(response as Map);
+        // Parse once per actual data refresh (every 30s / on manual
+        // refresh), not once per build() - see the field comment above.
+        final history = _parseTelemetryHistory(data['telemetry_history']);
         setState(() {
-          _dashboardData = Map<String, dynamic>.from(response as Map);
+          _dashboardData = data;
+          _telemetryHistory = history;
+          _phAssessment = assessment;
           _isLoading = false;
         });
       }
@@ -115,9 +147,7 @@ class DashboardViewState extends State<DashboardView> {
 
   @override
   Widget build(BuildContext context) {
-    final List<PondSample> telemetryHistory = _parseTelemetryHistory(
-      _dashboardData['telemetry_history'],
-    );
+    final List<PondSample> telemetryHistory = _telemetryHistory;
     final Map<String, dynamic> forecastData =
         _dashboardData['nea_forecasts'] ?? {};
     final Map<String, dynamic> telemetryData =
@@ -197,6 +227,7 @@ class DashboardViewState extends State<DashboardView> {
                         sensorData: _dashboardData['raw_sensor'] ?? {},
                         forecastData: _dashboardData['nea_forecasts'] ?? {},
                         telemetryHistory: telemetryHistory,
+                        backendAssessment: _phAssessment,
                         onTap: () => _navigateToDetailGraph(
                           'ph',
                           'pH & Buffer Stability',
@@ -284,19 +315,7 @@ class DashboardViewState extends State<DashboardView> {
       ),
     );
   }
-
-  /// Cockpit HUD wrapper: removes hard box edges and gives instruments a subtle radial canvas glow
-  Widget _buildBorderlessInstrumentWrap({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
-          width: 1,
-        ),
-      ),
-      child: child,
-    );
-  }
+  // ROUND 2 FIX: _buildBorderlessInstrumentWrap was dead code - defined but
+  // never called anywhere in this file. Removed rather than left to imply a
+  // "Cockpit HUD wrap" is actually applied somewhere.
 }
