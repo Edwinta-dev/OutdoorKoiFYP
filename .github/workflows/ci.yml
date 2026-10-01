@@ -9,7 +9,37 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      firmware: ${{ steps.filter.outputs.firmware }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'Backend/**'
+              - 'supabase/**'
+              - 'tools/**'
+              - '.github/workflows/ci.yml'
+            firmware:
+              - 'Embedded/**'
+              - 'tools/check.py'
+              - '.github/workflows/ci.yml'
+            mobile:
+              - 'MobileUI/mobile_app/**'
+              - 'tools/check.py'
+              - '.github/workflows/ci.yml'
+
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +52,8 @@ jobs:
       - run: python tools/check.py backend --strict
 
   firmware:
+    needs: changes
+    if: needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
     env:
       ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -47,6 +79,8 @@ jobs:
       - run: python tools/check.py firmware --strict
 
   mobile:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
