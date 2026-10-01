@@ -174,6 +174,54 @@ void test_wifi_retry() {
   CHECK(!wifiShouldStartAnotherAttempt(2, 2));
 }
 
+// ---- Issue #38: camera next wake (camera_wake.h) ----
+
+void test_camera_wake() {
+  int64_t t = -1;
+  CHECK(parseHttpDate("Thu, 01 Oct 2026 06:00:00 GMT", t) && t == 1790834400LL);
+  CHECK(parseHttpDate("Wed, 01 Mar 2000 00:00:00 GMT", t) && t == 951868800LL);
+  CHECK(parseHttpDate("Tue, 29 Feb 2028 23:59:59 GMT", t) && t == 1835481599LL);
+  CHECK(!parseHttpDate("Thu, 01 Foo 2026 06:00:00 GMT", t));
+  CHECK(!parseHttpDate("Thu, 01 Oct 2026 06:00:00 PST", t));
+  CHECK(!parseHttpDate("Thu, 01 Oct 2026", t));
+  CHECK(!parseHttpDate("", t));
+  CHECK(!parseHttpDate(nullptr, t));
+
+  CHECK(parseIsoTime("2026-10-01T14:00:00+08:00", t) && t == 1790834400LL);
+  CHECK(parseIsoTime("2026-10-01T06:00:00Z", t) && t == 1790834400LL);
+  CHECK(parseIsoTime("2026-10-01T06:00:00+00:00", t) && t == 1790834400LL);
+  CHECK(parseIsoTime("2026-09-30T22:30:00-07:30", t) && t == 1790834400LL);
+  CHECK(parseIsoTime("2026-10-01T14:00:00.250+08:00", t) && t == 1790834400LL);
+  CHECK(!parseIsoTime("2026-10-01T14:00:00", t));        // no offset
+  CHECK(!parseIsoTime("2026-10-01T14:00:00+0800", t));
+  CHECK(!parseIsoTime("2026-13-01T14:00:00+08:00", t));
+  CHECK(!parseIsoTime("2026-10-01 14:00:00+08:00", t));
+  CHECK(!parseIsoTime("soon", t));
+  CHECK(!parseIsoTime(nullptr, t));
+
+  // Lower clamp: 15 min unless a test build, never below 30 s.
+  CHECK(cameraMinSleepSeconds(900, false) == 900);
+  CHECK(cameraMinSleepSeconds(30, false) == 900);
+  CHECK(cameraMinSleepSeconds(1800, false) == 1800);
+  CHECK(cameraMinSleepSeconds(30, true) == 30);
+  CHECK(cameraMinSleepSeconds(5, true) == 30);
+  CHECK(cameraMinSleepSeconds(900, true) == 900);
+  static_assert(cameraMinSleepSeconds(60, false) == CAMERA_MIN_SLEEP_DEFAULT_SEC, "compile-time clamp");
+
+  const int64_t now = 1790834400LL;
+  // Sleep to next_at by the server clock, not the reply's sleep_sec.
+  CHECK(cameraWakeSleepSeconds(true, now, true, now + 3600, 3590, 900, 86400) == 3600);
+  // No Date header, or no/unparseable next_at: sleep_sec.
+  CHECK(cameraWakeSleepSeconds(false, 0, true, now + 3600, 3590, 900, 86400) == 3590);
+  CHECK(cameraWakeSleepSeconds(true, now, false, 0, 3590, 900, 86400) == 3590);
+  // next_at already passed: sleep_sec, still clamped.
+  CHECK(cameraWakeSleepSeconds(true, now, true, now - 10, 100, 900, 86400) == 900);
+  // Clamps on both sides.
+  CHECK(cameraWakeSleepSeconds(true, now, true, now + 60, 60, 900, 86400) == 900);
+  CHECK(cameraWakeSleepSeconds(true, now, true, now + 60, 60, 30, 86400) == 60);
+  CHECK(cameraWakeSleepSeconds(true, now, true, now + 10LL * 86400, 60, 900, 86400) == 86400);
+}
+
 int main() {
   test_median_filter();
   test_tds_sensor();
@@ -183,6 +231,7 @@ int main() {
   test_sleep_backoff();
   test_adaptive_settle();
   test_wifi_retry();
+  test_camera_wake();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

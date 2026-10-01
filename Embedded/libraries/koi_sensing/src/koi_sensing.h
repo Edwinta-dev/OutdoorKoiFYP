@@ -10,3 +10,4 @@
 #include "adaptive_settle.h"
 #include "sleep_backoff.h"
 #include "wifi_retry.h"
+#include "camera_wake.h"

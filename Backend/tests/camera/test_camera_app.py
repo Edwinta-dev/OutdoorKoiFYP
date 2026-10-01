@@ -1,6 +1,6 @@
 """koi.camera.create_app: the ESP32-CAM upload service, against
 MemoryStorage."""
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import cv2
 import numpy as np
@@ -93,13 +93,20 @@ def test_upload_survives_a_failed_previous_frame_read(storage):
     assert len(storage.rows("imageTable")) == 1
 
 
+def _fixed_wake(seconds, reason="slot"):
+    at = datetime(2026, 8, 1, 12, 0, tzinfo=imageSchedule.TZ)
+    return imageSchedule.NextWake(seconds, reason, at + timedelta(seconds=seconds))
+
+
 def test_failed_upload_still_returns_the_computed_sleep(storage, monkeypatch):
-    monkeypatch.setattr(imageSchedule, "sleep_for_state", lambda state, now=None, test_mode=False: 900)
+    monkeypatch.setattr(imageSchedule, "next_wake", lambda state, **kwargs: _fixed_wake(900, "dynamic_rising"))
     storage.failing.add("upload_image")
     resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
     assert resp.status_code == 503
     body = resp.get_json()
     assert body["sleep_sec"] == 900
+    assert body["reason"] == "dynamic_rising"
+    assert body["next_at"] == "2026-08-01T12:15:00+08:00"
     assert body["error"]["code"] == "storage_unavailable"
     assert "Try again" in body["error"]["message"]
     assert body["error"]["details"] == {
@@ -112,11 +119,11 @@ def test_failed_upload_still_returns_the_computed_sleep(storage, monkeypatch):
 def test_upload_uses_the_configured_time_zone(storage, monkeypatch):
     seen = []
 
-    def fake_sleep(state, now=None, test_mode=False):
+    def fake_wake(state, now=None, test_mode=False, rise=0.0, levels=()):
         seen.append((now.tzinfo, test_mode))
-        return 600
+        return _fixed_wake(600)
 
-    monkeypatch.setattr(imageSchedule, "sleep_for_state", fake_sleep)
+    monkeypatch.setattr(imageSchedule, "next_wake", fake_wake)
     resp = _client(storage, timezone="UTC").post("/upload", data=_jpeg((0, 0, 0)))
     assert resp.get_json()["sleep_sec"] == 600
     assert [(str(tz), tm) for tz, tm in seen] == [("UTC", False)]

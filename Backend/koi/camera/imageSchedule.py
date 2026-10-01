@@ -8,7 +8,16 @@
 3. Obstruction state:
 - Fixed 2 hour schedule for taking pictures
 
-imageSchedule computes a sleep duration, camera.py encodes it in JSON and returns it to the ESP32.
+imageSchedule computes the next wake (sleep_sec, a reason code and next_at, the local
+wake time), camera.py encodes it in JSON and returns it to the ESP32.
+
+Reason codes (issue #38), sent as `reason` in every reply:
+  slot             base state, sleeping to the next fixed daylight slot
+  dynamic_rising   dynamic state, on the 2 h / 1 h / 30 min step for the frame's rise
+  obstruction_hold obstruction state, fixed 2 h retry
+  night_base       outside daylight, any state sleeps to the next slot
+  error_fallback   the request failed before a schedule was computed
+  test_mode        TEST_MODE short intervals
 
 CHANGES FOR HOSTING (PythonAnywhere):
 - Server clocks run in UTC. All times are now computed in Asia/Singapore explicitly,
@@ -21,8 +30,12 @@ CHANGES FOR HOSTING (PythonAnywhere):
   obstruction/dynamic state can't keep the camera waking all night for dark frames.
 - TEST_MODE=1 (Settings.test_mode) keeps the short test intervals you were using.
 - The time zone comes from Settings.timezone; camera.py passes `now` in it.
+- Dynamic interval (issue #38): replaces the fixed 30 min placeholder. The
+  frame's green-ratio rise over the smoothed baseline picks the step:
+  2 h up to DYNAMIC_RATE_LEVELS[0], 1 h up to DYNAMIC_RATE_LEVELS[1], 30 min above.
 '''
 from datetime import datetime, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Singapore")
@@ -31,9 +44,15 @@ BASE_FIXED_TIMINGS = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00']
 EARLY_WAKE_GRACE = timedelta(minutes=10)
 
 OBSTRUCTION_SLEEP_SEC = 2 * 60 * 60
-DYNAMIC_SLEEP_SEC = 30 * 60        # PLACEHOLDER until the 2h/1h/30min dynamic rule is designed
+
+# Dynamic steps: rise <= levels[0] -> 2 h, <= levels[1] -> 1 h, above -> 30 min.
+# The levels are overridable through Settings.camera_dynamic_rate_levels.
+DYNAMIC_RATE_LEVELS = (0.10, 0.20)
+DYNAMIC_STEP_SEC = (2 * 60 * 60, 60 * 60, 30 * 60)
 
 TEST_SLEEP_SEC = {"base": 100, "obstruction": 80, "dynamic": 60}
+
+REASONS = ("slot", "dynamic_rising", "obstruction_hold", "night_base", "error_fallback", "test_mode")
 
 MIN_SLEEP_SEC = 60
 MAX_SLEEP_SEC = 24 * 60 * 60
@@ -73,22 +92,57 @@ def get_obstructionstate_sleep_seconds() -> int:
     return OBSTRUCTION_SLEEP_SEC
 
 
-def get_dynamicstate_sleep_seconds() -> int:
-    return DYNAMIC_SLEEP_SEC
+def get_dynamicstate_sleep_seconds(rise: float = 0.0, levels: tuple = DYNAMIC_RATE_LEVELS) -> int:
+    """2 h, 1 h or 30 min, shorter as the frame's green-ratio rise passes each level."""
+    low, high = levels
+    if rise > high:
+        return DYNAMIC_STEP_SEC[2]
+    if rise > low:
+        return DYNAMIC_STEP_SEC[1]
+    return DYNAMIC_STEP_SEC[0]
 
 
-def sleep_for_state(state_label: str, now: datetime | None = None, test_mode: bool = False) -> int:
-    """Single entry point used by camera.py."""
-    if test_mode:
-        return TEST_SLEEP_SEC.get(state_label, 100)
+class NextWake(NamedTuple):
+    sleep_sec: int
+    reason: str
+    next_at: datetime
 
+    def reply(self) -> dict:
+        """The keys every camera reply carries."""
+        return {"sleep_sec": self.sleep_sec, "reason": self.reason,
+                "next_at": self.next_at.isoformat(timespec="seconds")}
+
+
+def _wake(now: datetime, sleep_sec: int, reason: str) -> NextWake:
+    at = now + timedelta(seconds=sleep_sec)
+    rounded = at.replace(microsecond=0) + timedelta(seconds=1 if at.microsecond >= 500_000 else 0)
+    return NextWake(sleep_sec, reason, rounded)
+
+
+def fallback_wake(sleep_sec: int, now: datetime | None = None) -> NextWake:
+    """For a reply sent before any schedule was computed."""
+    return _wake(now or datetime.now(TZ), _clamp(sleep_sec), "error_fallback")
+
+
+def next_wake(state_label: str, now: datetime | None = None, test_mode: bool = False,
+              rise: float = 0.0, levels: tuple = DYNAMIC_RATE_LEVELS) -> NextWake:
+    """Single entry point used by camera.py. rise is the frame's green-ratio
+    rise over the smoothed baseline (hsvEngine.frame_rise)."""
     now = now or datetime.now(TZ)
+    if test_mode:
+        return _wake(now, TEST_SLEEP_SEC.get(state_label, 100), "test_mode")
+
     if not is_daylight(now):
-        return get_base_schedule_sleep_seconds(now)
+        return _wake(now, get_base_schedule_sleep_seconds(now), "night_base")
 
     if state_label == "obstruction":
-        return _clamp(get_obstructionstate_sleep_seconds())
+        return _wake(now, _clamp(get_obstructionstate_sleep_seconds()), "obstruction_hold")
     if state_label == "dynamic":
-        return _clamp(get_dynamicstate_sleep_seconds())
-    return get_base_schedule_sleep_seconds(now)
+        return _wake(now, _clamp(get_dynamicstate_sleep_seconds(rise, levels)), "dynamic_rising")
+    return _wake(now, get_base_schedule_sleep_seconds(now), "slot")
 
+
+def sleep_for_state(state_label: str, now: datetime | None = None, test_mode: bool = False,
+                    rise: float = 0.0, levels: tuple = DYNAMIC_RATE_LEVELS) -> int:
+    """next_wake's sleep_sec alone."""
+    return next_wake(state_label, now, test_mode, rise, levels).sleep_sec

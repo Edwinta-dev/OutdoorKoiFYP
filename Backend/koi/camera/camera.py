@@ -3,7 +3,9 @@ koi.camera.camera
 
 Routes of the camera service (formerly Backend/Camera/camera.py; the app is
 built by koi.camera.create_app). Receives an ESP32-CAM frame, runs the HSV
-analysis, stores the frame and its reading, and replies with the next sleep.
+analysis, stores the frame and its reading, and replies with the next wake:
+sleep_sec, reason (an imageSchedule.REASONS code) and next_at (local ISO
+time). Error replies carry the same three keys.
 
 Configuration comes from koi.settings.Settings:
   pond_image_bucket  storage bucket for the frames. The Flutter client
@@ -12,6 +14,7 @@ Configuration comes from koi.settings.Settings:
   device_token       the service is on the public internet; when set,
                      uploads without a matching X-Device-Token are rejected.
   test_mode          short fixed sleep times for bench testing.
+  camera_dynamic_*   hysteresis frame counts and dynamic interval levels.
 
 Metrics (GET /metrics, see camera_metrics): uploads by result, the time
 the HSV analysis and state evaluation take, and state transitions from
@@ -72,13 +75,15 @@ def _storage() -> Storage:
     return current_app.extensions["koi_storage"]
 
 
-def error_reply(status: int, code: str, message: str, sleep_sec: int = FALLBACK_SLEEP_SEC,
+def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWake | None = None,
                 details: dict | None = None, headers: dict | None = None):
-    """The koi.errors envelope; every error still carries a sleep time
-    for the ESP32."""
+    """The koi.errors envelope; every error still carries the next wake
+    (the fallback sleep unless a schedule was already computed)."""
     log_event(log, "upload_rejected", level=logging.WARNING, status=status, code=code, message=message)
     _metrics()[0].inc(result=code)
-    response, status = error_response(status, code, message, details, sleep_sec=sleep_sec)
+    if wake is None:
+        wake = imageSchedule.fallback_wake(FALLBACK_SLEEP_SEC, datetime.now(_settings().tz))
+    response, status = error_response(status, code, message, details, **wake.reply())
     if headers:
         response.headers.update(headers)
     return response, status
@@ -146,17 +151,22 @@ def upload_image():
 
     # 3. Compute new state transition.
     started = time.perf_counter()
-    state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state)
+    state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
+                                enter_frames=settings.camera_dynamic_enter_frames,
+                                exit_frames=settings.camera_dynamic_exit_frames)
+    rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
     analysis_seconds.observe(analysis_time + time.perf_counter() - started)
     from_state = hsvEngine._coerce_state(prev_state)
     transitions.inc(from_state=from_state, to_state=state[0])
 
-    # 4. Next sleep interval
+    # 4. Next wake
     # CHANGED: one call, local pond time, night-time fallback to base schedule
-    time_to_next_image = imageSchedule.sleep_for_state(
-        state[0], now=datetime.now(settings.tz), test_mode=settings.test_mode)
+    wake = imageSchedule.next_wake(
+        state[0], now=datetime.now(settings.tz), test_mode=settings.test_mode,
+        rise=rise, levels=settings.camera_dynamic_rate_levels)
     log_event(log, "frame_analysed", green_ratio=green_ratio, from_state=from_state, to_state=state[0],
-              analysis_ms=round(analysis_time * 1000, 1), sleep_sec=time_to_next_image)
+              analysis_ms=round(analysis_time * 1000, 1), rise=round(rise, 4), sleep_sec=wake.sleep_sec,
+              reason=wake.reason, next_at=wake.reply()["next_at"])
 
     try:
         # 5. Upload the frame to the configured bucket.
@@ -175,7 +185,7 @@ def upload_image():
         return jsonify({
             "status": "success",
             "state": state,
-            "sleep_sec": time_to_next_image
+            **wake.reply(),
         }), 200
 
     except StorageError as e:
@@ -183,7 +193,7 @@ def upload_image():
         return error_reply(
             503, "storage_unavailable",
             f"The pond database could not be reached. Try again in {STORAGE_RETRY_AFTER_SEC} seconds.",
-            sleep_sec=time_to_next_image,
+            wake=wake,
             details={"operation": e.operation, "retry_after_sec": STORAGE_RETRY_AFTER_SEC},
             headers={"Retry-After": str(STORAGE_RETRY_AFTER_SEC)},
         )

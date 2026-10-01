@@ -73,6 +73,18 @@ class Settings(BaseSettings):
     # Feature flag: short fixed camera sleep times for bench testing.
     test_mode: bool = Field(default=False, validation_alias=AliasChoices("TEST_MODE", "test_mode"))
 
+    # Camera state machine (issue #38): consecutive frames with a green-ratio
+    # rise above 0.05 to enter the dynamic schedule, consecutive stable
+    # frames to leave it, and the rise levels (comma separated, ascending)
+    # past which the dynamic interval steps from 2 h to 1 h to 30 min.
+    camera_dynamic_enter_frames: int = Field(
+        default=2, gt=0, validation_alias=AliasChoices("CAMERA_DYNAMIC_ENTER_FRAMES", "camera_dynamic_enter_frames"))
+    camera_dynamic_exit_frames: int = Field(
+        default=3, gt=0, validation_alias=AliasChoices("CAMERA_DYNAMIC_EXIT_FRAMES", "camera_dynamic_exit_frames"))
+    camera_dynamic_rate_levels: Annotated[tuple[float, float], NoDecode] = Field(
+        default=(0.10, 0.20),
+        validation_alias=AliasChoices("CAMERA_DYNAMIC_RATE_LEVELS", "camera_dynamic_rate_levels"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
@@ -82,6 +94,20 @@ class Settings(BaseSettings):
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
             return tuple(o.strip() for o in value.split(",") if o.strip())
+        return value
+
+    @field_validator("camera_dynamic_rate_levels", mode="before")
+    @classmethod
+    def _split_levels(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(v.strip() for v in value.split(",") if v.strip())
+        return value
+
+    @field_validator("camera_dynamic_rate_levels")
+    @classmethod
+    def _ascending_levels(cls, value: tuple[float, float]) -> tuple[float, float]:
+        if not 0 < value[0] < value[1]:
+            raise ValueError("camera_dynamic_rate_levels must be two ascending positive numbers")
         return value
 
     @field_validator("log_level", mode="before")
