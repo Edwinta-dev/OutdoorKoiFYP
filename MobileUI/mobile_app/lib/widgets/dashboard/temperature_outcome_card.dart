@@ -34,7 +34,6 @@ class TemperatureOutcomeCard extends StatelessWidget {
     double currentTemp,
     TemperatureAdvisoryResult? advisory,
   ) {
-    const Color optimalGreen = Color(0xFF50C878);
     const Color warningAmber = Colors.amberAccent;
     const Color alertRed = Color(0xFFFF4D4D);
 
