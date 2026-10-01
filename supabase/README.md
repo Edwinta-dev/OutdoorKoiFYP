@@ -3,103 +3,88 @@
 `migrations/` contains the repository's numbered schema changes. Every schema
 change belongs in a migration; do not make an unrecorded live-only change.
 
-| File | What it contains | Deployment status |
+| File | What it contains | Live status (2026-10-01) |
 |---|---|---|
-| `0001_baseline.sql` | The committed baseline reconstructed before the supplied schema snapshot was reviewed. Its compatibility with that snapshot is being reconciled in [issue #5](https://github.com/Edwinta-dev/OutdoorKoiFYP/issues/5). | Do not assume it was applied or that it matches the deployed database. |
-| `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and `save_pond_snapshot` / `take_worker_lease` used by the separated API and poller. | Present in the repository; its absence from the supplied snapshot does not establish whether it was deployed. Track this in [issue #74](https://github.com/Edwinta-dev/OutdoorKoiFYP/issues/74). |
-| `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Not applied. Apply after `0002`; until then the worker logs a failed status write each cycle and `/ready` returns 503. |
+| `0001_baseline.sql` | The live schema as observed: the supplied dump (`schema.sql`) plus one comment line, so every public function matches live exactly. Defects included. | Matches live. Never run it there; record it as applied (below). |
+| `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and `save_pond_snapshot` / `take_worker_lease` used by the separated API and poller (issue #8). | Not applied. |
+| `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Not applied. Until it is, the worker logs a failed status write each cycle and `/ready` returns 503. |
+| `0004_observed_storage.sql` | The live storage buckets (`imageAnalysisBucket`, `FishImages`) and their eight anon policies, as observed. | Matches live; applying it changes nothing there. |
+| `0005_algae_severity_ratings.sql` | The `algae_severity_ratings` table for the app's rating card. | Not applied. Until it is, the backend's rating endpoints fail. |
 
-## Migration and snapshot rules
-
-The supplied `schema(1).sql` is evidence of one exported schema state. It
-reveals material differences from committed `0001_baseline.sql`, including
-sensor pond identity, weather cache shapes, Singapore daily aggregation,
-station resolution, image identifier/state types and RPC behaviour. Treat it
-as observed state, including any defects. It does not establish live row
-values, applied-migration history, storage bucket configuration, scheduled
-jobs or deployed service revisions.
-
-The snapshot is committed unmodified as `schema.sql` at the repository
-root. Its checksum, the object-by-object comparison with the migrations,
-the disposition of each difference and the evidence still needed are in
+How each file was derived, the live evidence and every known difference
+and defect are in
 [docs/database-reconciliation.md](../docs/database-reconciliation.md).
 
-Before changing migration history, obtain the actual applied-migration ledger
-and checksums. If a migration was applied, keep it immutable and add the next
-numbered corrective migration. Only correct `0001_baseline.sql` if the owner
-confirms from migration history that it has never been applied. Similar object
-names or `IF NOT EXISTS` clauses are not proof that a migration is equivalent
-or safe to mark applied. Never run the reconstructed baseline against an
-existing database as a reconciliation method.
+## The observed snapshot
 
-Keep the observed snapshot separate from the intended target. Compare tables,
-columns and types, defaults, identity sequences, constraints, indexes, function
-signatures and bodies, triggers, policies, grants, default privileges,
-extensions and Realtime publication membership. Classify each difference as
-existing behaviour, an intentional addition, a correction or an unknown that
-needs owner evidence. Preserve legacy rows and identifiers through explicit
-backfills and compatibility paths.
+`schema.sql` at the repository root is the owner-supplied schema-only dump
+(`schema(1).sql`), committed unmodified (SHA-256 in the reconciliation
+report). Do not edit or regenerate it. `.gitattributes` keeps its bytes and
+those of `0001_baseline.sql`, whose function bodies use CRLF as on live.
 
-The committed `0002_worker_lease.sql` needs a rehearsal against the corrected
-baseline. The supplied snapshot omits its objects; this alone is not a reason
-to reopen its implementation issue or to mark it deployed. Record the
-disposition and evidence in issue #74.
+The live project had no migration history when it was checked, so
+`0001_baseline.sql` was corrected in place to match it; the earlier
+reconstruction is kept in `archive/pre-refactor/supabase/`. From now on,
+never edit an applied migration; add the next numbered one instead.
 
-## Reconciliation workflow
+## Local stack and tests
 
-Use disposable local databases for both paths:
-
-1. Apply the reviewed migrations to a fresh database.
-2. Restore the supplied schema snapshot with synthetic legacy rows, then apply
-   the reviewed upgrade path.
-
-Both paths must converge on the same reviewed target schema. Verify definitions,
-grants, policies, publication membership and row/identifier preservation, not
-just object names. SQL integration tests may use these disposable databases;
-tests and CI must never contact the live Supabase project, NEA API or
-PythonAnywhere service.
-
-The schema-only dump does not include enough evidence to settle storage bucket
-rows and object access, enabled API schemas, cron jobs, the external weather
-writer, deployed revisions or actual migration history. Record those as
-unknown until the owner supplies evidence. Do not infer a configured bucket or
-scheduled job from a migration file or installed extension.
-
-## Applying migrations
-
-For a new, empty project, apply the reviewed migration sequence and verify the
-result against the fresh-database rehearsal.
-
-For an existing project, application is an owner deployment action tracked in
-issue #74. Back up the database, verify the applied-migration ledger and
-checksums, rehearse the exact upgrade from the supplied snapshot, review the
-service revisions and external writers, then review the CLI dry-run. Apply
-only the rehearsed sequence after owner approval. Do not use
-`supabase migration repair --status applied` based only on objects appearing
-to exist; migration repair requires confirmed history and checksums. After
-application, collect a fresh schema export and verify row counts, ownership,
-RPC access and service health.
-
-Rules for new migrations:
-
-- Name files `NNNN_short_description.sql`, using the next unused number on the
-  implementation branch.
-- Add nullable/default-compatible fields and explicit backfills. Preserve
-  unknown legacy values instead of inventing them.
-- Never edit an applied migration; add a later migration for corrections.
-- Every changed RPC needs documented inputs, outputs, access rules and
-  disposable SQL behaviour tests.
-
-## Checks
-
-`Backend/tests/storage/test_schema.py` parses the migration files and checks
-that Python services, Flutter and firmware references are represented. It is a
-static check; it does not prove SQL execution or live deployment state.
+Requires Docker Desktop and the Supabase CLI. From the repository root:
 
 ```bash
-cd Backend && python -m pytest -q -k schema
+supabase start                   # first run downloads the images
+supabase db reset                # rebuild the local database from migrations/
+python tools/db_rehearsal.py     # fresh path and dump-upgrade path must converge
+cd Backend && python -m pytest -q tests/sql      # SQL behaviour tests
+cd Backend && python -m pytest -q -k schema      # text-based reference check
 ```
 
-Run the documented disposable-database migration and RPC suite separately.
-If its database runtime is unavailable, report the skip and leave the SQL gate
-incomplete. Never replace SQL execution tests with text parsing alone.
+`tools/db_rehearsal.py` restores `schema.sql` into a clean local database,
+loads synthetic legacy rows, applies every later migration, and compares
+the result with a fresh `supabase db reset`: public schema (definitions,
+grants, policies, publication membership), storage buckets and policies,
+and every legacy row. It leaves the local database at the current
+migrations.
+
+The SQL tests run each case in a rolled-back transaction, refuse any
+`KOI_TEST_DB_URL` that is not local, and skip when no local database
+answers (as in CI). If Docker is not running, report them as SKIP; text
+parsing does not replace them.
+
+Tests, scripts and CI never contact the live project, the NEA API or
+PythonAnywhere.
+
+## Bringing the live project in line (owner, issue #74)
+
+Live needs `0002`, `0003` and `0005` (`0004` is a no-op there). `0001`
+must not run on live; it is recorded as applied because it matches live,
+which the reconciliation report shows (function checksums equal, dump
+restored and compared).
+
+1. Back up the database (Supabase dashboard, Database, Backups).
+2. Link the CLI: `supabase link --project-ref mkzfdxhzmrnapvrhshte`.
+3. Record the baseline as applied, without running it:
+   `supabase migration repair --status applied 0001`.
+4. Review what would run: `supabase db push --dry-run`. It must list
+   exactly `0002`-`0005`.
+5. Apply: `supabase db push`.
+6. Check: `supabase migration list --linked` shows `0001`-`0005` applied;
+   `select snapshot_version from pond_chemistry_state;` returns 1 for the
+   existing row; the API's `/ready` returns 200 once the worker has
+   written its first status.
+
+Agents must not run `migration repair` or `db push`; these steps are the
+owner's.
+
+## Rules for new migrations
+
+- Name files `NNNN_short_description.sql`, using the next unused number.
+- Add nullable or defaulted columns and explicit backfills. Preserve
+  unknown legacy values instead of inventing them.
+- The live default privileges grant `anon` and `authenticated` everything on
+  new tables and functions. Until issue #12 changes that, revoke explicitly
+  and enable RLS on backend-only objects, as `0002`, `0003` and `0005` do.
+- Every changed RPC needs documented inputs, outputs and access rules, and
+  a test in `Backend/tests/sql`.
+- After adding a migration, run `supabase db reset`, the rehearsal and the
+  SQL tests.
