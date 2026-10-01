@@ -3,6 +3,51 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Local calendar days in the chemistry engine (issue #15)
+
+No numeric constant changed. `DAILY_RETENTION_DAYS` is still 30, and the
+`has_enough_data` minimum is still 6 samples a day.
+
+The chemistry engine's day buckets (`WaterChemistryEngine._daily`, which
+feed pH reactivity, its trend and the TDS trend) used to be keyed on the
+calendar fields of each timestamp's own offset. Poller samples are UTC,
+so in practice each day ran from 08:00 to 08:00 SGT. A day now runs from
+local midnight to local midnight in `PondConfig.time_zone` (default
+`Asia/Singapore`), which is the definition `aggregate_daily_sensor_data()`
+already used for `daily_sensor_averages`. Keys are zero-padded ISO dates.
+Retention now keeps exactly 30 local dates, whatever time of day the
+first sample of each bucket arrived. A calendar date is not a night:
+20:00 on one day and 06:00 the next are on different dates. No model
+needs a per-night key, and `night_ph` (per calendar day) is not read.
+
+Evaporation, algae, the feed-rate estimate and the API's daily series
+were reviewed and need no change: they use elapsed time or relative day
+indices, or read `daily_sensor_averages`, whose dates were already local.
+
+Snapshots: the chemistry snapshot now carries `daily_version: 2`, each
+bucket's `basis` and `calendar_day`, and `config.time_zone`. A snapshot
+without `daily_version` (recorded example:
+`Backend/tests/fixtures/snapshot_v2_utc_days.json`) still loads:
+
+- Pools, events, gate state and config load unchanged. A missing
+  `time_zone` takes the default.
+- Old buckets hold sample values without timestamps, so they cannot be
+  re-bucketed into local days, and splitting or merging their means
+  would not be accurate. Each one is kept unchanged under a
+  `legacy:YYYY-MM-DD` key, marked `basis: legacy`, and still counts in
+  the trend. It is never merged with a local bucket for the same date.
+  Legacy buckets leave the 30-day window within 30 days of the upgrade.
+- Limitation: until then the trend mixes days bounded at 08:00 SGT with
+  days bounded at midnight. On the upgrade day one UTC-bounded bucket
+  and one local bucket can each hold part of the same hours, so either
+  may fall below the 6-sample minimum and be skipped.
+  `WaterChemistryEngine.daily_provenance()` lists the legacy dates still
+  held, and loading such a snapshot logs `legacy_daily_aggregates_kept`.
+
+The SQL side changed in `0006_hourly_history_utc_instants.sql`:
+`get_pond_telemetry_history` returns real UTC instants (defect D9), so a
+session whose time zone is not UTC no longer shifts the hourly buckets.
+
 ## Camera state machine and capture schedule (issue #38)
 
 Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/imageSchedule.py`,
