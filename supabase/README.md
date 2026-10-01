@@ -19,6 +19,11 @@ as observed state, including any defects. It does not establish live row
 values, applied-migration history, storage bucket configuration, scheduled
 jobs or deployed service revisions.
 
+The snapshot is committed unmodified as `schema.sql` at the repository
+root. Its checksum, the object-by-object comparison with the migrations,
+the disposition of each difference and the evidence still needed are in
+[docs/database-reconciliation.md](../docs/database-reconciliation.md).
+
 Before changing migration history, obtain the actual applied-migration ledger
 and checksums. If a migration was applied, keep it immutable and add the next
 numbered corrective migration. Only correct `0001_baseline.sql` if the owner
