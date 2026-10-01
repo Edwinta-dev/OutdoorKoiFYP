@@ -7,6 +7,7 @@ change belongs in a migration; do not make an unrecorded live-only change.
 |---|---|---|
 | `0001_baseline.sql` | The committed baseline reconstructed before the supplied schema snapshot was reviewed. Its compatibility with that snapshot is being reconciled in [issue #5](https://github.com/Edwinta-dev/OutdoorKoiFYP/issues/5). | Do not assume it was applied or that it matches the deployed database. |
 | `0002_worker_lease.sql` | `pond_chemistry_state.snapshot_version`, the `worker_lease` table, and `save_pond_snapshot` / `take_worker_lease` used by the separated API and poller. | Present in the repository; its absence from the supplied snapshot does not establish whether it was deployed. Track this in [issue #74](https://github.com/Edwinta-dev/OutdoorKoiFYP/issues/74). |
+| `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Not applied. Apply after `0002`; until then the worker logs a failed status write each cycle and `/ready` returns 503. |
 
 ## Migration and snapshot rules
 

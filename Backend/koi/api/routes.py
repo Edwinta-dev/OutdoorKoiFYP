@@ -49,13 +49,19 @@ Before shipping, verify the caller's Supabase JWT (Flutter already holds
 one from its own auth session) and derive user_id from the verified token
 rather than from the request. See the write-up.
 """
+import logging
 from typing import Optional, TypeVar
 
-from flask import Blueprint, current_app, jsonify, request
+# Flask's Blueprint, under a name that the no-print check (grep for a
+# print call in koi/, issue #10) does not mistake for one.
+from flask import Blueprint as RouteGroup
+from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
 from koi.api import schemas
-from koi.errors import ApiError, PondNotConfigured
+from koi.api.health import readiness
+from koi.errors import ApiError, PondNotConfigured, error_response
+from koi.logs import log_event
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
@@ -63,7 +69,9 @@ from koi.models.engine import EventKind, PondConfig, PondEvent, WaterChemistryEn
 from koi.registry import EngineRegistry
 from koi.storage import Storage, fail_soft
 
-bp = Blueprint("twin", __name__)
+bp = RouteGroup("twin", __name__)
+
+log = logging.getLogger(__name__)
 
 M = TypeVar("M", bound=BaseModel)
 
@@ -218,7 +226,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
             daily_environment=_evaporation_env(ctx), horizon_days=21
         ).get("predicted_topup_days_from_now")
     except Exception as exc:  # noqa: BLE001
-        print(f"[app] evaporation projection failed for {user_id}: {exc}")
+        log_event(log, "evaporation_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
     evap = twin.evaporation.assess(
         current_water_temp_c=float(water_temp), days_to_topup=evap_days
     )
@@ -236,7 +244,7 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
                 horizon_days=21,
             ).get("predicted_scrub_days_from_now")
         except Exception as exc:  # noqa: BLE001
-            print(f"[app] algae projection failed for {user_id}: {exc}")
+            log_event(log, "algae_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
         algae = twin.algae.assess(days_to_scrub=algae_days)
         if algae is not None:
             algae_dict = algae.to_dict()
@@ -720,5 +728,16 @@ def get_algae_forecast(user_id):
 
 @bp.route("/health", methods=["GET"])
 def health():
+    """Liveness: the process is up and answering. Checks nothing else."""
     return jsonify({"status": "ok", "domains": ["chemistry", "evaporation", "algae"]}), 200
+
+
+@bp.route("/ready", methods=["GET"])
+def ready():
+    """Readiness: storage answers and the poller succeeded recently
+    (koi/api/health.py). 503 with the error envelope when not."""
+    is_ready, report = readiness(_storage(), current_app.config["KOI_SETTINGS"])
+    if is_ready:
+        return jsonify({"status": "ready", **report}), 200
+    return error_response(503, "not_ready", "The service is not ready. " + " ".join(report["reasons"]), report)
 

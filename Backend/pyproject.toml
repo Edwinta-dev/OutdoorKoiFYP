@@ -44,8 +44,15 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-# F: pyflakes, E: pycodestyle errors, I: isort, B: flake8-bugbear.
-select = ["F", "E", "I", "B"]
+# F: pyflakes, E: pycodestyle errors, I: isort, B: flake8-bugbear,
+# T20: no print calls (the koi package logs through koi.logs instead).
+select = ["F", "E", "I", "B", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+# Only the koi package must not print; the tests and tools/check.py
+# (linted with this file from the repository root) may.
+"**/tests/**" = ["T20"]
+"**/tools/**" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["koi", "conftest"]

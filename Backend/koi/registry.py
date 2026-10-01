@@ -28,15 +28,19 @@ event endpoints push evaluation rows) can happen twice when a save races.
 The evaluation logs are append-only and the later row reflects the saved
 state, so that is harmless.
 """
+import logging
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from koi.errors import PondNotConfigured
+from koi.logs import log_event
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.pond_twin import PondTwin
 from koi.storage import StaleSnapshotError, Storage
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -95,7 +99,7 @@ class EngineRegistry:
             if rows and not twin.algae._ratings:
                 twin.algae.load_ratings(rows)
         except Exception as exc:  # noqa: BLE001 - ratings are optional
-            print(f"[registry] could not load algae ratings for {user_id}: {exc}")
+            log_event(log, "algae_ratings_unavailable", level=logging.WARNING, pond_id=user_id, error=str(exc))
 
         loaded = _Loaded(twin, version)
         self._twins[user_id] = loaded
@@ -131,7 +135,7 @@ class EngineRegistry:
             try:
                 return self._run(user_id, fn, default_config, pond_depth_m, persist)
             except StaleSnapshotError as exc:
-                print(f"[registry] {exc}; reloading and retrying once")
+                log_event(log, "stale_snapshot_retry", level=logging.WARNING, pond_id=user_id, error=str(exc))
                 self._twins.pop(user_id, None)
             try:
                 return self._run(user_id, fn, default_config, pond_depth_m, persist)

@@ -251,6 +251,7 @@ python simulator.py                    # interactive four-arm simulator
 | `GET` | `/forecast/<user_id>` | Chemistry: first-breach day + full trajectory |
 | `GET` | `/forecast/evaporation/<user_id>` | Next top-up, feed-ration guidance |
 | `GET` | `/forecast/algae/<user_id>` | Next scrub, and what scrubbing today buys you |
+| `GET` | `/health`, `/ready`, `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating
 forward, and return `422` with a human-readable reason rather than projecting from

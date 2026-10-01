@@ -73,12 +73,21 @@ class Settings(BaseSettings):
     # Feature flag: short fixed camera sleep times for bench testing.
     test_mode: bool = Field(default=False, validation_alias=AliasChoices("TEST_MODE", "test_mode"))
 
+    # Lowest level written to the JSON log on stderr.
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
             return tuple(o.strip() for o in value.split(",") if o.strip())
         return value
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _upper_level(cls, value: object) -> object:
+        return value.upper() if isinstance(value, str) else value
 
     @field_validator("timezone")
     @classmethod

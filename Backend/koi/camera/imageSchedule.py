@@ -92,7 +92,3 @@ def sleep_for_state(state_label: str, now: datetime | None = None, test_mode: bo
         return _clamp(get_dynamicstate_sleep_seconds())
     return get_base_schedule_sleep_seconds(now)
 
-
-if __name__ == "__main__":
-    sleep_sec = get_base_schedule_sleep_seconds()
-    print(f"ESP32 should deep sleep for: {sleep_sec} seconds ({sleep_sec / 3600:.2f} hours)")
