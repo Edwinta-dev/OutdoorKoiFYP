@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,74 +14,78 @@ Future<void> handleImageManagement(
   final userId =
       prefs.getString('userID') ?? prefs.getInt('userID')?.toString() ?? '1';
 
+  if (!context.mounted) return;
+
   // 2. Present an action sheet to choose between Uploading a new image or Deleting the current one
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: const Color(0xFF1E293B),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  unawaited(
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (BuildContext sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Manage Species Image',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Option A: Pick & Upload / Overwrite Image
+              ListTile(
+                leading: const Icon(
+                  Icons.add_photo_alternate_outlined,
+                  color: Color(0xFF38BDF8),
+                ),
+                title: const Text(
+                  'Upload / Change Image',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Choose from gallery or camera',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _pickAndUploadImage(context, userId, onImageUpdated);
+                },
+              ),
+
+              const Divider(color: Colors.white12),
+
+              // Option B: Delete Current Image Asset
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
+                title: const Text(
+                  'Remove Image',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                subtitle: const Text(
+                  'Clear current custom image storage',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _deleteUserImage(context, userId, onImageUpdated);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     ),
-    builder: (BuildContext sheetContext) {
-      return Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Manage Species Image',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Option A: Pick & Upload / Overwrite Image
-            ListTile(
-              leading: const Icon(
-                Icons.add_photo_alternate_outlined,
-                color: Color(0xFF38BDF8),
-              ),
-              title: const Text(
-                'Upload / Change Image',
-                style: TextStyle(color: Colors.white),
-              ),
-              subtitle: const Text(
-                'Choose from gallery or camera',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await _pickAndUploadImage(context, userId, onImageUpdated);
-              },
-            ),
-
-            const Divider(color: Colors.white12),
-
-            // Option B: Delete Current Image Asset
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline,
-                color: Colors.redAccent,
-              ),
-              title: const Text(
-                'Remove Image',
-                style: TextStyle(color: Colors.redAccent),
-              ),
-              subtitle: const Text(
-                'Clear current custom image storage',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await _deleteUserImage(context, userId, onImageUpdated);
-              },
-            ),
-          ],
-        ),
-      );
-    },
   );
 }
 
@@ -99,13 +105,16 @@ Future<void> _pickAndUploadImage(
     );
 
     if (image == null) return;
+    if (!context.mounted) return;
 
     // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+        ),
       ),
     );
 
@@ -153,11 +162,13 @@ Future<void> _deleteUserImage(
   VoidCallback onImageUpdated,
 ) async {
   try {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => const Center(
-        child: CircularProgressIndicator(color: Colors.redAccent),
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent),
+        ),
       ),
     );
 

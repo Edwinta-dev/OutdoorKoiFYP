@@ -48,7 +48,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
     }
 
     // Default green when well within optimal bounds
-    return Color(0xFF50C878);
+    return const Color(0xFF50C878);
   }
 
   @override
@@ -176,7 +176,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                                 height: 6,
                                 width: trackWidth,
                                 decoration: BoxDecoration(
-                                  color: synchronizedColor.withOpacity(0.2),
+                                  color: synchronizedColor.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               ),
@@ -210,8 +210,8 @@ class TemperatureOutcomeCard extends StatelessWidget {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: synchronizedColor.withOpacity(
-                                          0.6,
+                                        color: synchronizedColor.withValues(
+                                          alpha: 0.6,
                                         ),
                                         blurRadius: 6,
                                         spreadRadius: 1,
@@ -230,7 +230,7 @@ class TemperatureOutcomeCard extends StatelessWidget {
                         child: Text(
                           'Optimal: ${((targetMinTemp + targetMaxTemp) / 2).toStringAsFixed(1)}°C',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.35),
+                            color: Colors.white.withValues(alpha: 0.35),
                             fontSize: 9,
                           ),
                         ),
@@ -247,10 +247,10 @@ class TemperatureOutcomeCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: synchronizedColor.withOpacity(0.12),
+                  color: synchronizedColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: synchronizedColor.withOpacity(0.35),
+                    color: synchronizedColor.withValues(alpha: 0.35),
                   ),
                 ),
                 child: Row(

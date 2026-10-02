@@ -49,7 +49,7 @@ class FishParameterTable extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: parameters.length,
-            separatorBuilder: (_, __) => Divider(
+            separatorBuilder: (_, _) => Divider(
               color: Colors.white.withValues(alpha: 0.06),
               height: 1,
               indent: 16,

@@ -77,7 +77,7 @@ Widget _actionTile(
   return ListTile(
     contentPadding: EdgeInsets.zero,
     leading: CircleAvatar(
-      backgroundColor: color.withOpacity(0.15),
+      backgroundColor: color.withValues(alpha: 0.15),
       child: Icon(icon, color: color, size: 20),
     ),
     title: Text(
@@ -373,7 +373,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
                 )
               else if (isAlgae)
                 DropdownButtonFormField<String>(
-                  value: _selectedOption,
+                  initialValue: _selectedOption,
                   dropdownColor: const Color(0xFF131B2A),
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                   decoration: _inputDeco('Scrub Method', widget.accentColor),
@@ -409,7 +409,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.white24),
                       ),

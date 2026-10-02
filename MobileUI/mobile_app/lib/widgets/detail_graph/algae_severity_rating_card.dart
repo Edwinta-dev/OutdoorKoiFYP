@@ -230,10 +230,10 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _accent.withOpacity(0.25)),
+        border: Border.all(color: _accent.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -331,8 +331,8 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _header() => Row(
-    children: const [
+  Widget _header() => const Row(
+    children: [
       Icon(Icons.rate_review_outlined, color: _accent, size: 18),
       SizedBox(width: 8),
       Expanded(
@@ -359,7 +359,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
             aspectRatio: 4 / 3,
             child: url == null
                 ? Container(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withValues(alpha: 0.04),
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -399,8 +399,8 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                     // The bucket is public but a phone on mobile data may
                     // still fail - degrade to a labelled placeholder
                     // rather than a broken-image glyph.
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.white.withOpacity(0.04),
+                    errorBuilder: (_, _, _) => Container(
+                      color: Colors.white.withValues(alpha: 0.04),
                       child: const Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -420,7 +420,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return Container(
-                        color: Colors.white.withOpacity(0.04),
+                        color: Colors.white.withValues(alpha: 0.04),
                         child: const Center(
                           child: SizedBox(
                             width: 20,
@@ -449,7 +449,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
                   ),
                 ),
                 child: Row(
@@ -489,13 +489,13 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
+                  color: Colors.black.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.orangeAccent.withOpacity(0.5)),
+                  border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.5)),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.visibility_off_outlined,
                         color: Colors.orangeAccent, size: 11),
                     SizedBox(width: 4),
@@ -517,9 +517,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
@@ -554,9 +554,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,10 +647,10 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.14) : Colors.white.withOpacity(0.03),
+          color: selected ? color.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? color.withOpacity(0.6) : Colors.white.withOpacity(0.06),
+            color: selected ? color.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.06),
             width: selected ? 1.4 : 1,
           ),
         ),
@@ -695,7 +695,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1.5),
                           decoration: BoxDecoration(
-                            color: _accent.withOpacity(0.15),
+                            color: _accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -737,7 +737,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
         color: color,
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(color: color.withOpacity(0.5), blurRadius: 5, spreadRadius: 0.5),
+          BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 5, spreadRadius: 0.5),
         ],
       ),
     );
@@ -748,9 +748,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
@@ -783,15 +783,15 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       child: FilledButton.icon(
         onPressed: canSubmit ? () => _submit(data) : null,
         style: FilledButton.styleFrom(
-          backgroundColor: _accent.withOpacity(0.18),
+          backgroundColor: _accent.withValues(alpha: 0.18),
           foregroundColor: _accent,
-          disabledBackgroundColor: Colors.white.withOpacity(0.04),
+          disabledBackgroundColor: Colors.white.withValues(alpha: 0.04),
           disabledForegroundColor: Colors.white24,
           padding: const EdgeInsets.symmetric(vertical: 13),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: canSubmit ? _accent.withOpacity(0.4) : Colors.white10,
+              color: canSubmit ? _accent.withValues(alpha: 0.4) : Colors.white10,
             ),
           ),
         ),
@@ -831,9 +831,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.greenAccent.withOpacity(0.08),
+        color: Colors.greenAccent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
+        border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -927,7 +927,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 5,
-              backgroundColor: Colors.white.withOpacity(0.06),
+              backgroundColor: Colors.white.withValues(alpha: 0.06),
               valueColor: const AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
@@ -983,7 +983,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     decoration: BoxDecoration(
       color: _surface,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withOpacity(0.08)),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
     ),
     child: child,
   );

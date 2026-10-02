@@ -30,7 +30,7 @@ class TimelineHeaderSelector extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.selected)) {
-                return Colors.cyanAccent.withOpacity(0.2);
+                return Colors.cyanAccent.withValues(alpha: 0.2);
               }
               return Colors.transparent;
             }),

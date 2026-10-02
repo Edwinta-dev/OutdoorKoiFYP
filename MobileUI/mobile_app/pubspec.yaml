@@ -1,5 +1,5 @@
 name: mobile_app
-description: "A new Flutter project."
+description: "OutdoorKoi mobile app for koi pond monitoring and care."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -33,16 +33,14 @@ dependencies:
     
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   http: ^1.6.0
-  fl_chart: ^0.68.0 # Check pub.dev for the latest version
-  formula1_data: ^0.2.0 # Check pub.dev for the latest version
+  fl_chart: ^1.2.0
   shared_preferences: ^2.5.5
-  supabase_flutter: ^2.16.0
-  supabase: ^2.14.0
-  geolocator: ^14.0.3
-  image_picker: ^1.1.2
-  image_cropper: ^8.0.3
+  supabase_flutter: ^2.18.0
+  geolocator: ^14.1.1
+  image_picker: ^1.2.3
+  image_cropper: ^12.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

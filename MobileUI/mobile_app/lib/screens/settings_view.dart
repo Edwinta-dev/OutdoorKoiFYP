@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
+import '../utils/app_log.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -58,7 +59,7 @@ class _SettingsViewState extends State<SettingsView> {
               onPressed:
                   deletePondData, // Implement this function to handle data deletion
 
-              child: Text('Delete Pond Data', style: TextStyle(fontSize: 16)),
+              child: const Text('Delete Pond Data', style: TextStyle(fontSize: 16)),
             ),
           ],
         ),
@@ -72,13 +73,14 @@ class _SettingsViewState extends State<SettingsView> {
     final prefs = await SharedPreferences.getInstance();
     final String userid = prefs.getString('userID') ?? '0';
     final int userIDInt = int.parse(userid);
-    prefs.setBool('isOnboarded', false);
-    print('Deleting pond data for user ID: $userid');
+    await prefs.setBool('isOnboarded', false);
+    log('Deleting pond data for user ID: $userid');
     await Supabase.instance.client
         .from('UserData')
         .delete()
         .eq('userID', userIDInt); // Example for Supabase
-    print('Pond data deleted'); // Placeholder for actual deletion logic
+    log('Pond data deleted'); // Placeholder for actual deletion logic
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const OnboardingScreen()),

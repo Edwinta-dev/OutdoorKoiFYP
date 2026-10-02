@@ -22,7 +22,7 @@ final String _digitalTwinBaseUrl = AppConfig.environment.digitalTwinBaseUrl;
 
 /// The message from a DigitalTwin error body. The service sends
 /// {"error": {"code", "message", "details"}}; a service not yet
-/// redeployed sends {"error": "<message>"}. Anything else gives fallback.
+/// redeployed sends `{"error": "<message>"}`. Anything else gives fallback.
 String errorMessageFrom(Object? body, String fallback) {
   if (body is! Map) return fallback;
   final error = body['error'];
@@ -88,7 +88,7 @@ class WaterChemistryAssessment {
   }
 }
 
-/// One simulated day from GET /forecast/<user_id> - mirrors an entry in
+/// One simulated day from `GET /forecast/<user_id>` - mirrors an entry in
 /// project_forward()'s "trajectory" list in engine.py.
 class ForecastDay {
   final int daysFromNow;
@@ -129,7 +129,7 @@ class ForecastDay {
 }
 
 /// Mirrors the dict returned by WaterChemistryEngine.project_forward() /
-/// GET /forecast/<user_id>. All the "daysFromNow" fields are null if that
+/// `GET /forecast/<user_id>`. All the "daysFromNow" fields are null if that
 /// threshold is never crossed within the requested horizon - treat null
 /// as "not projected to be needed within the window you asked for", not
 /// as "never needed".
@@ -175,7 +175,7 @@ class WaterChemistryForecast {
 }
 
 /// ---------------------------------------------------------------------
-/// EVAPORATION + FEED LOOKAHEAD  (GET /forecast/evaporation/<user_id>)
+/// EVAPORATION + FEED LOOKAHEAD  (`GET /forecast/evaporation/<user_id>`)
 /// Mirrors EvaporationFeedEngine.project_forward() in
 /// Backend/DigitalTwin/evaporation_engine.py
 /// ---------------------------------------------------------------------
@@ -331,7 +331,7 @@ class EvaporationForecast {
 }
 
 /// ---------------------------------------------------------------------
-/// ALGAE LOOKAHEAD  (GET /forecast/algae/<user_id>)
+/// ALGAE LOOKAHEAD  (`GET /forecast/algae/<user_id>`)
 /// Mirrors AlgaeGrowthEngine.project_forward() in
 /// Backend/DigitalTwin/algae_engine.py. Grounded on the ESP32-CAM HSV
 /// green-ratio series in imageTable.
@@ -969,8 +969,8 @@ class DigitalTwinApi {
             body: jsonEncode({
               'user_id': userId,
               'severity': severity.wire,
-              if (imageId != null) 'image_id': imageId,
-              if (greenRatio != null) 'green_ratio': greenRatio,
+              'image_id': ?imageId,
+              'green_ratio': ?greenRatio,
               if (notes != null && notes.isNotEmpty) 'notes': notes,
             }),
           )
@@ -1004,7 +1004,7 @@ class DigitalTwinApi {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'user_id': userId,
-              if (ratingId != null) 'rating_id': ratingId,
+              'rating_id': ?ratingId,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -1057,8 +1057,8 @@ class DigitalTwinApi {
       'food_grams': foodGrams,
       'protein_percent': proteinPercent,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
-      if (fishType != null) 'fish_type': fishType,
-      if (fishCount != null) 'fish_count': fishCount,
+      'fish_type': ?fishType,
+      'fish_count': ?fishCount,
     });
   }
 
@@ -1072,11 +1072,11 @@ class DigitalTwinApi {
   }) {
     return _postEvent('/events/water-change', {
       'user_id': userId,
-      if (volumePercent != null) 'volume_percent': volumePercent,
-      if (volumeLitres != null) 'volume_litres': volumeLitres,
+      'volume_percent': ?volumePercent,
+      'volume_litres': ?volumeLitres,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
-      if (fishType != null) 'fish_type': fishType,
-      if (fishCount != null) 'fish_count': fishCount,
+      'fish_type': ?fishType,
+      'fish_count': ?fishCount,
     });
   }
 
@@ -1090,11 +1090,11 @@ class DigitalTwinApi {
   }) {
     return _postEvent('/events/top-up', {
       'user_id': userId,
-      if (volumePercent != null) 'volume_percent': volumePercent,
-      if (volumeLitres != null) 'volume_litres': volumeLitres,
+      'volume_percent': ?volumePercent,
+      'volume_litres': ?volumeLitres,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
-      if (fishType != null) 'fish_type': fishType,
-      if (fishCount != null) 'fish_count': fishCount,
+      'fish_type': ?fishType,
+      'fish_count': ?fishCount,
     });
   }
 
@@ -1107,10 +1107,10 @@ class DigitalTwinApi {
   }) {
     return _postEvent('/events/algal-scrub', {
       'user_id': userId,
-      if (scrubType != null) 'scrub_type': scrubType,
+      'scrub_type': ?scrubType,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
-      if (fishType != null) 'fish_type': fishType,
-      if (fishCount != null) 'fish_count': fishCount,
+      'fish_type': ?fishType,
+      'fish_count': ?fishCount,
     });
   }
 }

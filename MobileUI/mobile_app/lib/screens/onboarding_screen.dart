@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
+import '../utils/app_log.dart';
 
 // --- Data Model for Fish Inhabitant Items ---
 class FishEntry {
@@ -134,7 +135,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               )
                             : null,
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.08),
+                        fillColor: Colors.white.withValues(alpha: 0.08),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -210,8 +211,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             : ListView.separated(
                                 shrinkWrap: true,
                                 itemCount: filteredList.length,
-                                separatorBuilder: (_, __) => Divider(
-                                  color: Colors.white.withOpacity(0.1),
+                                separatorBuilder: (_, _) => Divider(
+                                  color: Colors.white.withValues(alpha: 0.1),
                                 ),
                                 itemBuilder: (context, index) {
                                   final speciesName = filteredList[index];
@@ -349,7 +350,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       try {
         locationData = await _getCurrentLocation();
       } catch (e) {
-        print("Location retrieval failed: $e");
+        log("Location retrieval failed: $e");
       }
     }
 
@@ -384,12 +385,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await prefs.setString('latitude', latitude);
     await prefs.setString('longitude', longitude);
     await prefs.setString('userID', userID);
-    print("Tank Volume: $volume");
-    print("Total Biomass: $totalBiomassKg");
-    print("Owned Fish Species: $uniqueOwnedSpecies");
-    print("Longitude: $longitude");
-    print("Latitude: $latitude");
-    print("User ID: $userID");
+    log("Tank Volume: $volume");
+    log("Total Biomass: $totalBiomassKg");
+    log("Owned Fish Species: $uniqueOwnedSpecies");
+    log("Longitude: $longitude");
+    log("Latitude: $latitude");
+    log("User ID: $userID");
 
     try {
       final response = await Supabase.instance.client
@@ -406,16 +407,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           .single();
       final Map<String, dynamic>? closestStations = response['ClosestStations'];
       if (closestStations != null) {
-        print("Assigned NEA Stations: $closestStations");
+        log("Assigned NEA Stations: $closestStations");
         // 2. Encode the JSON map to a string and persist to SharedPreferences
         final String jsonString = jsonEncode(closestStations);
         await prefs.setString('assignedStationsJson', jsonString);
       } else {
-        print("No assigned stations returned from database.");
+        log("No assigned stations returned from database.");
       }
-      print("Supabase write success: $response");
+      log("Supabase write success: $response");
     } catch (supabaseError) {
-      print("Supabase write failure: $supabaseError");
+      log("Supabase write failure: $supabaseError");
     }
 
     if (!mounted) return;
@@ -491,12 +492,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           vertical: 16,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.07),
+                          color: Colors.white.withValues(alpha: 0.07),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _currentSelectedSpecies.isNotEmpty
                                 ? Colors.tealAccent
-                                : Colors.white.withOpacity(0.2),
+                                : Colors.white.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
@@ -580,9 +581,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withOpacity(0.15),
+                    color: Colors.teal.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.teal.withOpacity(0.4)),
+                    border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
