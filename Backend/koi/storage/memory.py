@@ -33,6 +33,9 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 from koi.storage.base import (
+    CAMERA_CONFIG_COLUMNS,
+    CAMERA_MASK_VERSION_COLUMNS,
+    IMAGE_COLUMNS,
     PROFILE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
@@ -65,7 +68,10 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "algae_severity_ratings": (
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
-    "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL"),
+    "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL", "mask_version",
+                   "baseline_reset"),
+    "camera_config": CAMERA_CONFIG_COLUMNS,
+    "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
@@ -105,9 +111,10 @@ USER_COLUMN = {
     "pondInterventions": "userID",
     "daily_sensor_averages": "userid",
     "pond_profile": "pond_id",
+    "camera_config": "pond_id",
+    "camera_mask_version": "pond_id",
 }
 
-IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL")
 DAILY_COLUMNS = ("avg_value", "min_value", "max_value", "record_date")
 FEEDING_COLUMNS = ("food_grams", "protein_percentage", "event_timestamp")
 # Columns returned by weather_forecast_as_of and weather_observations_as_of.
@@ -126,6 +133,7 @@ _STAMPED = {
     "pondInterventions": "created_at",
     "UserData": "created_at",
     "pond_profile": "created_at",
+    "camera_mask_version": "created_at",
     "weather_observation": "created_at",
     "weather_forecast_issuance": "created_at",
 }
@@ -398,16 +406,45 @@ class MemoryStorage:
         rows = self._select("imageTable", user_id, newest_first_by="created_at", limit=limit)
         return [self._project(r, IMAGE_COLUMNS) for r in rows]
 
-    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str) -> None:
+    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
         self._check("insert_image")
-        self._insert("insert_image", "imageTable", [{
-            "user_ID": user_id, "green_ratio": green_ratio,
-            "current_state": current_state, "imageURL": image_url}])
+        row = {"user_ID": user_id, "green_ratio": green_ratio, "current_state": current_state,
+               "imageURL": image_url}
+        if mask_version is not None:
+            row["mask_version"] = mask_version
+        if baseline_reset is not None:
+            row["baseline_reset"] = baseline_reset
+        self._insert("insert_image", "imageTable", [row])
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         self._check("upload_image")
         self.uploads[(bucket, path)] = bytes(data)
         return f"memory://{bucket}/{path}"
+
+    # --- camera water mask --------------------------------------------
+    def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
+        self._check("fetch_camera_mask")
+        rows = self._select("camera_config", user_id, limit=1)
+        return self._project(rows[0], CAMERA_CONFIG_COLUMNS) if rows else None
+
+    def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
+        self._check("fetch_camera_mask_versions")
+        rows = sorted(self._select("camera_mask_version", user_id), key=lambda r: r["mask_version"])
+        return [self._project(r, CAMERA_MASK_VERSION_COLUMNS) for r in rows]
+
+    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+        self._check("save_camera_mask")
+        with self._lock:
+            current = self._select("camera_config", user_id, limit=1)
+            version = (current[0]["mask_version"] if current else 0) + 1
+            self._insert("save_camera_mask", "camera_mask_version",
+                         [{"pond_id": user_id, "mask_version": version, "mask": mask}])
+            table = self._tables["camera_config"]
+            table[:] = [r for r in table if not _same_user(r, "pond_id", user_id)]
+            return self._insert("save_camera_mask", "camera_config", [{
+                "pond_id": user_id, "mask": mask, "mask_version": version,
+                "updated_at": self._clock().isoformat()}])[0]
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

@@ -255,6 +255,7 @@ python simulator.py                    # interactive four-arm simulator
 | `GET` | `/forecast/evaporation/<user_id>` | Next top-up, feed-ration guidance |
 | `GET` | `/forecast/algae/<user_id>` | Next scrub, and what scrubbing today buys you |
 | `GET`, `PUT` | `/v1/ponds/{pond}/profile` | Pond profile (volume, depth, fish, tap water, aeration); PUT adds a row effective now or at `effective_from`, earlier rows are kept |
+| `GET`, `PUT` | `/v1/ponds/{pond}/camera/mask` | Water mask for the camera's green ratio: a polygon of `[x, y]` points as fractions of the frame (3 to 64 points, at least 1% of the frame). Each PUT is a new mask version; the camera restarts its smoothed baseline on the first frame with a new version |
 | `GET` | `/health`, `/ready`, `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating

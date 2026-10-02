@@ -16,6 +16,7 @@ from typing import Callable, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from koi.camera import mask as camera_mask
 from koi.models import algae_engine as ae
 
 # An event timestamp outside this window is rejected. The past limit is
@@ -167,6 +168,22 @@ class ProfileUpdate(_Body):
         return self.effective_from if self.effective_from is not None else utc_now()
 
 
+class CameraMaskUpdate(_Body):
+    """PUT /v1/ponds/{pond}/camera/mask: the pond's water mask, a polygon
+    of [x, y] points as fractions (0..1) of the frame's width and height,
+    origin top-left (koi/camera/mask.py). Each save is a new mask version."""
+
+    polygon: list[list[float]]
+
+    @field_validator("polygon")
+    @classmethod
+    def _valid_polygon(cls, value: list[list[float]]) -> list[list[float]]:
+        try:
+            return camera_mask.validate_polygon(value)
+        except ValueError as exc:
+            raise PydanticCustomError("mask_invalid", "{reason}", {"reason": str(exc)}) from None
+
+
 class EvaporationForecastQuery(_Query):
     """depth_m, when given, replaces the profile's depth for this one
     projection; otherwise the profile's depth (or the default depth when
@@ -176,6 +193,6 @@ class EvaporationForecastQuery(_Query):
     depth_m: Optional[float] = Field(default=None, gt=0, le=10)
 
 
-__all__ = ["AlgaeRatingEvent", "AlgaeRatingUndo", "AlgalScrubEvent", "EvaporationForecastQuery", "EventBody",
-           "FeedingEvent", "ForecastQuery", "MAX_EVENT_AGE", "MAX_EVENT_LEAD", "ProfileUpdate", "VolumeEvent",
-           "parse_event_time"]
+__all__ = ["AlgaeRatingEvent", "AlgaeRatingUndo", "AlgalScrubEvent", "CameraMaskUpdate", "EvaporationForecastQuery",
+           "EventBody", "FeedingEvent", "ForecastQuery", "MAX_EVENT_AGE", "MAX_EVENT_LEAD", "ProfileUpdate",
+           "VolumeEvent", "parse_event_time"]

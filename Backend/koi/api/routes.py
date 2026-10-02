@@ -799,6 +799,46 @@ def put_pond_profile(user_id):
 
 
 # ===================================================================
+# Camera water mask (camera_config, migration 0010)
+# ===================================================================
+# The camera service computes the green ratio inside this polygon only.
+# Each PUT is a new mask_version; earlier versions are kept, so a stored
+# frame's mask_version still names the polygon it was analysed over.
+# The camera restarts its smoothed baseline on the first frame with the
+# new version (koi/camera/camera.py).
+
+def _camera_mask_response(user_id: int) -> dict:
+    config = _storage().fetch_camera_mask(user_id)
+    return {
+        "pond_id": user_id,
+        "mask": config["mask"] if config else None,
+        "mask_version": config["mask_version"] if config else None,
+        "updated_at": config["updated_at"] if config else None,
+        "versions": _storage().fetch_camera_mask_versions(user_id),
+    }
+
+
+@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["GET"])
+def get_camera_mask(user_id):
+    """The mask in force and every saved version, oldest first. mask is
+    null when none has been saved: the whole frame is analysed."""
+    return jsonify(_camera_mask_response(user_id)), 200
+
+
+@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["PUT"])
+def put_camera_mask(user_id):
+    """Saves the body's polygon as the pond's next mask version."""
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    update = schemas.CameraMaskUpdate.model_validate(body)
+    saved = _storage().save_camera_mask(user_id, update.polygon)
+    log_event(log, "camera_mask_saved", pond_id=user_id, mask_version=saved["mask_version"],
+              points=len(update.polygon))
+    return jsonify(_camera_mask_response(user_id)), 200
+
+
+# ===================================================================
 
 @bp.route("/health", methods=["GET"])
 def health():

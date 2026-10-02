@@ -155,9 +155,31 @@ class Storage(Protocol):
 
     def fetch_image_history(self, user_id: int | str, limit: int = 200) -> list[dict]: ...
 
-    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str) -> None: ...
+    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
+        """mask_version and baseline_reset (migration 0010) are left out of
+        the insert when None, so a frame without a mask is stored the same
+        way on a database that does not have the columns yet."""
+        ...
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str: ...
+
+    # --- camera water mask (camera_config, migration 0010) -------------
+    def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
+        """The pond's camera_config row {pond_id, mask, mask_version,
+        updated_at}, or None when no mask has been saved."""
+        ...
+
+    def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
+        """Every saved mask of the pond {pond_id, mask_version, mask,
+        created_at}, oldest version first."""
+        ...
+
+    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+        """Stores mask (a validated polygon, koi/camera/mask.py) as the
+        pond's next mask version and makes it the one in force, in one
+        step (save_camera_mask). Returns the new camera_config row."""
+        ...
 
     # --- pond config (UserData) ---------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]: ...
@@ -238,6 +260,12 @@ class Storage(Protocol):
 # Row conversions shared by both implementations
 # ---------------------------------------------------------------------
 _BIOMASS_KG_TO_GRAMS = 1000.0
+
+# imageTable columns the services read (mask_version, baseline_reset: 0010).
+IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset")
+# camera_config and camera_mask_version columns (migration 0010).
+CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
+CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
 
 # pond_profile's columns (migration 0008).
 PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",

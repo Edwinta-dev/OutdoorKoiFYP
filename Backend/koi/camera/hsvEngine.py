@@ -72,6 +72,10 @@ Also note: analyze_image_bytes' docstring said it "extracts the ROI" but
 used the whole frame. Rather than silently change behaviour, the ROI is
 now an explicit optional argument defaulting to the full frame, and the
 docstring says so.
+
+[Issue #39] Water mask. analyze_image_bytes also takes the pond's mask, a
+normalised polygon (koi/camera/mask.py), and counts green over the
+pixels inside it only. camera.py passes the mask stored for the pond.
 """
 import cv2
 import numpy as np
@@ -95,12 +99,16 @@ DYNAMIC_ENTER_FRAMES = 2          # consecutive raised frames to enter DYNAMIC
 DYNAMIC_EXIT_FRAMES = 3           # consecutive stable frames to leave DYNAMIC
 
 
-def analyze_image_bytes(image_bytes: bytes, roi_bounds: tuple | None = None) -> float:
+def analyze_image_bytes(image_bytes: bytes, roi_bounds: tuple | None = None,
+                        polygon: list | None = None) -> float:
     """Decodes raw JPEG bytes, optionally crops to a region of interest,
     applies the HSV green mask and returns green coverage as a ratio 0..1.
 
     roi_bounds: (x, y, w, h) in pixels, or None for the entire frame
     (the default, matching existing deployed behaviour).
+    polygon: the water mask, [x, y] points as fractions of the frame (or
+    of the ROI when roi_bounds is given), or None for every pixel. The
+    ratio is then green pixels inside the polygon over all pixels inside it.
 
     Cropping to just the water surface is worth doing when the camera
     frame includes decking, planting or sky - green_ratio is a fraction
@@ -122,8 +130,17 @@ def analyze_image_bytes(image_bytes: bytes, roi_bounds: tuple | None = None) -> 
 
     hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv_roi, LOWER_GREEN, UPPER_GREEN)
-    green_pixels = cv2.countNonZero(mask)
-    return round(green_pixels / float(mask.size), 4)
+    if polygon is None:
+        green_pixels = cv2.countNonZero(mask)
+        return round(green_pixels / float(mask.size), 4)
+
+    height, width = mask.shape
+    region = np.zeros((height, width), dtype=np.uint8)
+    corners = np.array([[round(x * width), round(y * height)] for x, y in polygon], dtype=np.int32)
+    cv2.fillPoly(region, [corners], 255)
+    region_pixels = cv2.countNonZero(region)  # at least 1: fillPoly draws the outline
+    green_pixels = cv2.countNonZero(cv2.bitwise_and(mask, region))
+    return round(green_pixels / float(region_pixels), 4)
 
 
 def _coerce_state(current_state) -> str:

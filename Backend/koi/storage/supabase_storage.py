@@ -32,6 +32,9 @@ from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
 from koi.storage.base import (
+    CAMERA_CONFIG_COLUMNS,
+    CAMERA_MASK_VERSION_COLUMNS,
+    IMAGE_COLUMNS,
     PROFILE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
@@ -43,7 +46,6 @@ from koi.storage.base import (
 if TYPE_CHECKING:
     from supabase import Client
 
-IMAGE_COLUMNS = "id, created_at, green_ratio, current_state, imageURL"
 DAILY_COLUMNS = "avg_value, min_value, max_value, record_date"
 WINDOW_COLUMNS = ("product, window_start, window_end, status, attempts, pages, records, inserted, duplicates, "
                   "malformed, last_error, updated_at")
@@ -346,7 +348,7 @@ class SupabaseStorage:
         with _operation("fetch_image_by_id"):
             res = (
                 self._db().table("imageTable")
-                .select(IMAGE_COLUMNS)
+                .select(", ".join(IMAGE_COLUMNS))
                 .eq("user_ID", user_id)
                 .eq("id", image_id)
                 .limit(1)
@@ -360,7 +362,7 @@ class SupabaseStorage:
         with _operation("fetch_image_history"):
             res = (
                 self._db().table("imageTable")
-                .select(IMAGE_COLUMNS)
+                .select(", ".join(IMAGE_COLUMNS))
                 .eq("user_ID", user_id)
                 .order("created_at", desc=True)
                 .limit(limit)
@@ -368,14 +370,18 @@ class SupabaseStorage:
             )
             return list(res.data or [])
 
-    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str) -> None:
+    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
         with _operation("insert_image"):
-            self._db().table("imageTable").insert({
+            row = {
                 "user_ID": user_id,
                 "green_ratio": green_ratio,
                 "current_state": current_state,
                 "imageURL": image_url,
-            }).execute()
+                "mask_version": mask_version,
+                "baseline_reset": baseline_reset,
+            }
+            self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         """Stores a JPEG and returns its public URL."""
@@ -385,6 +391,34 @@ class SupabaseStorage:
             # supabase-py has historically appended a bare "?" here, which
             # makes cache keys inconsistent downstream. Strip it at the source.
             return str(files.get_public_url(path)).rstrip("?&")
+
+    # --- camera water mask --------------------------------------------
+    def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
+        with _operation("fetch_camera_mask"):
+            res = (
+                self._db().table("camera_config")
+                .select(", ".join(CAMERA_CONFIG_COLUMNS))
+                .eq("pond_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            return res.data[0] if res.data else None
+
+    def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
+        with _operation("fetch_camera_mask_versions"):
+            res = (
+                self._db().table("camera_mask_version")
+                .select(", ".join(CAMERA_MASK_VERSION_COLUMNS))
+                .eq("pond_id", user_id)
+                .order("mask_version")
+                .execute()
+            )
+            return list(res.data or [])
+
+    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+        with _operation("save_camera_mask"):
+            res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
+            return res.data[0]
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

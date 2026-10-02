@@ -19,6 +19,17 @@ Configuration comes from koi.settings.Settings:
 Metrics (GET /metrics, see camera_metrics): uploads by result, the time
 the HSV analysis and state evaluation take, and state transitions from
 the previous frame's state to the new one.
+
+Water mask (issue #39, migration 0010): each upload reads the pond's
+camera_config row once and computes the green ratio over that row's
+polygon only, storing that row's mask_version with the frame, so the
+stored version always names the polygon used even if the mask is saved
+again mid-upload. When the frame's mask_version differs from the previous
+frame's (null counts as the whole frame), the smoothed baseline and the
+frame counters restart from this frame and the row records
+baseline_reset = "mask_changed". The decision uses only stored rows, so
+it holds across service restarts. If the mask cannot be read the frame
+is analysed over the whole frame and stored without a mask_version.
 """
 import logging
 import time
@@ -89,29 +100,45 @@ def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWa
     return response, status
 
 
+# Baseline reset reason stored in imageTable.baseline_reset (migration 0010).
+RESET_MASK_CHANGED = "mask_changed"
+
+
 # Helper Function: Fetch Previous Image Data
 def get_prev_image_data(user_id: str):
-    """Returns (prev_raw_green_ratio, prev_current_state).
+    """Returns (prev_raw_green_ratio, prev_current_state, prev_row).
 
     The whole current_state value is returned untouched and handed
     straight to evalstate(), which recovers the smoothed baseline from it
     itself. The raw ratio is still returned as a fallback for the very
-    first reading, when no pair exists yet.
+    first reading, when no pair exists yet. prev_row is the previous
+    imageTable row (for its mask_version), or None for the first reading.
     """
     rows: list[dict] = fail_soft(lambda: _storage().fetch_image_history(user_id, limit=1), [])
     if rows:
         latest = rows[0]
         prev_green_ratio = latest.get("green_ratio", 0.15)
         prev_state = latest.get("current_state", hsvEngine.DEFAULT_STATE)
-        return prev_green_ratio, prev_state
+        return prev_green_ratio, prev_state, latest
 
     log_event(log, "camera_baseline_defaulted")
-    return 0.15, hsvEngine.DEFAULT_STATE
+    return 0.15, hsvEngine.DEFAULT_STATE, None
+
+
+def get_mask(user_id: str) -> tuple[list | None, int | None]:
+    """(polygon, mask_version) from one read of the pond's camera_config
+    row; (None, None) when the pond has no mask or it cannot be read."""
+    config = fail_soft(lambda: _storage().fetch_camera_mask(user_id), None)
+    if not config:
+        return None, None
+    return config["mask"], int(config["mask_version"])
 
 
 # Helper Function: Insert Current Reading Record
-def push_current_data(green_ratio: float, user_id: str, state, public_url: str):
-    fail_soft(lambda: _storage().insert_image(user_id, green_ratio, state, public_url), None)
+def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
+                      mask_version: int | None = None, baseline_reset: str | None = None):
+    fail_soft(lambda: _storage().insert_image(user_id, green_ratio, state, public_url,
+                                              mask_version=mask_version, baseline_reset=baseline_reset), None)
 
 
 @bp.route('/', methods=['GET'])
@@ -136,25 +163,38 @@ def upload_image():
     user_id = request.headers.get('X-User-ID', 'default_user')
     uploads, analysis_seconds, transitions = _metrics()
 
-    # 1. Compute HSV Green Ratio for current frame
+    # 1. Compute HSV Green Ratio for current frame, over the pond's water
+    # mask. The polygon and its version come from one read, and that
+    # version is the one stored with the frame.
     # CHANGED: a corrupt JPEG used to raise here, outside any try, and the ESP32
     # got an HTML 500 page with no sleep time in it.
+    polygon, mask_version = get_mask(user_id)
     started = time.perf_counter()
     try:
-        green_ratio = hsvEngine.analyze_image_bytes(file_bytes)
+        green_ratio = hsvEngine.analyze_image_bytes(file_bytes, polygon=polygon)
     except Exception as e:
         return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
     analysis_time = time.perf_counter() - started
 
     # 2. Fetch historical state & baseline
-    prev_green_ratio, prev_state = get_prev_image_data(user_id)
+    prev_green_ratio, prev_state, prev_row = get_prev_image_data(user_id)
 
-    # 3. Compute new state transition.
+    # 3. Compute new state transition. A different mask from the previous
+    # frame's means the stored baseline covers another area: restart it
+    # from this frame, with the counters at zero.
     started = time.perf_counter()
-    state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
-                                enter_frames=settings.camera_dynamic_enter_frames,
-                                exit_frames=settings.camera_dynamic_exit_frames)
-    rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
+    baseline_reset = None
+    if prev_row is not None and prev_row.get("mask_version") != mask_version:
+        baseline_reset = RESET_MASK_CHANGED
+        log_event(log, "camera_baseline_reset", reason=baseline_reset,
+                  from_mask_version=prev_row.get("mask_version"), to_mask_version=mask_version)
+        state = (hsvEngine.DEFAULT_STATE, green_ratio, 0, 0)
+        rise = 0.0
+    else:
+        state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
+                                    enter_frames=settings.camera_dynamic_enter_frames,
+                                    exit_frames=settings.camera_dynamic_exit_frames)
+        rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
     analysis_seconds.observe(analysis_time + time.perf_counter() - started)
     from_state = hsvEngine._coerce_state(prev_state)
     transitions.inc(from_state=from_state, to_state=state[0])
@@ -164,7 +204,8 @@ def upload_image():
     wake = imageSchedule.next_wake(
         state[0], now=datetime.now(settings.tz), test_mode=settings.test_mode,
         rise=rise, levels=settings.camera_dynamic_rate_levels)
-    log_event(log, "frame_analysed", green_ratio=green_ratio, from_state=from_state, to_state=state[0],
+    log_event(log, "frame_analysed", green_ratio=green_ratio, mask_version=mask_version,
+              from_state=from_state, to_state=state[0],
               analysis_ms=round(analysis_time * 1000, 1), rise=round(rise, 4), sleep_sec=wake.sleep_sec,
               reason=wake.reason, next_at=wake.reply()["next_at"])
 
@@ -178,7 +219,7 @@ def upload_image():
         log_event(log, "frame_stored", bucket=settings.pond_image_bucket, path=filename)
 
         # 6. Save the reading to imageTable
-        push_current_data(green_ratio, user_id, state, public_url)
+        push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset)
 
         # 7. Return payload to ESP32
         uploads.inc(result="stored")
