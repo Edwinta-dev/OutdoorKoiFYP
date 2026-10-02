@@ -238,10 +238,9 @@ class PondConfig:
     volume_litres: float
     estimated_biomass_grams: float
     # Not currently consumed by any chemistry calculation below - descriptive
-    # only. Not stored server-side (UserData has no fish_type/fish_count
-    # columns); sourced from the phone's SharedPreferences when available,
-    # see app.py's event endpoints. Default when unavailable (e.g. the
-    # poller, which has no per-request phone input to read from).
+    # only. Set from the pond's profile (koi/models/profile.py, the
+    # pond_profile table); the defaults stand in when the profile leaves
+    # them unknown.
     fish_type: str = "Unspecified"
     fish_count: int = 0
     tap_tds_ppm: float = 30.0

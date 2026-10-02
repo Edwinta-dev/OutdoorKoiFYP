@@ -70,7 +70,6 @@ BODY_CASES = [
     # wrong type
     ("/events/feeding", {**FEED, "food_grams": "lots"}, "food_grams"),
     ("/events/feeding", {**FEED, "user_id": "455"}, "user_id"),
-    ("/events/feeding", {**FEED, "fish_count": True}, "fish_count"),
     ("/events/water-change", {**VOLUME, "volume_percent": "half"}, "volume_percent"),
     ("/events/top-up", {**VOLUME, "volume_litres": [5]}, "volume_litres"),
     ("/events/algal-scrub", {**SCRUB, "scrub_type": 5}, "scrub_type"),

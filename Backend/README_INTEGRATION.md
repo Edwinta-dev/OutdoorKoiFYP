@@ -211,7 +211,15 @@ Cheap cached reads (dashboard cards + alert badges):
 
 Live projections (detail graph screens):
 - `GET /forecast/<uid>?horizon_days=21` — chemistry
-- `GET /forecast/evaporation/<uid>?horizon_days=14&depth_m=1.2`
+- `GET /forecast/evaporation/<uid>?horizon_days=14` — uses the depth in
+  the pond profile, or 1.2 m when none is stored; `&depth_m=0.9` replaces
+  it for that one projection
+
+Pond profile (volume, depth, fish, tap water, aeration; effective-dated):
+- `GET /v1/ponds/<uid>/profile` — the profile in force now and every stored row
+- `PUT /v1/ponds/<uid>/profile` — `{volume_l, biomass_g, depth_m?, fish_type?,
+  fish_count?, tap_tds_ppm?, tap_nitrate_ppm?, aeration?, effective_from?}`;
+  adds a row in force from `effective_from` (default now, UTC when no offset)
 - `GET /forecast/algae/<uid>?horizon_days=21`
 
 Algae severity ratings:

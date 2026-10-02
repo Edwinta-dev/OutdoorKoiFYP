@@ -50,6 +50,16 @@ class StaleSnapshotError(StorageError):
         super().__init__("save_engine_snapshot", f"snapshot for user {user_id} is newer than version {base_version}")
 
 
+class DuplicateProfileError(StorageError):
+    """insert_pond_profile was given an effective_from at which the pond
+    already has a profile row ((pond_id, effective_from) is unique)."""
+
+    def __init__(self, user_id: int, effective_from: str):
+        self.user_id = user_id
+        self.effective_from = effective_from
+        super().__init__("insert_pond_profile", f"pond {user_id} already has a profile effective {effective_from}")
+
+
 def fail_soft(call: Callable[[], T], default: T) -> T:
     """Runs call(); on StorageError logs a storage_call_failed warning and
     returns default. For the reads and writes a caller can do without, such
@@ -152,6 +162,19 @@ class Storage(Protocol):
 
     def fetch_pond_config(self, user_id: int) -> Optional[dict]: ...
 
+    # --- pond profile (pond_profile, migration 0008) -------------------
+    def fetch_pond_profiles(self, user_id: int) -> list[dict]:
+        """Every profile row of the pond (PROFILE_COLUMNS), oldest
+        effective_from first. Empty when the pond has none."""
+        ...
+
+    def insert_pond_profile(self, user_id: int, profile: dict) -> dict:
+        """Inserts one row from profile (effective_from as ISO 8601 and
+        the PROFILE_FIELDS of koi/models/profile.py) with source 'api',
+        and returns the stored row. Raises DuplicateProfileError when the
+        pond already has a row at that effective_from."""
+        ...
+
     # --- account links (UserData.auth_uid, migration 0007) -------------
     def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
         """The userID of the pond linked to this Supabase account, or None."""
@@ -177,14 +200,17 @@ class Storage(Protocol):
 # ---------------------------------------------------------------------
 _BIOMASS_KG_TO_GRAMS = 1000.0
 
+# pond_profile's columns (migration 0008).
+PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",
+                   "fish_count", "tap_tds_ppm", "tap_nitrate_ppm", "aeration", "source", "created_at")
+
 
 def pond_config_from_userdata_row(row: dict) -> Optional[dict]:
     """UserData is populated at onboarding (see onboarding_screen.dart) and
     only has volume (litres) + biomass (KG, aggregated across all fish
-    entries) - not fish_type/fish_count, which live in the phone's
-    SharedPreferences and never get synced server-side. Callers that need
-    those two fields (the event endpoints) fill them in from the request
-    body; the poller falls back to PondConfig's own defaults."""
+    entries). It is the legacy pond configuration: a pond's profile
+    (pond_profile, koi/models/profile.py) is built from this only when
+    the pond has no pond_profile rows."""
     if row.get("volume") is None or row.get("biomass") is None:
         return None
     return {

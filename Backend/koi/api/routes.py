@@ -48,6 +48,7 @@ pond linked to that account (koi/api/auth.py): 401 without a valid token,
 403 for any other pond. Path user_ids are checked before the view runs;
 _parse_body checks the body's user_id.
 """
+import dataclasses
 import logging
 from typing import Optional, TypeVar
 
@@ -65,9 +66,10 @@ from koi.logs import log_event
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
-from koi.models.engine import EventKind, PondConfig, PondEvent, WaterChemistryEngine
+from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
+from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.registry import EngineRegistry
-from koi.storage import Storage, fail_soft
+from koi.storage import DuplicateProfileError, Storage, fail_soft
 
 bp = RouteGroup("twin", __name__)
 bp.before_request(authenticate)
@@ -107,26 +109,16 @@ def _parse_query(model: type[M]) -> M:
 
 def _require_pond(user_id: int) -> None:
     """Raises PondNotConfigured unless the pond has a stored snapshot or
-    a UserData config to start one from."""
-    if _storage().fetch_snapshot_version(user_id) == 0 and _storage().fetch_pond_config(user_id) is None:
+    a profile (pond_profile rows or a UserData config) to start one from."""
+    if _storage().fetch_snapshot_version(user_id) == 0 and _registry().profile_history(user_id) is None:
         raise PondNotConfigured(user_id)
 
 
-def _default_config_for(user_id: int, body: Optional[schemas.EventBody] = None) -> PondConfig | None:
-    """Bootstraps a PondConfig for a user with no persisted snapshot yet.
-    volume/biomass come from UserData (Storage.fetch_pond_config);
-    fish_type/fish_count aren't stored there, so the caller (Flutter) sends
-    them from its own SharedPreferences - see quick_log_modals.dart. Both
-    are optional and fall back to PondConfig's own defaults if omitted."""
-    row = _storage().fetch_pond_config(user_id)
-    if row is None:
-        return None
-    kwargs = dict(row)
-    if body is not None and body.fish_type is not None:
-        kwargs["fish_type"] = body.fish_type
-    if body is not None and body.fish_count is not None:
-        kwargs["fish_count"] = body.fish_count
-    return PondConfig(**kwargs)
+def _profiles_for(user_id: int) -> Optional[ProfileHistory]:
+    """The pond's profile history (EngineRegistry.profile_history). Every
+    engine call gets it, so volume, biomass, depth, fish and tap water
+    always come from the pond's stored profile, never from a request."""
+    return _registry().profile_history(user_id)
 
 
 def _environment_for(user_id: int):
@@ -272,9 +264,7 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         twin.apply_event(event)
         return _recompute_and_push(user_id, twin, ctx)
 
-    return _registry().with_twin(
-        user_id, mutate, default_config=_default_config_for(user_id, body)
-    )
+    return _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
 
 # ===================================================================
@@ -402,9 +392,7 @@ def log_algae_rating():
         summary["assessments"] = assessments
         return summary
 
-    result = _registry().with_twin(
-        user_id, mutate, default_config=_default_config_for(user_id, body)
-    )
+    result = _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
     result["rating_id"] = rating_id
     result["rated_image_id"] = image_row.get("id") if image_row else None
@@ -449,7 +437,7 @@ def undo_algae_rating():
             "assessments": assessments,
         }
 
-    result = _registry().with_twin(user_id, mutate)
+    result = _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
     if not result.get("undone"):
         raise ApiError(
             "Nothing to undo, or that rating is no longer the most recent one. "
@@ -480,7 +468,7 @@ def get_algae_ratings(user_id):
         }
 
     calibration = _registry().with_twin(
-        user_id, read, default_config=_default_config_for(user_id), persist=False
+        user_id, read, profiles=_profiles_for(user_id), persist=False
     )
 
     latest_image = _storage().fetch_image_history(user_id, limit=1)
@@ -603,7 +591,7 @@ def get_forecast(user_id):
         )
 
     result = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id), persist=False
+        user_id, run, profiles=_profiles_for(user_id), persist=False
     )
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
     result["temp_baseline"] = temp_stats
@@ -626,15 +614,20 @@ def get_evaporation_forecast(user_id):
     env = _evaporation_env(ctx)
 
     def run(twin):
-        return twin.evaporation.project_forward(
-            daily_environment=env, horizon_days=query.horizon_days
-        )
+        stored = twin.evaporation.config
+        if query.depth_m is not None:
+            twin.evaporation.config = dataclasses.replace(stored, pond_depth_m=query.depth_m)
+        try:
+            return twin.evaporation.project_forward(
+                daily_environment=env, horizon_days=query.horizon_days
+            )
+        finally:
+            twin.evaporation.config = stored
 
     result = _registry().with_twin(
         user_id,
         run,
-        default_config=_default_config_for(user_id),
-        pond_depth_m=query.depth_m,
+        profiles=_profiles_for(user_id),
         persist=False,
     )
 
@@ -716,7 +709,7 @@ def get_algae_forecast(user_id):
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
     result, assimilated = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id), persist=True
+        user_id, run, profiles=_profiles_for(user_id), persist=True
     )
 
     if "error" in result:
@@ -726,6 +719,55 @@ def get_algae_forecast(user_id):
     image_rows = _storage().fetch_image_history(user_id, limit=1)
     result["latest_image_url"] = image_rows[0].get("imageURL") if image_rows else None
     return jsonify(result), 200
+
+
+# ===================================================================
+# Pond profile (pond_profile, migration 0008)
+# ===================================================================
+# Effective-dated: each PUT adds a row in force from its effective_from
+# until the next row's, and old rows stay, so a change applies from its
+# own time onward (koi/models/profile.py). A past effective_from is
+# recorded and used from the next engine step on; steps the engines have
+# already taken are not recomputed.
+
+def _profile_response(user_id: int) -> dict:
+    rows = _storage().fetch_pond_profiles(user_id)
+    history = _registry().profile_history(user_id)
+    if history is None:
+        raise PondNotConfigured(user_id)
+    return {
+        "pond_id": user_id,
+        "source": "pond_profile" if rows else "userdata",
+        "current": history.at(schemas.utc_now()).to_dict(),
+        "history": rows,
+    }
+
+
+@bp.route("/v1/ponds/<int:user_id>/profile", methods=["GET"])
+def get_pond_profile(user_id):
+    """The profile in force now and every stored profile row, oldest
+    first. source is "userdata" for a pond with no profile rows yet,
+    whose profile is its onboarding volume and biomass."""
+    return jsonify(_profile_response(user_id)), 200
+
+
+@bp.route("/v1/ponds/<int:user_id>/profile", methods=["PUT"])
+def put_pond_profile(user_id):
+    """Adds a profile row effective now, or at the body's effective_from.
+    409 when the pond already has a profile at that exact time."""
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    update = schemas.ProfileUpdate.model_validate(body)
+    row = {name: getattr(update, name) for name in PROFILE_FIELDS}
+    row["effective_from"] = update.effective_time().isoformat()
+    try:
+        stored = _storage().insert_pond_profile(user_id, row)
+    except DuplicateProfileError as exc:
+        raise ApiError(f"Pond {user_id} already has a profile starting at {exc.effective_from}. "
+                       "Send a different effective_from.", status=409, code="profile_exists") from exc
+    log_event(log, "pond_profile_added", pond_id=user_id, effective_from=row["effective_from"])
+    return jsonify({**_profile_response(user_id), "added": stored}), 201
 
 
 # ===================================================================

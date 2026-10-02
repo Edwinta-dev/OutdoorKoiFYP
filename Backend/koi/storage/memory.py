@@ -33,6 +33,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 from koi.storage.base import (
+    PROFILE_COLUMNS,
+    DuplicateProfileError,
     StaleSnapshotError,
     StorageError,
     daily_stats,
@@ -69,6 +71,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "volume_litres", "food_grams", "protein_percentage", "algae_method"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
+    "pond_profile": PROFILE_COLUMNS,
     # Supabase Auth's session table, read by auth_session_active (0007).
     "auth.sessions": ("id", "user_id", "not_after"),
 }
@@ -84,6 +87,7 @@ USER_COLUMN = {
     "UserData": "userID",
     "pondInterventions": "userID",
     "daily_sensor_averages": "userid",
+    "pond_profile": "pond_id",
 }
 
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL")
@@ -99,6 +103,7 @@ _STAMPED = {
     "imageTable": "created_at",
     "pondInterventions": "created_at",
     "UserData": "created_at",
+    "pond_profile": "created_at",
 }
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -395,6 +400,23 @@ class MemoryStorage:
         self._check("fetch_pond_config")
         rows = self._select("UserData", user_id, limit=1)
         return pond_config_from_userdata_row(rows[0]) if rows else None
+
+    # --- pond profile -------------------------------------------------
+    def fetch_pond_profiles(self, user_id: int) -> list[dict]:
+        self._check("fetch_pond_profiles")
+        indexed = list(enumerate(self._select("pond_profile", user_id)))
+        indexed.sort(key=lambda item: (parse_timestamp(item[1]["effective_from"]), item[1]["id"], item[0]))
+        return [r for _, r in indexed]
+
+    def insert_pond_profile(self, user_id: int, profile: dict) -> dict:
+        self._check("insert_pond_profile")
+        row = {k: v for k, v in profile.items() if k in PROFILE_COLUMNS and k not in ("id", "created_at")}
+        row.update(pond_id=user_id, source="api")
+        with self._lock:
+            at = parse_timestamp(row["effective_from"])
+            if any(parse_timestamp(r["effective_from"]) == at for r in self._select("pond_profile", user_id)):
+                raise DuplicateProfileError(user_id, str(row["effective_from"]))
+            return self._insert("insert_pond_profile", "pond_profile", [row])[0]
 
     # --- account links ------------------------------------------------
     def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:

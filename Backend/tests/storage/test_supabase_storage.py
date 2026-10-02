@@ -3,7 +3,7 @@ supabase client. No network: the client is injected."""
 import pytest
 
 from conftest import ALGAE_ASSESSMENT, make_settings
-from koi.storage import StaleSnapshotError, StorageError, SupabaseStorage
+from koi.storage import DuplicateProfileError, StaleSnapshotError, StorageError, SupabaseStorage
 
 
 class _Query:
@@ -207,3 +207,36 @@ def test_auth_session_check_errors_are_storage_errors():
     storage, _ = _storage(error=ConnectionError("down"))
     with pytest.raises(StorageError, match="is_session_active"):
         storage.is_session_active("s-1", "u-1")
+
+
+# --- pond profile (issue #16) ---------------------------------------------
+
+PROFILE_ROW = {"effective_from": "2026-09-01T06:00:00+00:00", "volume_l": 1200.0, "biomass_g": 3000.0}
+
+
+def test_profile_supabase_reads_by_pond_oldest_first():
+    storage, client = _storage(data={"pond_profile": [PROFILE_ROW]})
+    assert storage.fetch_pond_profiles(4) == [PROFILE_ROW]
+    calls = client.queries[-1].calls
+    assert ("eq", ("pond_id", 4), {}) in calls
+    assert ("order", ("effective_from",), {}) in calls
+
+
+def test_profile_supabase_insert_sets_pond_and_source():
+    storage, client = _storage(data={"pond_profile": [{**PROFILE_ROW, "id": 1}]})
+    assert storage.insert_pond_profile(4, {**PROFILE_ROW, "id": 99, "source": "userdata"})["id"] == 1
+    [(method, (row,), _)] = client.queries[-1].calls
+    assert method == "insert" and row["pond_id"] == 4 and row["source"] == "api" and "id" not in row
+
+
+def test_profile_supabase_unique_violation_is_a_duplicate_profile_error():
+    class UniqueViolation(Exception):
+        code = "23505"
+
+    storage, _ = _storage(error=UniqueViolation("duplicate key"))
+    with pytest.raises(DuplicateProfileError):
+        storage.insert_pond_profile(4, PROFILE_ROW)
+    other, _ = _storage(error=ConnectionError("down"))
+    with pytest.raises(StorageError, match="insert_pond_profile") as info:
+        other.insert_pond_profile(4, PROFILE_ROW)
+    assert not isinstance(info.value, DuplicateProfileError)

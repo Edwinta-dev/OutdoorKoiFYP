@@ -46,9 +46,11 @@ calibration note in the write-up).
 Volume conversion: 1 mm of depth over 1 m^2 of surface = 1 litre. So
     litres_lost_per_day = E_mm_per_day * surface_area_m2
 
-Surface area is NOT stored anywhere in the schema (UserData has volume
-and biomass only), so it is derived as volume / assumed_depth. Koi ponds
-are typically 1.0-1.5 m deep; DEFAULT_POND_DEPTH_M is 1.2. This is the
+Surface area is NOT stored anywhere in the schema, so it is derived as
+volume / depth, with the depth from the pond's profile (pond_profile,
+migration 0008) when the owner has measured it. Otherwise an assumed
+depth is used: koi ponds are typically 1.0-1.5 m deep; DEFAULT_POND_DEPTH_M
+is 1.2. This is the
 single largest source of error in the volume projection and is reported
 back in the response so the UI can caveat it.
 """
@@ -56,7 +58,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 # ============================================================
@@ -67,7 +69,7 @@ from typing import Optional
 WIND_FN_A = 0.26
 WIND_FN_B = 0.54
 
-# Pond geometry fallback - UserData stores volume but not surface area.
+# Pond geometry fallback for a profile with no measured depth.
 DEFAULT_POND_DEPTH_M = 1.2
 
 # NEA reports wind at 10 m; evaporation formulae want 2 m. Standard
@@ -309,6 +311,12 @@ class EvaporationFeedEngine:
         self._recent_env: list = []
         self._last_evaporation_mm_per_day = 0.0
 
+    @property
+    def last_advance_time(self) -> Optional[datetime]:
+        """When the loss integral was last advanced; None before the first
+        advance."""
+        return self._last_advance_time
+
     # ----------------------------------------------------------
     # State advancement (called by the poller each cycle)
     # ----------------------------------------------------------
@@ -317,11 +325,19 @@ class EvaporationFeedEngine:
         now: datetime,
         env: DayEnvironment,
         measured_water_temp_c: Optional[float] = None,
+        config_changes: Optional[list[tuple[datetime, EvaporationConfig]]] = None,
     ) -> float:
         """Integrates evaporative loss over the interval since the last
         call, using the conditions measured for THIS interval. Returns the
         litres lost during this step (0.0 on the very first call, which
         only establishes the time baseline).
+
+        config_changes are (time, config) pairs for pond profile changes
+        (koi/models/profile.py): the integral is split at each change
+        that falls inside the integrated window, and each part uses the
+        surface area in force over it. A change before the window applies
+        to all of it; one after now is ignored. self.config ends as the
+        config in force at now.
 
         measured_water_temp_c, when the sensor provides it, is preferred
         over the air-temp-derived estimate - it is the actual evaporating
@@ -355,14 +371,20 @@ class EvaporationFeedEngine:
         if len(self._recent_env) > 200:
             self._recent_env = self._recent_env[-200:]
 
+        changes = sorted((c for c in config_changes or [] if c[0] <= now), key=lambda c: c[0])
+
         if self._last_advance_time is None:
             self._last_advance_time = now
+            if changes:
+                self.config = changes[-1][1]
             return 0.0
 
         elapsed_days = (now - self._last_advance_time).total_seconds() / 86400.0
         if elapsed_days <= 0:
             # Clock went backwards, or a duplicate tick. Do not integrate.
             self._last_advance_time = now
+            if changes:
+                self.config = changes[-1][1]
             return 0.0
 
         # Guard against a long outage silently dumping a huge one-shot
@@ -379,7 +401,23 @@ class EvaporationFeedEngine:
             rain_mm_per_day = _RAIN_MM_BY_CATEGORY.get(env.rain_category, 0.0)
 
         net_mm = (e_mm_per_day - rain_mm_per_day) * capped_days
-        step_litres = net_mm * self.config.surface_area_m2
+        window_start = now - timedelta(days=capped_days)
+        before = [c for c in changes if c[0] <= window_start]
+        inside = [c for c in changes if c[0] > window_start]
+        if before:
+            self.config = before[-1][1]
+        if not inside:
+            step_litres = net_mm * self.config.surface_area_m2
+        else:
+            step_litres = 0.0
+            seg_start = window_start
+            for at, config in inside:
+                seg_days = (at - seg_start).total_seconds() / 86400.0
+                step_litres += (e_mm_per_day - rain_mm_per_day) * seg_days * self.config.surface_area_m2
+                self.config = config
+                seg_start = at
+            seg_days = (now - seg_start).total_seconds() / 86400.0
+            step_litres += (e_mm_per_day - rain_mm_per_day) * seg_days * self.config.surface_area_m2
 
         self._cumulative_loss_litres = max(
             self._cumulative_loss_litres + step_litres, 0.0

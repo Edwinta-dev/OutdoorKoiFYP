@@ -27,7 +27,14 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
-from koi.storage.base import StaleSnapshotError, StorageError, daily_stats, pond_config_from_userdata_row
+from koi.storage.base import (
+    PROFILE_COLUMNS,
+    DuplicateProfileError,
+    StaleSnapshotError,
+    StorageError,
+    daily_stats,
+    pond_config_from_userdata_row,
+)
 
 if TYPE_CHECKING:
     from supabase import Client
@@ -399,6 +406,31 @@ class SupabaseStorage:
                 .execute()
             )
             return pond_config_from_userdata_row(res.data[0]) if res.data else None
+
+    # --- pond profile -------------------------------------------------
+    def fetch_pond_profiles(self, user_id: int) -> list[dict]:
+        with _operation("fetch_pond_profiles"):
+            res = (
+                self._db().table("pond_profile")
+                .select(", ".join(PROFILE_COLUMNS))
+                .eq("pond_id", user_id)
+                .order("effective_from")
+                .order("id")
+                .execute()
+            )
+            return list(res.data or [])
+
+    def insert_pond_profile(self, user_id: int, profile: dict) -> dict:
+        with _operation("insert_pond_profile"):
+            row = {k: v for k, v in profile.items() if k in PROFILE_COLUMNS and k not in ("id", "created_at")}
+            row.update(pond_id=user_id, source="api")
+            try:
+                res = self._db().table("pond_profile").insert(row).execute()
+            except Exception as exc:
+                if getattr(exc, "code", None) == "23505":  # unique (pond_id, effective_from)
+                    raise DuplicateProfileError(user_id, str(row.get("effective_from"))) from exc
+                raise
+            return res.data[0]
 
     # --- account links ------------------------------------------------
     def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:

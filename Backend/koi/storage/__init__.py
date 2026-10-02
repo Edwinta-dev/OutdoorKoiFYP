@@ -7,7 +7,7 @@ See koi/storage/base.py for the Storage interface and StorageError.
 from __future__ import annotations
 
 from koi.settings import Settings
-from koi.storage.base import StaleSnapshotError, Storage, StorageError, fail_soft
+from koi.storage.base import DuplicateProfileError, StaleSnapshotError, Storage, StorageError, fail_soft
 from koi.storage.memory import MemoryStorage
 from koi.storage.supabase_storage import SupabaseStorage
 
@@ -20,5 +20,5 @@ def build_storage(settings: Settings) -> Storage:
     return SupabaseStorage(settings)
 
 
-__all__ = ["MemoryStorage", "StaleSnapshotError", "Storage", "StorageError", "SupabaseStorage", "build_storage",
-           "fail_soft"]
+__all__ = ["DuplicateProfileError", "MemoryStorage", "StaleSnapshotError", "Storage", "StorageError",
+           "SupabaseStorage", "build_storage", "fail_soft"]
