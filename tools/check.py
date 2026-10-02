@@ -4,7 +4,8 @@ Usage, from anywhere:
     python tools/check.py backend|firmware|mobile|all [--strict]
 
 Each step prints PASS, FAIL or SKIP with its run time. A step whose tool is
-not installed prints "SKIP <step> (<tool> not found)" and does not fail the
+not installed (including an arduino-cli board core) prints
+"SKIP <step> (<tool> not found)" and does not fail the
 run unless --strict is given (CI always passes --strict). The exit code is
 non-zero if any step failed.
 
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import re
 import shutil
 import subprocess
@@ -234,15 +236,40 @@ def check_firmware(r: Runner) -> None:
         r.skip("firmware: host tests", "g++")
 
     cli = shutil.which("arduino-cli")
+    cores = installed_cores(cli) if cli else set()
     for sketch, fqbn in SKETCHES:
         name = f"firmware: compile {sketch} ({fqbn})"
         if not cli:
             r.skip(name, "arduino-cli")
             continue
+        core = ":".join(fqbn.split(":")[:2])
+        if core not in cores:
+            r.skip(name, f"arduino-cli core {core}")
+            continue
         r.run(name, [cli, "compile", "--fqbn", fqbn,
                      "--libraries", str(EMBEDDED / "libraries"),
                      "--build-path", str(BUILD / "arduino" / sketch),
                      str(stage_sketch(sketch))], ROOT)
+
+
+def installed_cores(cli: str) -> set[str]:
+    """Platform ids (e.g. "esp32:esp32") that arduino-cli has installed.
+    A board whose core is missing is treated like a missing tool."""
+    try:
+        proc = subprocess.run([cli, "core", "list", "--format", "json"],
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              text=True, encoding="utf-8", errors="replace")
+        data = json.loads(proc.stdout or "{}")
+    except (OSError, ValueError):
+        return set()
+    platforms = data.get("platforms", []) if isinstance(data, dict) else data
+    ids = set()
+    for p in platforms or []:
+        if isinstance(p, dict):
+            pid = p.get("id") or (p.get("metadata") or {}).get("id")
+            if pid:
+                ids.add(pid)
+    return ids
 
 
 def stage_sketch(sketch: str) -> Path:
@@ -288,6 +315,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--strict", action="store_true",
                         help="treat a missing tool as a failure (used by CI)")
     args = parser.parse_args(argv)
+
+    # Tool output (flutter's box drawing, for one) can hold characters a
+    # Windows console code page cannot encode; print them as "?" instead
+    # of crashing the run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
     runner = Runner(strict=args.strict)
     for name in (SUITES if args.suite == "all" else [args.suite]):
