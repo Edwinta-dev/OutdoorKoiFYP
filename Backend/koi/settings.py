@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from koi.models.hypoxia import HypoxiaThresholds
+
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
@@ -125,6 +127,14 @@ class Settings(BaseSettings):
     weather_history_areas: Annotated[tuple[str, ...], NoDecode] = Field(
         default=(), validation_alias=AliasChoices("WEATHER_HISTORY_AREAS", "weather_history_areas"))
 
+    # Night-time hypoxia flag (issue #28, koi/models/hypoxia.py): water
+    # temperature in C at or above which a dark pond is flagged "watch",
+    # and "high". The watch level must be below the high level.
+    hypoxia_watch_temp_c: float = Field(
+        default=30.0, validation_alias=AliasChoices("KOI_HYPOXIA_WATCH_TEMP_C", "hypoxia_watch_temp_c"))
+    hypoxia_high_temp_c: float = Field(
+        default=32.0, validation_alias=AliasChoices("KOI_HYPOXIA_HIGH_TEMP_C", "hypoxia_high_temp_c"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
@@ -165,6 +175,12 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def _hypoxia_levels_ascending(self) -> "Settings":
+        if not self.hypoxia_watch_temp_c < self.hypoxia_high_temp_c:
+            raise ValueError("KOI_HYPOXIA_WATCH_TEMP_C must be below KOI_HYPOXIA_HIGH_TEMP_C")
+        return self
+
+    @model_validator(mode="after")
     def _auth_bypass_only_in_development(self) -> "Settings":
         if self.auth == "disabled" and self.env != "development":
             raise ValueError(f"KOI_AUTH=disabled is only allowed with KOI_ENV=development, not {self.env!r}")
@@ -177,6 +193,10 @@ class Settings(BaseSettings):
         if self.jwt_issuer:
             return self.jwt_issuer
         return f"{self.supabase_url.rstrip('/')}/auth/v1" if self.supabase_url else ""
+
+    @property
+    def hypoxia_thresholds(self) -> HypoxiaThresholds:
+        return HypoxiaThresholds(self.hypoxia_watch_temp_c, self.hypoxia_high_temp_c)
 
     @property
     def tz(self) -> ZoneInfo:

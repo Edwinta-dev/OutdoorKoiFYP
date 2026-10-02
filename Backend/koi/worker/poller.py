@@ -72,6 +72,7 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
 from koi.models.engine import RawSample, WaterChemistryEngine
+from koi.models.hypoxia import assess_hypoxia
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
@@ -350,9 +351,21 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict) -> Opti
         )
         algae_assessment = twin.algae.assess(days_to_scrub=algae_days)
 
+        # Night-time hypoxia risk from this cycle's reading (the pond's
+        # own light sensor, not NEA's), the profile in force now and the
+        # algae assessment just made.
+        outcome["hypoxia"] = assess_hypoxia(
+            lux=sample.lux,
+            water_temp_c=sample.temp_c,
+            aeration=profiles.at(now).aeration,
+            algae_high=algae_assessment.scrub_now if algae_assessment is not None else None,
+            thresholds=registry.hypoxia_thresholds,
+        )
+
         return outcome["chemistry"], evap_assessment, algae_assessment, outcome
 
     chem, evap, algae, outcome = registry.with_twin(user_id, cycle, profiles=profiles)
+    hypoxia = outcome["hypoxia"]
 
     # --- push evaluations (outside the lock: storage I/O is slow and
     #     the twin is already durably snapshotted by with_twin). The
@@ -366,6 +379,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict) -> Opti
 
     log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
               evaporation=evap.status if evap else None, algae=algae.status if algae else None,
+              hypoxia=hypoxia.level, hypoxia_raised_by=hypoxia.raised_by,
               new_camera_frames=outcome.get("assimilated_camera_frames", 0))
     return sensor_recorded_at
 

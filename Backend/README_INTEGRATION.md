@@ -48,6 +48,8 @@ name in `.env`. Both services read the same file.
 | `KOI_TIMEZONE` | `Asia/Singapore` | camera daylight slots |
 | `KOI_POLL_INTERVAL_MINUTES` | `15` | poller |
 | `KOI_WORKER_THREADS` | `4` | poller; ponds polled at the same time |
+| `KOI_HYPOXIA_WATCH_TEMP_C` | `30` | poller and API; water temperature (C) at which a dark pond's hypoxia flag is `watch` |
+| `KOI_HYPOXIA_HIGH_TEMP_C` | `32` | poller and API; the same for `high`; must be above the watch level |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
 | `POND_IMAGE_BUCKET` | `imageAnalysisBucket` | camera; must match the app's `env/*.json` |
 | `DEVICE_TOKEN` | empty (uploads unauthenticated) | camera; must match `Embedded/camera_node/secrets.h` |
@@ -207,7 +209,10 @@ Cheap cached reads (dashboard cards + alert badges):
 - `GET /assessment/<uid>` — chemistry
 - `GET /assessment/evaporation/<uid>`
 - `GET /assessment/algae/<uid>`
-- `GET /assessment/all/<uid>` — all three in one call
+- `GET /assessment/all/<uid>` — all three in one call, plus `hypoxia`: the night-time
+  low-oxygen flag (`level` none/watch/high/unknown, `explanation`, `advice`) from the
+  latest reading, the profile's aeration and the cached algae assessment
+  (`koi/models/hypoxia.py`)
 
 Live projections (detail graph screens):
 - `GET /forecast/<uid>?horizon_days=21` — chemistry

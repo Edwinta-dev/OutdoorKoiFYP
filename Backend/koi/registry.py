@@ -38,6 +38,7 @@ from koi.errors import PondNotConfigured
 from koi.logs import log_event
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
+from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
 from koi.storage import StaleSnapshotError, Storage
@@ -55,8 +56,11 @@ class EngineRegistry:
     """One per process, shared by the API routes and the poller when both
     run in it (see koi.api.create_app and koi.worker)."""
 
-    def __init__(self, storage: Storage):
+    def __init__(self, storage: Storage, hypoxia_thresholds: Optional[HypoxiaThresholds] = None):
         self.storage = storage
+        # Temperature levels for the night-time hypoxia flag (Settings),
+        # read by the poller and /assessment/all.
+        self.hypoxia_thresholds = hypoxia_thresholds or HypoxiaThresholds()
         self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above

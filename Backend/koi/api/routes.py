@@ -50,6 +50,7 @@ _parse_body checks the body's user_id.
 """
 import dataclasses
 import logging
+from datetime import datetime, timezone
 from typing import Optional, TypeVar
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
@@ -67,6 +68,7 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
+from koi.models.hypoxia import algae_is_high, assess_hypoxia
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
@@ -529,7 +531,7 @@ def get_latest_algae_assessment(user_id):
 def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
     populate every outcome card and its alert badge from a single
-    request instead of three."""
+    request instead of three - plus the night-time hypoxia flag."""
     assessments = {
         "chemistry": _storage().fetch_latest_evaluation(user_id),
         "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
@@ -537,7 +539,33 @@ def get_all_assessments(user_id):
     }
     if all(a is None for a in assessments.values()):
         _require_pond(user_id)
+    assessments["hypoxia"] = _hypoxia_now(user_id, assessments["algae"])
     return jsonify(assessments), 200
+
+
+def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
+    """The night-time hypoxia flag (koi/models/hypoxia.py) from the
+    latest sensor reading, the profile in force now and the cached algae
+    assessment: the inputs the poller uses, read fresh. A missing reading
+    gives level "unknown" rather than an error."""
+    payload = fail_soft(lambda: _storage().fetch_dashboard_payload(user_id), None) or {}
+    raw = payload.get("raw_sensor")
+    raw = raw if isinstance(raw, dict) else {}
+
+    def number(key: str) -> Optional[float]:
+        try:
+            return float(raw[key]) if raw.get(key) is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    profiles = _profiles_for(user_id)
+    return assess_hypoxia(
+        lux=number("LUX"),
+        water_temp_c=number("temp"),
+        aeration=profiles.at(datetime.now(timezone.utc)).aeration if profiles is not None else None,
+        algae_high=algae_is_high(algae_assessment),
+        thresholds=_registry().hypoxia_thresholds,
+    ).to_dict()
 
 
 # ===================================================================
