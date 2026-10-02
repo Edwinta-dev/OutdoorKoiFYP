@@ -190,7 +190,7 @@ def test_next_wake_reason(state, now, test_mode, reason):
 
 def test_every_reason_code_is_listed():
     assert set(imageSchedule.REASONS) == {"slot", "dynamic_rising", "obstruction_hold",
-                                         "night_base", "error_fallback", "test_mode"}
+                                         "night_base", "error_fallback", "test_mode", "quality_retry"}
 
 
 def test_reply_keys_and_next_at_format():

@@ -371,7 +371,8 @@ class SupabaseStorage:
             return list(res.data or [])
 
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
-                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
         with _operation("insert_image"):
             row = {
                 "user_ID": user_id,
@@ -380,6 +381,8 @@ class SupabaseStorage:
                 "imageURL": image_url,
                 "mask_version": mask_version,
                 "baseline_reset": baseline_reset,
+                "quality": quality,
+                "thumbnail_path": thumbnail_path,
             }
             self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
@@ -391,6 +394,10 @@ class SupabaseStorage:
             # supabase-py has historically appended a bare "?" here, which
             # makes cache keys inconsistent downstream. Strip it at the source.
             return str(files.get_public_url(path)).rstrip("?&")
+
+    def delete_images(self, bucket: str, paths: list[str]) -> None:
+        with _operation("delete_images"):
+            self._db().storage.from_(bucket).remove(paths)
 
     # --- camera water mask --------------------------------------------
     def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:

@@ -100,9 +100,11 @@ def test_image_history_is_newest_first_and_matches_text_user_ids(storage):
     rows = storage.fetch_image_history(str(USER))
     assert [r["green_ratio"] for r in rows] == [0.2, 0.1]
     assert set(rows[0]) == {"id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version",
-                            "baseline_reset"}
-    # Rows written before migration 0010 have no mask provenance.
+                            "baseline_reset", "quality", "thumbnail_path"}
+    # Rows written before migration 0010 have no mask provenance, and
+    # before 0011 no quality result or thumbnail.
     assert rows[0]["mask_version"] is None and rows[0]["baseline_reset"] is None
+    assert rows[0]["quality"] is None and rows[0]["thumbnail_path"] is None
     assert storage.fetch_image_by_id(USER, rows[1]["id"])["green_ratio"] == 0.1
     assert storage.fetch_image_by_id(999, rows[1]["id"]) is None
 

@@ -69,7 +69,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
     "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL", "mask_version",
-                   "baseline_reset"),
+                   "baseline_reset", "quality", "thumbnail_path"),
     "camera_config": CAMERA_CONFIG_COLUMNS,
     "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
@@ -407,20 +407,25 @@ class MemoryStorage:
         return [self._project(r, IMAGE_COLUMNS) for r in rows]
 
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
-                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
         self._check("insert_image")
         row = {"user_ID": user_id, "green_ratio": green_ratio, "current_state": current_state,
                "imageURL": image_url}
-        if mask_version is not None:
-            row["mask_version"] = mask_version
-        if baseline_reset is not None:
-            row["baseline_reset"] = baseline_reset
+        optional = {"mask_version": mask_version, "baseline_reset": baseline_reset, "quality": quality,
+                    "thumbnail_path": thumbnail_path}
+        row.update({k: v for k, v in optional.items() if v is not None})
         self._insert("insert_image", "imageTable", [row])
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         self._check("upload_image")
         self.uploads[(bucket, path)] = bytes(data)
         return f"memory://{bucket}/{path}"
+
+    def delete_images(self, bucket: str, paths: list[str]) -> None:
+        self._check("delete_images")
+        for path in paths:
+            self.uploads.pop((bucket, path), None)
 
     # --- camera water mask --------------------------------------------
     def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:

@@ -156,13 +156,18 @@ class Storage(Protocol):
     def fetch_image_history(self, user_id: int | str, limit: int = 200) -> list[dict]: ...
 
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
-                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None) -> None:
-        """mask_version and baseline_reset (migration 0010) are left out of
-        the insert when None, so a frame without a mask is stored the same
-        way on a database that does not have the columns yet."""
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
+        """mask_version and baseline_reset (migration 0010), quality and
+        thumbnail_path (migration 0011) are left out of the insert when
+        None, so a row without them is stored the same way as before."""
         ...
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str: ...
+
+    def delete_images(self, bucket: str, paths: list[str]) -> None:
+        """Removes stored objects; used to clean up after a failed row insert."""
+        ...
 
     # --- camera water mask (camera_config, migration 0010) -------------
     def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
@@ -261,8 +266,10 @@ class Storage(Protocol):
 # ---------------------------------------------------------------------
 _BIOMASS_KG_TO_GRAMS = 1000.0
 
-# imageTable columns the services read (mask_version, baseline_reset: 0010).
-IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset")
+# imageTable columns the services read (mask_version, baseline_reset: 0010;
+# quality, thumbnail_path: 0011).
+IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
+                 "quality", "thumbnail_path")
 # camera_config and camera_mask_version columns (migration 0010).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")

@@ -34,6 +34,11 @@ class _Bucket:
     def get_public_url(self, path):
         return f"https://storage.invalid/{self.name}/{path}?"
 
+    def remove(self, paths):
+        if self.db.error is not None:
+            raise self.db.error
+        self.db.removed.append((self.name, list(paths)))
+
 
 class FakeClient:
     def __init__(self, data=None, error=None):
@@ -41,6 +46,7 @@ class FakeClient:
         self.error = error
         self.queries = []
         self.uploads = []
+        self.removed = []
         self.storage = type("Storage", (), {"from_": lambda _s, name: _Bucket(self, name)})()
 
     def table(self, name):
