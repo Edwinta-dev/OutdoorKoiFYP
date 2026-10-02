@@ -41,6 +41,8 @@ from koi.storage.base import (
     parse_timestamp,
     pond_config_from_userdata_row,
 )
+from koi.weather import cache as weather_cache
+from koi.weather import history as weather_history
 
 # Columns of each table this store serves, from supabase/migrations/.
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -74,6 +76,21 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_profile": PROFILE_COLUMNS,
     # Supabase Auth's session table, read by auth_session_active (0007).
     "auth.sessions": ("id", "user_id", "not_after"),
+    # Weather caches (0001, columns added by 0009), station lookup and
+    # weather history (0009).
+    "weather_telemetry": ("station_id", "metric_type", "data", "valid_start", "valid_end", "updated_at",
+                          "source_times"),
+    "weather_forecasts": ("forecast_type", "slot_id", "data", "valid_period", "updated_at", "source_issued_at"),
+    "WeatherStationLookup": ("Id", "station__id", "station__name", "location__latitude", "location__longitude",
+                             "Measurement"),
+    "weather_observation": ("id", "source", "series", "station_id", "metric", "value", "unit", "semantics",
+                            "observed_from", "observed_to", "fetched_at", "regime_id", "provenance",
+                            "created_at"),
+    "weather_forecast_issuance": ("id", "source", "product", "slot_id", "issued_at", "source_updated_at",
+                                  "valid_from", "valid_to", "payload", "fetched_at", "available_at",
+                                  "provenance", "created_at"),
+    "weather_ingest_window": ("product", "window_start", "window_end", "status", "attempts", "pages", "records",
+                              "inserted", "duplicates", "malformed", "last_error", "updated_at"),
 }
 
 # The user column of each table (three spellings coexist in the schema).
@@ -93,6 +110,11 @@ USER_COLUMN = {
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL")
 DAILY_COLUMNS = ("avg_value", "min_value", "max_value", "record_date")
 FEEDING_COLUMNS = ("food_grams", "protein_percentage", "event_timestamp")
+# Columns returned by weather_forecast_as_of and weather_observations_as_of.
+FORECAST_AS_OF_COLUMNS = ("id", "product", "slot_id", "issued_at", "source_updated_at", "available_at",
+                          "fetched_at", "valid_from", "valid_to", "payload")
+OBSERVATION_AS_OF_COLUMNS = ("id", "source", "station_id", "metric", "value", "unit", "semantics",
+                             "observed_from", "observed_to", "fetched_at", "regime_id")
 
 # Table timestamps filled in on insert when the row does not carry one.
 _STAMPED = {
@@ -104,6 +126,8 @@ _STAMPED = {
     "pondInterventions": "created_at",
     "UserData": "created_at",
     "pond_profile": "created_at",
+    "weather_observation": "created_at",
+    "weather_forecast_issuance": "created_at",
 }
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -456,3 +480,155 @@ class MemoryStorage:
         rows = self._select("daily_sensor_averages", user_id, newest_first_by="record_date",
                             limit=days, sensor_type=sensor_type)
         return [self._project(r, DAILY_COLUMNS) for r in rows]
+
+    # --- weather history ----------------------------------------------
+    @staticmethod
+    def _observation_key(row: dict) -> tuple:
+        return (row["source"], row.get("series") or "station", row["station_id"], row["metric"],
+                parse_timestamp(row["observed_from"]), parse_timestamp(row["observed_to"]))
+
+    @staticmethod
+    def _issuance_key(row: dict) -> tuple:
+        def t(value: object) -> Optional[datetime]:
+            return parse_timestamp(value) if value else None
+        return (row["source"], row["product"], row["slot_id"], t(row["valid_from"]), t(row["valid_to"]),
+                t(row.get("issued_at")), t(row.get("source_updated_at")))
+
+    def ingest_weather_batch(self, batch: dict) -> dict:
+        self._check("ingest_weather_batch")
+        with self._lock:
+            now = self._clock().isoformat()
+            counts: dict[str, Any] = {}
+            seen = {self._observation_key(r) for r in self._tables["weather_observation"]}
+            new_rows = []
+            for row in batch.get("observations") or []:
+                key = self._observation_key(row)
+                if key not in seen:
+                    seen.add(key)
+                    new_rows.append({**row, "series": row.get("series") or "station",
+                                     "provenance": row.get("provenance") or {}})
+            self._insert("ingest_weather_batch", "weather_observation", new_rows)
+            counts["observations"] = {"received": len(batch.get("observations") or []), "inserted": len(new_rows)}
+
+            seen = {self._issuance_key(r) for r in self._tables["weather_forecast_issuance"]}
+            new_rows = []
+            for row in batch.get("forecasts") or []:
+                key = self._issuance_key(row)
+                if key not in seen:
+                    seen.add(key)
+                    new_rows.append({**row, "available_at": weather_cache.available_at(row),
+                                     "provenance": row.get("provenance") or {}})
+            self._insert("ingest_weather_batch", "weather_forecast_issuance", new_rows)
+            counts["forecasts"] = {"received": len(batch.get("forecasts") or []), "inserted": len(new_rows)}
+
+            updated = 0
+            table = self._tables["weather_telemetry"]
+            for cand in sorted(batch.get("telemetry_cache") or [],
+                               key=lambda c: (c["station_id"], parse_timestamp(c["observed_at"]))):
+                index = next((i for i, r in enumerate(table) if r["station_id"] == cand["station_id"]
+                              and r["metric_type"] == "realtime_sensor"), None)
+                new = weather_cache.apply_telemetry_candidate(
+                    _copy(table[index]) if index is not None else None, cand, now)
+                if new is not None:
+                    if index is None:
+                        table.append(_copy(new))
+                    else:
+                        table[index] = _copy(new)
+                    updated += 1
+            counts["telemetry_cache_updated"] = updated
+
+            updated = 0
+            table = self._tables["weather_forecasts"]
+            for cand in sorted(batch.get("forecast_cache") or [],
+                               key=lambda c: (c["forecast_type"], c["slot_id"], parse_timestamp(c["source_time"]))):
+                issued_4day = [parse_timestamp(r["source_issued_at"]) for r in table
+                               if r["forecast_type"] == "4day" and r.get("source_issued_at")]
+                newest = max(issued_4day).isoformat() if issued_4day else None
+                index = next((i for i, r in enumerate(table) if r["forecast_type"] == cand["forecast_type"]
+                              and r["slot_id"] == cand["slot_id"]), None)
+                new = weather_cache.apply_forecast_candidate(
+                    _copy(table[index]) if index is not None else None, cand, newest, now)
+                if new is not None:
+                    if index is None:
+                        table.append(_copy(new))
+                    else:
+                        table[index] = _copy(new)
+                    updated += 1
+            counts["forecast_cache_updated"] = updated
+            counts["stations_changed"] = sum(self._upsert_station(s) for s in batch.get("stations") or [])
+            return _copy(counts)
+
+    def _upsert_station(self, station: dict) -> int:
+        """The station step of ingest_weather_batch; 1 when a row changed."""
+        table = self._tables["WeatherStationLookup"]
+        tag = station["tag"]
+        if station.get("station_id") is not None:
+            row = next((r for r in table if r.get("station__id") == station["station_id"]), None)
+        else:
+            row = next((r for r in table if r.get("station__name") == station["station_name"]
+                        and tag in (r.get("Measurement") or [])), None)
+        if row is None:
+            table.append({"Id": max((r["Id"] for r in table), default=0) + 1,
+                          "station__id": station.get("station_id"), "station__name": station.get("station_name"),
+                          "location__latitude": station.get("latitude"),
+                          "location__longitude": station.get("longitude"), "Measurement": [tag]})
+            return 1
+        before = _copy(row)
+        if tag not in (row.get("Measurement") or []):
+            row["Measurement"] = [*(row.get("Measurement") or []), tag]
+        if station.get("station_id") is not None and station.get("station_name") is not None:
+            row["station__name"] = station["station_name"]
+        for key, column in (("latitude", "location__latitude"), ("longitude", "location__longitude")):
+            if station.get(key) is not None:
+                row[column] = station[key]
+        return int(row != before)
+
+    def fetch_weather_windows(self, product: str) -> list[dict]:
+        self._check("fetch_weather_windows")
+        return [r for r in self.rows("weather_ingest_window") if r["product"] == product]
+
+    def record_weather_window(self, window: dict) -> None:
+        self._check("record_weather_window")
+        with self._lock:
+            row = {**window, "updated_at": self._clock().isoformat()}
+            unknown = set(row) - set(TABLE_COLUMNS["weather_ingest_window"])
+            if unknown:
+                raise StorageError("record_weather_window", f"no column(s) {sorted(unknown)}")
+            start = parse_timestamp(row["window_start"])
+            table = self._tables["weather_ingest_window"]
+            table[:] = [r for r in table
+                        if not (r["product"] == row["product"] and parse_timestamp(r["window_start"]) == start)]
+            table.append(_copy(row))
+
+    def fetch_assigned_weather_slots(self) -> list[dict]:
+        self._check("fetch_assigned_weather_slots")
+        slots = []
+        for row in self.rows("UserData"):
+            value = row.get("ClosestStations")
+            if isinstance(value, str):
+                value = json.loads(value)
+            if isinstance(value, dict):
+                slots.append(value)
+        return slots
+
+    def fetch_forecast_as_of(self, product: str, slot_id: str, as_of: datetime,
+                             valid_at: Optional[datetime] = None) -> Optional[dict]:
+        self._check("fetch_forecast_as_of")
+        rows = [r for r in self.rows("weather_forecast_issuance")
+                if r["product"] == product and r["slot_id"] == slot_id]
+        found = weather_history.select_forecast_as_of(rows, as_of, valid_at)
+        if found is None:
+            return None
+        return {k: found.get(k) for k in FORECAST_AS_OF_COLUMNS}
+
+    def fetch_weather_observations(self, station_id: str, metric: str, start: datetime, end: datetime,
+                                   as_of: datetime) -> list[dict]:
+        self._check("fetch_weather_observations")
+        rows = weather_history.observations_as_of(self.rows("weather_observation"), station_id, metric, start, end,
+                                                  as_of)
+        return [{k: r.get(k) for k in OBSERVATION_AS_OF_COLUMNS} for r in rows]
+
+    def fetch_rainfall_total(self, station_id: str, start: datetime, end: datetime,
+                             as_of: Optional[datetime] = None) -> dict:
+        self._check("fetch_rainfall_total")
+        return weather_history.rainfall_total(self.rows("weather_observation"), station_id, start, end, as_of)

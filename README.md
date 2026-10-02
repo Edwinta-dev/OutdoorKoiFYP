@@ -154,6 +154,7 @@ Backend/koi/storage/                Storage interface: Supabase and in-memory im
 Backend/koi/api/                    Digital twin Flask API
 Backend/koi/worker/                 Environmental poller
 Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
+Backend/koi/weather/                NEA ingestion job and weather history reads (docs/weather-ingestion.md)
 Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
 Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
@@ -195,6 +196,7 @@ cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY, KOI_ENV, ...
 python -m koi.api         # digital twin API on :8080 (runs the poller too when KOI_ENV=development)
 python -m koi.worker      # the poller on its own, for any other KOI_ENV
 python -m koi.camera      # camera service on :5000
+python -m koi.weather live   # one NEA fetch into the weather caches and history
 ```
 
 Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;

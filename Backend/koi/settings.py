@@ -105,11 +105,31 @@ class Settings(BaseSettings):
     jwt_audience: str = Field(
         default="authenticated", validation_alias=AliasChoices("KOI_JWT_AUDIENCE", "jwt_audience"))
 
+    # NEA weather ingestion (python -m koi.weather, issue #24). The key is
+    # optional (sent as x-api-key); without it the public rate limit
+    # applies. History is kept for the listed stations and 2-hour forecast
+    # areas plus those assigned to ponds; "*" keeps every one. The latest
+    # caches are filled for every station and area either way.
+    nea_api_base_url: str = Field(
+        default="https://api-open.data.gov.sg/v2/real-time/api",
+        validation_alias=AliasChoices("NEA_API_BASE_URL", "nea_api_base_url"))
+    nea_api_key: SecretStr = Field(
+        default=SecretStr(""), validation_alias=AliasChoices("NEA_API_KEY", "nea_api_key"))
+    nea_min_request_interval_seconds: float = Field(
+        default=1.0, ge=0,
+        validation_alias=AliasChoices("NEA_MIN_REQUEST_INTERVAL_SECONDS", "nea_min_request_interval_seconds"))
+    nea_max_attempts: int = Field(
+        default=5, gt=0, validation_alias=AliasChoices("NEA_MAX_ATTEMPTS", "nea_max_attempts"))
+    weather_history_stations: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=(), validation_alias=AliasChoices("WEATHER_HISTORY_STATIONS", "weather_history_stations"))
+    weather_history_areas: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=(), validation_alias=AliasChoices("WEATHER_HISTORY_AREAS", "weather_history_areas"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "weather_history_stations", "weather_history_areas", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):

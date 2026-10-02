@@ -19,11 +19,15 @@ Table notes (schema in supabase/migrations/):
 - Snapshot saves and the worker lease go through the save_pond_snapshot
   and take_worker_lease functions (migration 0002), which compare and set
   in one statement.
+- Weather ingestion writes only through ingest_weather_batch, and the
+  as-of weather reads are the database functions of migration 0009.
 """
 from __future__ import annotations
 
+import json
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
@@ -41,6 +45,8 @@ if TYPE_CHECKING:
 
 IMAGE_COLUMNS = "id, created_at, green_ratio, current_state, imageURL"
 DAILY_COLUMNS = "avg_value, min_value, max_value, record_date"
+WINDOW_COLUMNS = ("product, window_start, window_end, status, attempts, pages, records, inserted, duplicates, "
+                  "malformed, last_error, updated_at")
 
 
 @contextmanager
@@ -499,3 +505,66 @@ class SupabaseStorage:
             .execute()
         )
         return list(res.data or [])
+
+    # --- weather history ----------------------------------------------
+    def ingest_weather_batch(self, batch: dict) -> dict:
+        """One call to ingest_weather_batch (migration 0009), which
+        deduplicates, guards the caches and updates the station lookup in
+        one transaction."""
+        with _operation("ingest_weather_batch"):
+            res = self._db().rpc("ingest_weather_batch", {"p_batch": batch}).execute()
+            return dict(res.data or {})
+
+    def fetch_weather_windows(self, product: str) -> list[dict]:
+        with _operation("fetch_weather_windows"):
+            res = (
+                self._db().table("weather_ingest_window")
+                .select(WINDOW_COLUMNS)
+                .eq("product", product)
+                .execute()
+            )
+            return list(res.data or [])
+
+    def record_weather_window(self, window: dict) -> None:
+        with _operation("record_weather_window"):
+            row = {**window, "updated_at": datetime.now(timezone.utc).isoformat()}
+            self._db().table("weather_ingest_window").upsert(row, on_conflict="product,window_start").execute()
+
+    def fetch_assigned_weather_slots(self) -> list[dict]:
+        """ClosestStations is a json column; PostgREST returns it parsed,
+        a text-encoded value is parsed here."""
+        with _operation("fetch_assigned_weather_slots"):
+            res = self._db().table("UserData").select("ClosestStations").execute()
+            slots = []
+            for row in res.data or []:
+                value = row.get("ClosestStations")
+                if isinstance(value, str):
+                    value = json.loads(value)
+                if isinstance(value, dict):
+                    slots.append(value)
+            return slots
+
+    def fetch_forecast_as_of(self, product: str, slot_id: str, as_of: datetime,
+                             valid_at: Optional[datetime] = None) -> Optional[dict]:
+        with _operation("fetch_forecast_as_of"):
+            res = self._db().rpc("weather_forecast_as_of", {
+                "p_product": product, "p_slot_id": slot_id, "p_as_of": as_of.isoformat(),
+                "p_valid_at": valid_at.isoformat() if valid_at else None}).execute()
+            rows = list(res.data or [])
+            return rows[0] if rows else None
+
+    def fetch_weather_observations(self, station_id: str, metric: str, start: datetime, end: datetime,
+                                   as_of: datetime) -> list[dict]:
+        with _operation("fetch_weather_observations"):
+            res = self._db().rpc("weather_observations_as_of", {
+                "p_station_id": station_id, "p_metric": metric, "p_from": start.isoformat(),
+                "p_to": end.isoformat(), "p_as_of": as_of.isoformat()}).execute()
+            return list(res.data or [])
+
+    def fetch_rainfall_total(self, station_id: str, start: datetime, end: datetime,
+                             as_of: Optional[datetime] = None) -> dict:
+        with _operation("fetch_rainfall_total"):
+            res = self._db().rpc("weather_rainfall_total", {
+                "p_station_id": station_id, "p_from": start.isoformat(), "p_to": end.isoformat(),
+                "p_as_of": as_of.isoformat() if as_of else None}).execute()
+            return dict(res.data or {})

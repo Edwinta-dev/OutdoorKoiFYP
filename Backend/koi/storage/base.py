@@ -13,9 +13,11 @@ swallowed inside storage. The caller decides whether a failure is fatal
 (a lost snapshot write) or can be skipped (a missing evaluation log row);
 fail_soft below is the one way to say "skip".
 
-Weather has no operation of its own: the NEA telemetry and forecast reach
-the backend inside the dashboard payload (fetch_dashboard_payload), which
-get_bundled_dashboard_payload assembles in the database.
+The current NEA telemetry and forecast reach the services inside the
+dashboard payload (fetch_dashboard_payload), which
+get_bundled_dashboard_payload assembles from the latest caches. The
+weather operations below are the ingestion job's writes (koi/weather) and
+the as-of reads over weather history (migration 0009).
 """
 from __future__ import annotations
 
@@ -193,6 +195,43 @@ class Storage(Protocol):
     def fetch_daily_sensor_stats(self, user_id: int, sensor_type: str, days: int = 14) -> Optional[dict]: ...
 
     def fetch_daily_sensor_series(self, user_id: int, sensor_type: str, days: int = 30) -> list[dict]: ...
+
+    # --- weather history (migration 0009, koi/weather) -----------------
+    def ingest_weather_batch(self, batch: dict) -> dict:
+        """Stores one fetch through ingest_weather_batch: history rows
+        deduplicated, latest caches updated only by newer values, station
+        lookup maintained. batch and the returned counts are described
+        in the migration."""
+        ...
+
+    def fetch_weather_windows(self, product: str) -> list[dict]:
+        """Every weather_ingest_window row of the product."""
+        ...
+
+    def record_weather_window(self, window: dict) -> None:
+        """Inserts or replaces the (product, window_start) row."""
+        ...
+
+    def fetch_assigned_weather_slots(self) -> list[dict]:
+        """The "ClosestStations" map of every pond that has one."""
+        ...
+
+    def fetch_forecast_as_of(self, product: str, slot_id: str, as_of: datetime,
+                             valid_at: Optional[datetime] = None) -> Optional[dict]:
+        """The forecast issuance usable at as_of (weather_forecast_as_of),
+        with issued_at, source_updated_at, available_at and fetched_at."""
+        ...
+
+    def fetch_weather_observations(self, station_id: str, metric: str, start: datetime, end: datetime,
+                                   as_of: datetime) -> list[dict]:
+        """Station observations inside [start, end] observed by as_of, with
+        observed_from, observed_to and fetched_at (weather_observations_as_of)."""
+        ...
+
+    def fetch_rainfall_total(self, station_id: str, start: datetime, end: datetime,
+                             as_of: Optional[datetime] = None) -> dict:
+        """Rainfall over [start, end] with coverage (weather_rainfall_total)."""
+        ...
 
 
 # ---------------------------------------------------------------------
