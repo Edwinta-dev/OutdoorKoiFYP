@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import USER, make_settings, make_storage
+from conftest import USER, api_client, make_settings, make_storage
 from koi.api import create_app
 from koi.models.engine import EventKind, PondConfig, PondEvent
 from koi.registry import EngineRegistry
@@ -301,7 +301,7 @@ def stored_loss(storage):
 def test_api_registry_picks_up_a_snapshot_the_worker_saved():
     storage = make_storage()
     app = create_app(make_settings(), storage=storage)
-    client = app.test_client()
+    client = api_client(app)
     api_registry = app.extensions["koi_registry"]
     worker_registry = EngineRegistry(storage)   # the koi.worker process
     config_row = storage.fetch_active_pond_configs()[0]

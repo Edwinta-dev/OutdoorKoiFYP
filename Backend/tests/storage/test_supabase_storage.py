@@ -180,3 +180,30 @@ def test_worker_status_read_failure_is_a_storage_error():
     storage, _ = _storage(error=RuntimeError("down"))
     with pytest.raises(StorageError, match="fetch_worker_status"):
         storage.fetch_worker_status("poller")
+
+
+def test_auth_pond_for_account_filters_userdata_by_auth_uid():
+    uid = "6c1f0c4e-5b1a-4a39-9d0e-455000000455"
+    storage, client = _storage(data={"UserData": [{"userID": 455}]})
+    assert storage.fetch_pond_id_for_account(uid) == 455
+    calls = client.queries[-1].calls
+    assert ("select", ("userID",), {}) in calls
+    assert ("eq", ("auth_uid", uid), {}) in calls
+    unlinked, _ = _storage(data={"UserData": []})
+    assert unlinked.fetch_pond_id_for_account(uid) is None
+
+
+def test_auth_session_check_calls_the_rpc_and_needs_a_true_answer():
+    storage, client = _storage(data={"rpc:auth_session_active": True})
+    assert storage.is_session_active("s-1", "u-1") is True
+    assert client.queries[-1].calls[0] == (
+        "rpc", ("auth_session_active", {"p_session_id": "s-1", "p_user_id": "u-1"}), {})
+    for answer in (False, None, [], "true"):
+        refused, _ = _storage(data={"rpc:auth_session_active": answer})
+        assert refused.is_session_active("s-1", "u-1") is False
+
+
+def test_auth_session_check_errors_are_storage_errors():
+    storage, _ = _storage(error=ConnectionError("down"))
+    with pytest.raises(StorageError, match="is_session_active"):
+        storage.is_session_active("s-1", "u-1")

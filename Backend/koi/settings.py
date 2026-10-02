@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -85,6 +85,26 @@ class Settings(BaseSettings):
         default=(0.10, 0.20),
         validation_alias=AliasChoices("CAMERA_DYNAMIC_RATE_LEVELS", "camera_dynamic_rate_levels"))
 
+    # Digital twin API authentication (issue #11). "required" verifies the
+    # Supabase access token on every pond request; "disabled" trusts the
+    # caller's user_id and is refused unless env is development.
+    auth: Literal["required", "disabled"] = Field(
+        default="required", validation_alias=AliasChoices("KOI_AUTH", "auth"))
+
+    # How access tokens are verified. HS256 checks the signature with the
+    # project's JWT secret; ES256 and RS256 with the public key from the
+    # JWKS URL (the project's signing keys). The issuer defaults to
+    # SUPABASE_URL + /auth/v1.
+    jwt_algorithm: Literal["HS256", "ES256", "RS256"] = Field(
+        default="HS256", validation_alias=AliasChoices("KOI_JWT_ALGORITHM", "jwt_algorithm"))
+    supabase_jwt_secret: SecretStr = Field(
+        default=SecretStr(""), validation_alias=AliasChoices("SUPABASE_JWT_SECRET", "supabase_jwt_secret"))
+    supabase_jwks_url: str = Field(
+        default="", validation_alias=AliasChoices("SUPABASE_JWKS_URL", "supabase_jwks_url"))
+    jwt_issuer: str = Field(default="", validation_alias=AliasChoices("KOI_JWT_ISSUER", "jwt_issuer"))
+    jwt_audience: str = Field(
+        default="authenticated", validation_alias=AliasChoices("KOI_JWT_AUDIENCE", "jwt_audience"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
@@ -123,6 +143,20 @@ class Settings(BaseSettings):
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError(f"unknown time zone {value!r}") from exc
         return value
+
+    @model_validator(mode="after")
+    def _auth_bypass_only_in_development(self) -> "Settings":
+        if self.auth == "disabled" and self.env != "development":
+            raise ValueError(f"KOI_AUTH=disabled is only allowed with KOI_ENV=development, not {self.env!r}")
+        return self
+
+    @property
+    def resolved_jwt_issuer(self) -> str:
+        """The issuer access tokens must carry: KOI_JWT_ISSUER, else the
+        Supabase project's auth URL, else empty (refused at API start)."""
+        if self.jwt_issuer:
+            return self.jwt_issuer
+        return f"{self.supabase_url.rstrip('/')}/auth/v1" if self.supabase_url else ""
 
     @property
     def tz(self) -> ZoneInfo:

@@ -63,12 +63,14 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
     "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL"),
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
-                 "manualpostallocation", "ClosestStations"),
+                 "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
         "id", "created_at", "userID", "event_type", "event_timestamp", "volume_percentage",
         "volume_litres", "food_grams", "protein_percentage", "algae_method"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
+    # Supabase Auth's session table, read by auth_session_active (0007).
+    "auth.sessions": ("id", "user_id", "not_after"),
 }
 
 # The user column of each table (three spellings coexist in the schema).
@@ -393,6 +395,19 @@ class MemoryStorage:
         self._check("fetch_pond_config")
         rows = self._select("UserData", user_id, limit=1)
         return pond_config_from_userdata_row(rows[0]) if rows else None
+
+    # --- account links ------------------------------------------------
+    def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
+        self._check("fetch_pond_id_for_account")
+        row = next((r for r in self.rows("UserData") if r.get("auth_uid") == auth_uid), None)
+        return int(row["userID"]) if row else None
+
+    def is_session_active(self, session_id: str, auth_uid: str) -> bool:
+        self._check("is_session_active")
+        now = self._clock()
+        return any(r["id"] == session_id and r["user_id"] == auth_uid
+                   and (r.get("not_after") is None or parse_timestamp(r["not_after"]) > now)
+                   for r in self.rows("auth.sessions"))
 
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:

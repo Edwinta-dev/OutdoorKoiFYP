@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import USER
+from conftest import USER, api_client
 from koi.worker import poller
 
 
@@ -47,7 +47,7 @@ def registry(pond_app):
 
 @pytest.fixture(scope="module")
 def client(store, pond_app):
-    return pond_app.test_client()
+    return api_client(pond_app)
 
 
 @pytest.fixture(scope="module")

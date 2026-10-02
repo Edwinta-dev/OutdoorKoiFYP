@@ -13,6 +13,11 @@ GET /health is liveness only. GET /ready checks storage and the poller
 Prometheus text: request counts and latency by route, and the poller's
 cycle, failure, sensor-age and snapshot-age gauges. Logs are JSON lines
 (koi.logs) at settings.log_level.
+
+Every pond route needs the caller's Supabase access token (koi/api/auth.py).
+create_app raises koi.api.auth.AuthConfigError when auth is required but
+the settings cannot verify a token; signing_keys is an offline JWKS for
+tests.
 """
 from __future__ import annotations
 
@@ -21,6 +26,8 @@ from typing import Optional
 from flask import Flask
 from flask_cors import CORS
 
+from koi.api.auth import SigningKeys
+from koi.api.auth import init_app as init_auth
 from koi.errors import register_error_handlers
 from koi.logs import configure_logging
 from koi.observability import instrument_app
@@ -29,7 +36,8 @@ from koi.settings import Settings, get_settings
 from koi.storage import Storage, build_storage
 
 
-def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] = None) -> Flask:
+def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] = None,
+               signing_keys: Optional[SigningKeys] = None) -> Flask:
     settings = settings or get_settings()
     configure_logging(settings, "api")
     storage = storage if storage is not None else build_storage(settings)
@@ -38,6 +46,7 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
     app.extensions["koi_storage"] = storage
     app.extensions["koi_registry"] = EngineRegistry(storage)
     CORS(app, origins=list(settings.cors_origins))
+    init_auth(app, settings, signing_keys)
 
     from koi.api.health import poller_metrics
     from koi.api.routes import bp

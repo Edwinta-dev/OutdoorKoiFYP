@@ -152,6 +152,16 @@ class Storage(Protocol):
 
     def fetch_pond_config(self, user_id: int) -> Optional[dict]: ...
 
+    # --- account links (UserData.auth_uid, migration 0007) -------------
+    def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
+        """The userID of the pond linked to this Supabase account, or None."""
+        ...
+
+    def is_session_active(self, session_id: str, auth_uid: str) -> bool:
+        """True while the account's auth session exists and has not reached
+        its not_after time (the auth_session_active function)."""
+        ...
+
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]: ...
 

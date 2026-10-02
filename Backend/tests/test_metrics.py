@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import DASHBOARD_PAYLOAD, POND_FIXTURE, USER, make_settings, make_storage
+from conftest import DASHBOARD_PAYLOAD, POND_FIXTURE, USER, api_client, make_settings, make_storage
 from koi.api import create_app
 from koi.metrics import CONTENT_TYPE, Metrics
 from koi.registry import EngineRegistry
@@ -50,7 +50,7 @@ def test_metrics_label_values_are_escaped_and_label_names_checked():
 
 
 def test_metrics_endpoint_counts_requests_by_route_pattern():
-    client = create_app(make_settings(), storage=make_storage()).test_client()
+    client = api_client(create_app(make_settings(), storage=make_storage()))
     client.get("/health")
     client.get("/health")
     client.get(f"/assessment/{USER}")

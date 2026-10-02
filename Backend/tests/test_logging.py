@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import DASHBOARD_PAYLOAD, USER, make_settings, make_storage
+from conftest import DASHBOARD_PAYLOAD, USER, api_client, make_settings, make_storage
 from koi.api import create_app
 from koi.logs import JsonFormatter, configure_logging, log_event, pond_context
 from koi.registry import EngineRegistry
@@ -106,7 +106,7 @@ def test_logging_level_comes_from_settings():
 
 
 def test_logging_request_id_is_taken_from_the_header_and_returned():
-    client = create_app(make_settings(), storage=make_storage()).test_client()
+    client = api_client(create_app(make_settings(), storage=make_storage()))
     resp = client.get(f"/assessment/{USER}", headers={"X-Request-ID": "abc-123"})
     assert resp.headers["X-Request-ID"] == "abc-123"
     generated = client.get("/health").headers["X-Request-ID"]
@@ -122,7 +122,7 @@ def test_logging_request_lines_carry_request_and_pond_ids():
     buf = io.StringIO()
     handler = configure_logging(make_settings(log_level="DEBUG"), "api", stream=buf)
     try:
-        resp = app.test_client().get(f"/assessment/{USER}", headers={"X-Request-ID": "req-1"})
+        resp = api_client(app).get(f"/assessment/{USER}", headers={"X-Request-ID": "req-1"})
     finally:
         logging.getLogger().removeHandler(handler)
     lines = [json.loads(line) for line in buf.getvalue().splitlines()]

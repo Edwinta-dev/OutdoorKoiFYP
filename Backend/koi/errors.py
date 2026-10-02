@@ -40,7 +40,7 @@ class ApiError(Exception):
     code = "bad_request"
 
     def __init__(self, message: str, *, status: Optional[int] = None, code: Optional[str] = None,
-                 details: Optional[dict] = None):
+                 details: Optional[dict] = None, headers: Optional[dict] = None):
         super().__init__(message)
         self.message = message
         if status is not None:
@@ -48,6 +48,7 @@ class ApiError(Exception):
         if code is not None:
             self.code = code
         self.details = details or {}
+        self.headers = headers or {}
 
 
 class PondNotConfigured(ApiError):
@@ -97,7 +98,7 @@ def register_error_handlers(app: Flask, extra: Optional[Callable[[], dict]] = No
 
     @app.errorhandler(ApiError)
     def _api_error(exc: ApiError):
-        return reply(exc.status, exc.code, exc.message, exc.details)
+        return reply(exc.status, exc.code, exc.message, exc.details, headers=exc.headers)
 
     @app.errorhandler(ValidationError)
     def _validation_error(exc: ValidationError):

@@ -11,6 +11,7 @@ change belongs in a migration; do not make an unrecorded live-only change.
 | `0004_observed_storage.sql` | The live storage buckets (`imageAnalysisBucket`, `FishImages`) and their eight anon policies, as observed. | Applied 2026-10-01 (no change on live). |
 | `0005_algae_severity_ratings.sql` | The `algae_severity_ratings` table for the app's rating card. | Applied 2026-10-01. |
 | `0006_hourly_history_utc_instants.sql` | `get_pond_telemetry_history` returns UTC instants whatever the session time zone (defect D9, issue #15). | Not yet applied. |
+| `0007_auth_link.sql` | `UserData.auth_uid` (nullable, unique: one pond per account until #67), a trigger refusing app-role changes to the link, `auth_session_active` (backend only) and `link_pond_to_account` (owner only, SQL editor) for the API's sign-in check (issue #11). Access per function is listed in its header. | Not yet applied. |
 
 How each file was derived, the live evidence and every known difference
 and defect are in

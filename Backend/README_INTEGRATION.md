@@ -53,6 +53,12 @@ name in `.env`. Both services read the same file.
 | `DEVICE_TOKEN` | empty (uploads unauthenticated) | camera; must match `Embedded/camera_node/secrets.h` |
 | `TEST_MODE` | `0` | camera; `1` = short bench-test sleep times |
 | `KOI_LOG_LEVEL` | `INFO` | all three; lowest level written to the JSON log |
+| `KOI_AUTH` | `required` | API; `disabled` skips sign-in and is refused unless `KOI_ENV=development` |
+| `KOI_JWT_ALGORITHM` | `HS256` | API; `ES256`/`RS256` verify with `SUPABASE_JWKS_URL` |
+| `SUPABASE_JWT_SECRET` | none | API, with `HS256` (server-side only) |
+| `SUPABASE_JWKS_URL` | none | API, with `ES256`/`RS256` |
+| `KOI_JWT_ISSUER` | `SUPABASE_URL` + `/auth/v1` | API; the token's `iss` |
+| `KOI_JWT_AUDIENCE` | `authenticated` | API; the token's `aud` |
 
 The old camera service loaded its `.env` with `override=True`, so the file
 beat the environment. Settings use the usual order instead: the
@@ -173,6 +179,30 @@ frame from the growth fit. Exactly reversible via undo.
 
 ## Endpoints
 
+Sign-in (`koi/api/auth.py`, issue #11): every route below except
+`/health`, `/ready` and `/metrics` needs `Authorization: Bearer <access
+token>`, the Supabase session token the app holds. The token must verify
+(configured algorithm only, signature, `iss`, `aud`, `exp`, with `sub`
+and `session_id`) and its session must still exist in `auth.sessions`
+(`auth_session_active`, migration 0007), so signing out or revoking a
+session stops its token early. Otherwise 401 with a `WWW-Authenticate`
+header (codes `auth_required`, `invalid_token`, `token_expired`,
+`session_revoked`). The `<uid>` in the path or the `user_id` in the body
+must be the pond whose `UserData.auth_uid` is the token's `sub`; any other
+pond, or an account with no pond linked, is 403 (`pond_forbidden`,
+`pond_not_linked`). Knowing a pond's id gives no access.
+
+Ponds are linked to accounts only by the owner, with
+`link_pond_to_account(pond_id, account_uuid)` in the Supabase SQL editor
+after confirming outside the app that the account holder keeps that pond
+(the process #49 reuses). A trigger refuses any change of `auth_uid` made
+with the app's keys, and the backend never writes it. One pond per
+account for now; #67 lifts that.
+
+`KOI_AUTH=disabled` restores the old behaviour (trust `user_id`) for local
+development only; the API refuses to start with it in any other
+`KOI_ENV`.
+
 Cheap cached reads (dashboard cards + alert badges):
 - `GET /assessment/<uid>` — chemistry
 - `GET /assessment/evaporation/<uid>`
@@ -254,7 +284,11 @@ location, so it works from any working directory.
 
 ## Still open
 
-- **No auth.** Every endpoint trusts a caller-supplied `user_id`.
+- **Direct database access.** The API checks the caller's pond (above),
+  but until #12 the app's anon key can still call
+  `get_bundled_dashboard_payload`, `get_historical_graph_payload`,
+  `get_pond_telemetry_history` and `aggregate_daily_sensor_data` and read
+  the tables for any pond id. See migration 0007's header.
 - **ESP32 `user_id` mismatch.** The camera firmware hardcoded `15`; pond data
   is `455`. Algae stays `no-camera` for 455 until reconciled.
 - Both new models are uncalibrated against ground truth.

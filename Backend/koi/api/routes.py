@@ -42,12 +42,11 @@ koi.api.schemas. Every non-2xx response is the koi.errors envelope,
 {"error": {"code", "message", "details"}}; routes raise ApiError or
 PondNotConfigured rather than building error responses themselves.
 
-Auth note: every endpoint below trusts a caller-supplied user_id (in the
-body for events, in the path for reads). That is NOT safe for production
-- anyone who can reach this service can read or write state for any user.
-Before shipping, verify the caller's Supabase JWT (Flutter already holds
-one from its own auth session) and derive user_id from the verified token
-rather than from the request. See the write-up.
+Auth: every route except /health and /ready verifies the caller's
+Supabase access token, and the user_id in the path or body must be the
+pond linked to that account (koi/api/auth.py): 401 without a valid token,
+403 for any other pond. Path user_ids are checked before the view runs;
+_parse_body checks the body's user_id.
 """
 import logging
 from typing import Optional, TypeVar
@@ -59,6 +58,7 @@ from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
 from koi.api import schemas
+from koi.api.auth import authenticate, require_pond
 from koi.api.health import readiness
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
@@ -70,6 +70,7 @@ from koi.registry import EngineRegistry
 from koi.storage import Storage, fail_soft
 
 bp = RouteGroup("twin", __name__)
+bp.before_request(authenticate)
 
 log = logging.getLogger(__name__)
 
@@ -90,11 +91,14 @@ def _registry() -> EngineRegistry:
 
 def _parse_body(model: type[M]) -> M:
     """The JSON body validated against model; a ValidationError becomes
-    a 400 with field-level detail (koi.errors)."""
+    a 400 with field-level detail (koi.errors). Every body names a pond,
+    which must be the caller's (403 otherwise)."""
     body = request.get_json(force=True, silent=True)
     if not isinstance(body, dict):
         raise ApiError("The request body must be a JSON object.", code="invalid_body")
-    return model.model_validate(body)
+    parsed = model.model_validate(body)
+    require_pond(getattr(parsed, "user_id"))  # noqa: B009 - every body model has user_id
+    return parsed
 
 
 def _parse_query(model: type[M]) -> M:

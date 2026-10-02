@@ -400,6 +400,25 @@ class SupabaseStorage:
             )
             return pond_config_from_userdata_row(res.data[0]) if res.data else None
 
+    # --- account links ------------------------------------------------
+    def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
+        with _operation("fetch_pond_id_for_account"):
+            res = (
+                self._db().table("UserData")
+                .select("userID")
+                .eq("auth_uid", auth_uid)
+                .limit(1)
+                .execute()
+            )
+            return int(res.data[0]["userID"]) if res.data else None
+
+    def is_session_active(self, session_id: str, auth_uid: str) -> bool:
+        with _operation("is_session_active"):
+            res = self._db().rpc(
+                "auth_session_active", {"p_session_id": session_id, "p_user_id": auth_uid}
+            ).execute()
+            return res.data is True
+
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:
         """The get_bundled_dashboard_payload RPC: latest sensor readings,
