@@ -3,10 +3,11 @@
 // Font setup: the default test font draws every glyph as a full-width
 // square, so text is about twice as wide as on a phone and the dashboard
 // cards overflow at phone widths. This loads Roboto and the Material
-// icon font from the Flutter SDK's own cache (bin/cache/artifacts/
-// material_fonts, downloaded by every Flutter install), so layout is
-// realistic and goldens render real text and icons. Local runs and CI
-// read the same files for the same Flutter version.
+// icon font from test/fonts (copied from the Flutter SDK's
+// bin/cache/artifacts/material_fonts, licenses alongside), so layout is
+// realistic and goldens render real text and icons. They are committed
+// because the CI runner's SDK cache lacks Roboto even after
+// `flutter precache`; the SDK cache is only a fallback.
 //
 // Limit: text whose style names no font family and does not inherit the
 // theme's (DropdownButton's own `style`, as in the log sheet's time
@@ -39,6 +40,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 
 Directory _materialFontsDir() {
   final candidates = <String>[
+    'test/fonts', // flutter test runs from the package root
     if (Platform.environment['FLUTTER_ROOT'] case final root?)
       '$root/bin/cache/artifacts/material_fonts',
   ];
@@ -54,8 +56,7 @@ Directory _materialFontsDir() {
     if (File('${d.path}/roboto-regular.ttf').existsSync()) return d;
   }
   throw StateError(
-    'Roboto not found in the Flutter SDK cache (looked in: '
-    '${candidates.join(', ')}). Run `flutter precache` and retry.',
+    'Roboto not found (looked in: ${candidates.join(', ')}).',
   );
 }
 
