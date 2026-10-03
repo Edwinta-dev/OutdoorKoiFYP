@@ -128,6 +128,7 @@ def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWa
 
 # Baseline reset reason stored in imageTable.baseline_reset (migration 0010).
 RESET_MASK_CHANGED = "mask_changed"
+RESET_OBSTRUCTION_PERSISTED = "obstruction_persisted"  # issue #80
 
 
 # Rows searched for the newest frame that did not fail the quality gate.
@@ -175,10 +176,15 @@ def get_mask(user_id: str) -> tuple[list | None, int | None]:
 def carried_state(prev_state, prev_green_ratio) -> list:
     """The state a failed frame stores: the previous accepted frame's
     [label, baseline, raised, stable] unchanged, so it is shown as the
-    camera's current state and moves nothing."""
+    camera's current state and moves nothing, including an obstruction
+    candidate (issue #80), which a failed frame neither extends nor breaks."""
     raised, stable = hsvEngine._coerce_counters(prev_state)
-    return [hsvEngine._coerce_state(prev_state),
-            round(hsvEngine._coerce_baseline(prev_state, prev_green_ratio), 4), raised, stable]
+    carried = [hsvEngine._coerce_state(prev_state),
+               round(hsvEngine._coerce_baseline(prev_state, prev_green_ratio), 4), raised, stable]
+    mean, count = hsvEngine._coerce_candidate(prev_state)
+    if mean is not None:
+        carried += [mean, count]
+    return carried
 
 
 def store_thumbnail(bucket: str, frame_path: str, img) -> str | None:
@@ -272,8 +278,18 @@ def upload_image():
     else:
         state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
                                     enter_frames=settings.camera_dynamic_enter_frames,
-                                    exit_frames=settings.camera_dynamic_exit_frames)
+                                    exit_frames=settings.camera_dynamic_exit_frames,
+                                    confirm_frames=settings.camera_obstruction_confirm_frames,
+                                    tolerance=settings.camera_obstruction_tolerance)
         rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
+        if hsvEngine.rebaselined(prev_state, state):
+            # A persistent, consistent level is a new view, not an
+            # obstruction: the baseline restarted there (issue #80).
+            baseline_reset = RESET_OBSTRUCTION_PERSISTED
+            rise = 0.0
+            log_event(log, "camera_baseline_reset", reason=baseline_reset,
+                      from_baseline=hsvEngine._coerce_baseline(prev_state, prev_green_ratio),
+                      to_baseline=state[1])
     analysis_seconds.observe(analysis_time + time.perf_counter() - started)
     from_state = hsvEngine._coerce_state(prev_state)
     transitions.inc(from_state=from_state, to_state=state[0])

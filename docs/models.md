@@ -3,6 +3,21 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Camera obstruction off-ramp (issue #80)
+
+Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/camera.py`.
+New constants; no existing constant changed.
+
+| Constant | Value | Why |
+|---|---|---|
+| Frames to confirm a new level (`OBSTRUCTION_CONFIRM_FRAMES`, `CAMERA_OBSTRUCTION_CONFIRM_FRAMES`) | 3 (0 = off) | An obstruction (a jump of more than 0.40 over the smoothed baseline) froze the baseline and cleared only when a frame came back within 0.15 of it. The app reset meant for a genuine change of view was never connected, so pond 455 stayed latched at a 0.0125 baseline while reading about 0.19 (2026-10-03). Three obstructed frames in a row that agree now restart the baseline at their mean and record `baseline_reset = 'obstruction_persisted'`. |
+| Agreement band (`OBSTRUCTION_TOLERANCE`, `CAMERA_OBSTRUCTION_TOLERANCE`) | 0.05 green ratio | A frame within 0.05 of the running mean of the current run extends it; any other frame starts a new run at itself, so a lone leaf, bird or ripple never confirms. |
+
+While latched, dG/dt stays frozen at the last trusted baseline as before;
+frames that fail the quality gate carry the run unchanged. Obstruction rows
+grow to `[label, smoothed, 0, 0, candidate_mean, count]`; rows without the
+candidate load with none, and the app only reads element 0.
+
 ## Camera frame quality gate (issue #40)
 
 Files: `Backend/koi/camera/quality.py`, `Backend/koi/camera/imageSchedule.py`.
