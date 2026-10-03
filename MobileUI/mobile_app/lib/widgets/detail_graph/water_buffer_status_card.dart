@@ -6,6 +6,7 @@
 // screen. Fetches GET /assessment/<user_id> via DigitalTwinApi.
 
 import 'package:flutter/material.dart';
+import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
 
 class WaterBufferStatusCard extends StatefulWidget {
@@ -23,12 +24,12 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
   @override
   void initState() {
     super.initState();
-    _future = DigitalTwinApi.fetchLatestAssessment(widget.userId);
+    _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
   }
 
   void _retry() {
     setState(() {
-      _future = DigitalTwinApi.fetchLatestAssessment(widget.userId);
+      _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
     });
   }
 

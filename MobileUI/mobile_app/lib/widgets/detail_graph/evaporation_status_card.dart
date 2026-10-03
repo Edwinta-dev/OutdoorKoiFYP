@@ -9,6 +9,7 @@
 // 20px radius) so the three detail screens read as one system.
 
 import 'package:flutter/material.dart';
+import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
 
 class EvaporationStatusCard extends StatefulWidget {
@@ -26,12 +27,12 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
   @override
   void initState() {
     super.initState();
-    _future = DigitalTwinApi.fetchEvaporationForecastOrError(widget.userId);
+    _future = PondDataScope.of(context).fetchEvaporationForecastOrError(widget.userId);
   }
 
   void _retry() {
     setState(() {
-      _future = DigitalTwinApi.fetchEvaporationForecastOrError(widget.userId);
+      _future = PondDataScope.of(context).fetchEvaporationForecastOrError(widget.userId);
     });
   }
 

@@ -3,7 +3,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
+
+/// The live write behind PondDataSource.insertIntervention. It lives next
+/// to the payload built in _InterventionLogSheetState._save so the schema
+/// check can match the payload keys to pondInterventions columns.
+Future<void> insertPondIntervention(Map<String, dynamic> payload) async {
+  await Supabase.instance.client.from('pondInterventions').insert(payload);
+}
 
 /// Main Entry Point: Opens the Quick Action Option Selector
 void showQuickActionSelector(BuildContext context) {
@@ -119,11 +127,16 @@ class InterventionLogSheet extends StatefulWidget {
   final String title;
   final Color accentColor;
 
+  /// The time the sheet opens on; tests pass a fixed one so the rendered
+  /// timestamp does not depend on the wall clock.
+  final DateTime? initialTimestamp;
+
   const InterventionLogSheet({
     super.key,
     required this.eventType,
     required this.title,
     required this.accentColor,
+    this.initialTimestamp,
   });
 
   @override
@@ -136,14 +149,15 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   final _val2Ctrl = TextEditingController(); // Volume or Protein %
 
   String _selectedOption = 'Manual Scrub'; // For Algae or Food presets
-  DateTime _date = DateTime.now();
+  late DateTime _date;
   int _hour = 12, _min = 0;
   bool _isPm = true, _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = widget.initialTimestamp ?? DateTime.now();
+    _date = now;
     _isPm = now.hour >= 12;
     _hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
     _min = now.minute;
@@ -155,6 +169,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
+    final source = PondDataScope.of(context);
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
@@ -203,13 +218,14 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
       }
 
       // Historical intervention record - feeds the timeline graph markers.
-      await Supabase.instance.client.from('pondInterventions').insert(payload);
+      await source.insertIntervention(payload);
 
       // Push the same event into the DigitalTwin chemistry engine so its
       // TAN/NO2/NO3 pools and the water buffer status card reflect it.
       // Best-effort: the Supabase insert above already succeeded, so a
       // slow/unreachable Flask host must not fail this save.
       final assessment = await _pushToDigitalTwin(
+        source,
         userId: userId,
         timestamp: timestamp,
         volumePercent: volumePercent,
@@ -246,7 +262,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     }
   }
 
-  Future<WaterChemistryAssessment?> _pushToDigitalTwin({
+  Future<WaterChemistryAssessment?> _pushToDigitalTwin(
+    PondDataSource source, {
     required int userId,
     required DateTime timestamp,
     double? volumePercent,
@@ -258,7 +275,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   }) {
     switch (widget.eventType) {
       case 'FEEDING':
-        return DigitalTwinApi.logFeeding(
+        return source.logFeeding(
           userId: userId,
           foodGrams: foodGrams ?? 0.0,
           proteinPercent: proteinPercent ?? 40.0,
@@ -267,7 +284,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           fishCount: fishCount,
         );
       case 'WATER_CHANGE':
-        return DigitalTwinApi.logWaterChange(
+        return source.logWaterChange(
           userId: userId,
           volumePercent: volumePercent,
           volumeLitres: volumeLitres,
@@ -276,7 +293,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           fishCount: fishCount,
         );
       case 'WATER_TOPUP':
-        return DigitalTwinApi.logTopUp(
+        return source.logTopUp(
           userId: userId,
           volumePercent: volumePercent,
           volumeLitres: volumeLitres,
@@ -285,7 +302,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           fishCount: fishCount,
         );
       case 'ALGAE_SCRUB':
-        return DigitalTwinApi.logAlgalScrub(
+        return source.logAlgalScrub(
           userId: userId,
           scrubType: _selectedOption,
           timestamp: timestamp,

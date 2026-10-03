@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/pond_data_source.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/detail_graph/algae_status_card.dart';
 import '../widgets/detail_graph/evaporation_status_card.dart';
@@ -52,21 +52,20 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
   /// Loads tank parameters from SharedPreferences & fetches database trends
   Future<void> _loadUserPreferencesAndPayload() async {
     setState(() => _isLoading = true);
+    final source = PondDataScope.of(context);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
       _userId = userId;
 
-      final response = await Supabase.instance.client.rpc(
-        'get_historical_graph_payload',
-        params: {'p_userid': userId, 'p_days': _selectedDays},
+      final response = await source.fetchHistoricalGraphPayload(
+        userId,
+        _selectedDays,
       );
 
       if (mounted && response != null) {
-        final Map<String, dynamic> data = Map<String, dynamic>.from(
-          response as Map,
-        );
+        final Map<String, dynamic> data = response;
         setState(() {
           _dailyTrends = List<Map<String, dynamic>>.from(
             data['daily_trends'] ?? [],

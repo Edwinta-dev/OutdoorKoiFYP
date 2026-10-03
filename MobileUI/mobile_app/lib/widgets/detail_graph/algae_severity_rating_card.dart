@@ -36,6 +36,7 @@
 // The two are merged in _load() and degrade independently.
 
 import 'package:flutter/material.dart';
+import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
 import '../../utils/pond_camera_storage.dart';
 
@@ -87,8 +88,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     // cast back to a record type on the way out - fragile, and needless
     // here. Kicking all three off before the first await gives the same
     // concurrency with full static typing.
-    final frameFuture = PondCameraStorage.fetchLatestFrame(userId: widget.userId);
-    final contextFuture = DigitalTwinApi.fetchAlgaeRatingContext(widget.userId);
+    final source = PondDataScope.of(context);
+    final frameFuture = source.fetchLatestFrame(widget.userId);
+    final contextFuture = source.fetchAlgaeRatingContext(widget.userId);
 
     final frameResult = await frameFuture;
     final ctx = await contextFuture;
@@ -117,7 +119,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       _error = null;
     });
 
-    final res = await DigitalTwinApi.submitAlgaeRating(
+    final res = await PondDataScope.of(context).submitAlgaeRating(
       userId: widget.userId,
       severity: choice,
       // Pin the exact frame being rated - see the header comment.
@@ -140,7 +142,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
   Future<void> _undo() async {
     final id = _lastResult?.ratingId;
     setState(() => _submitting = true);
-    final ok = await DigitalTwinApi.undoAlgaeRating(
+    final ok = await PondDataScope.of(context).undoAlgaeRating(
       userId: widget.userId,
       ratingId: id,
     );

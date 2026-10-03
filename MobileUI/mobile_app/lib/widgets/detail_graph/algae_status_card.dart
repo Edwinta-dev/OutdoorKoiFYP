@@ -13,6 +13,7 @@
 // evidence for is one they can calibrate their trust against.
 
 import 'package:flutter/material.dart';
+import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
 
 class AlgaeStatusCard extends StatefulWidget {
@@ -30,12 +31,12 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
   @override
   void initState() {
     super.initState();
-    _future = DigitalTwinApi.fetchAlgaeForecastOrError(widget.userId);
+    _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
   }
 
   void _retry() {
     setState(() {
-      _future = DigitalTwinApi.fetchAlgaeForecastOrError(widget.userId);
+      _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
     });
   }
 
