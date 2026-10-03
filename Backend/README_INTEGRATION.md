@@ -61,11 +61,25 @@ name in `.env`. Both services read the same file.
 | `SUPABASE_JWKS_URL` | none | API, with `ES256`/`RS256` |
 | `KOI_JWT_ISSUER` | `SUPABASE_URL` + `/auth/v1` | API; the token's `iss` |
 | `KOI_JWT_AUDIENCE` | `authenticated` | API; the token's `aud` |
+| `CAMERA_DYNAMIC_ENTER_FRAMES` | `2` | camera; raised frames in a row to enter the dynamic schedule |
+| `CAMERA_DYNAMIC_EXIT_FRAMES` | `3` | camera; stable frames in a row to leave it |
+| `CAMERA_DYNAMIC_RATE_LEVELS` | `0.10,0.20` | camera; green-ratio rise per frame past which the dynamic interval steps from 2 h to 1 h to 30 min |
+| `CAMERA_OBSTRUCTION_CONFIRM_FRAMES` | `3` | camera; consistent obstructed frames that restart the baseline (issue #80); `0` keeps the old latch |
+| `CAMERA_OBSTRUCTION_TOLERANCE` | `0.05` | camera; how close (green ratio) those frames must stay to their mean |
+| `NEA_API_BASE_URL` | `https://api-open.data.gov.sg/v2/real-time/api` | weather job |
+| `NEA_API_KEY` | empty | weather job; optional data.gov.sg key (server-side only) |
+| `NEA_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | weather job; spacing between requests |
+| `NEA_MAX_ATTEMPTS` | `5` | weather job; tries per request with backoff |
+| `WEATHER_HISTORY_STATIONS` | empty | weather job; extra stations to keep history for (comma separated), beside those assigned to ponds |
+| `WEATHER_HISTORY_AREAS` | empty | weather job; extra 2-hour forecast areas, `*` for all |
+| `SENTRY_DSN` | empty (off) | all three; error tracking turns on when set (server-side only) |
+| `SENTRY_ENVIRONMENT` | `KOI_ENV` | all three |
+| `SENTRY_RELEASE` | `koi@<version>+twin.<snapshot version>` | all three |
 
 The old camera service loaded its `.env` with `override=True`, so the file
 beat the environment. Settings use the usual order instead: the
-environment wins. On PythonAnywhere nothing else sets these names, so the
-result is the same.
+environment wins. On PythonAnywhere and on the laptop nothing else sets
+these names, so the result is the same.
 
 ## Running
 
@@ -117,32 +131,78 @@ twins. They stay consistent through the stored snapshot:
 `pyproject.toml` lists direct dependencies with lower bounds.
 `requirements.lock` pins the full set for Python 3.11 on Linux; regenerate
 it with the command at its top after changing `pyproject.toml`.
-`requirements.txt` installs the lock plus the package and is what
-PythonAnywhere uses.
+`requirements.txt` installs the lock plus the package and is what the
+PythonAnywhere camera uses.
 
-## Deploying on PythonAnywhere
+## Where each service runs
 
-1. Pull the repository, then from `Backend/`:
-   `pip install --user -r requirements.txt` (or, in the web app's
-   virtualenv, without `--user`).
-2. Create `Backend/.env` from `.env.example` and set `KOI_ENV=production`.
-3. Point each web app's WSGI file at its factory. Camera service:
+As of 2026-10-03 (permanent hosting for the API and worker: issue #83):
 
-   ```python
-   import sys
-   path = "/home/<username>/OutdoorKoiFYP/Backend"
-   if path not in sys.path:
-       sys.path.insert(0, path)
+| Service | Runs on | Code |
+|---|---|---|
+| Camera (`koi.camera`) | PythonAnywhere free tier, `edwinta.pythonanywhere.com` | `~/koi-camera/Backend`, a sparse clone of `main` |
+| Digital twin API (`koi.api`) | The owner's laptop, for now | this repository |
+| Poller (`koi.worker`) | The owner's laptop, for now | this repository |
 
-   from koi.camera import create_app
-   application = create_app()
-   ```
+The free tier allows one web app (the camera), no always-on tasks and
+512 MB of disk, so the API and the worker cannot run there.
 
-   Digital twin API: the same, with `from koi.api import create_app`.
-4. Run the poller as an always-on task: `python -m koi.worker`, with
-   `Backend/` as the working directory. PythonAnywhere web apps run one
-   process each, so no gunicorn step is needed there.
-5. Reload the web apps.
+### Camera on PythonAnywhere
+
+Web tab settings: source and working directory `/home/edwinta/koi-camera/Backend`,
+virtualenv `/home/edwinta/.virtualenvs/koi` (Python 3.11), WSGI file
+`/var/www/edwinta_pythonanywhere_com_wsgi.py`:
+
+```python
+import sys
+path = "/home/edwinta/koi-camera/Backend"
+if path not in sys.path:
+    sys.path.insert(0, path)
+
+from koi.camera import create_app
+application = create_app()
+```
+
+First install, from a Bash console with the virtualenv active. The
+`Backend/` folder alone keeps the clone at about 4 MB:
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/Edwinta-dev/OutdoorKoiFYP.git ~/koi-camera
+cd ~/koi-camera && git sparse-checkout set Backend
+cd Backend && pip install -r requirements.txt   # the virtualenv's packages, no --user
+cp ~/Camera/.env .env && chmod 600 .env         # the camera's keys; never committed
+python -c "from koi.camera import create_app; create_app()"
+```
+
+Update: `cd ~/koi-camera && git pull`, then `pip install -r Backend/requirements.txt`
+if `requirements.lock` changed, then Reload on the Web tab, ideally between
+camera wake-ups. Check `GET /` and `GET /metrics` return 200 and the error log
+is clean.
+
+Rollback: `~/Camera` still holds the pre-refactor camera app. Copy
+`~/camera_wsgi_backup.py` back over the WSGI file and Reload;
+`~/koi-venv-freeze-before-20261003.txt` restores the virtualenv's earlier
+packages with `pip install -r`.
+
+The free site stops unless "Run until 1 month from today" is clicked on the
+Web tab once a month.
+
+### API and worker on the laptop
+
+From `Backend/`, with `Backend/.env` set as for production
+(`KOI_ENV=production`, the Supabase URL and service-role key,
+`SUPABASE_JWT_SECRET`):
+
+```bash
+python -m koi.api      # port 8080
+python -m koi.worker   # its own terminal; stops when the laptop sleeps
+```
+
+Only one worker polls at a time (the `worker_lease`), so starting a second
+copy elsewhere is safe. While the laptop is off, nothing polls and the
+stored pond state stops advancing until the worker runs again. The app
+cannot use this API yet: it has no sign-in (#49), and `KOI_AUTH=required`
+refuses unsigned requests.
 
 Database: apply `supabase/migrations/0002_worker_lease.sql` before
 deploying this version: the snapshot reads and writes and the worker
