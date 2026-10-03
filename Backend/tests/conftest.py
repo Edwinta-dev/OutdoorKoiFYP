@@ -5,6 +5,11 @@ the JSON files in tests/fixtures. supabase and apscheduler are also
 replaced with inert stubs before any test module is imported, so no test
 can reach the live database or start a real scheduler. Settings are built
 with _env_file=None so a developer's real Backend/.env is never read.
+
+The API requires a Supabase access token (koi/api/auth.py). Tests sign
+their own with TEST_JWT_SECRET (mint_token); the fixture pond is linked to
+USER_AUTH_UID with an active session, and api_client() sends a token for
+that account on every request.
 """
 import itertools
 import json
@@ -13,6 +18,7 @@ import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import jwt
 import pytest
 
 _STUBBED_MODULES = ["supabase", "apscheduler", "apscheduler.schedulers",
@@ -76,12 +82,50 @@ def ticking_clock(start=datetime(2026, 8, 20, tzinfo=timezone.utc)):
     return lambda: start + timedelta(seconds=next(ticks))
 
 
+# Offline auth: the test-only signing secret and the account that owns
+# the fixture pond.
+TEST_JWT_SECRET = "koi-test-only-jwt-secret-not-a-real-project-key"
+TEST_ISSUER = "https://koi-test.invalid/auth/v1"
+USER_AUTH_UID = "6c1f0c4e-5b1a-4a39-9d0e-455000000455"
+USER_SESSION_ID = "0b8d3f2a-1c7e-4e55-8a61-455000000001"
+
+
+def mint_token(sub=USER_AUTH_UID, session_id=USER_SESSION_ID, *, secret=TEST_JWT_SECRET,
+               expires_in=timedelta(hours=1), algorithm="HS256", headers=None, **claims):
+    """A Supabase-shaped access token signed with the test secret (or the
+    given key). Pass a claim as None to leave it out."""
+    now = datetime.now(timezone.utc)
+    payload = {"sub": sub, "session_id": session_id, "aud": "authenticated", "iss": TEST_ISSUER,
+               "role": "authenticated", "iat": now, "exp": now + expires_in, **claims}
+    payload = {k: v for k, v in payload.items() if v is not None}
+    return jwt.encode(payload, secret, algorithm=algorithm, headers=headers)
+
+
+def link_account(storage, user_id, auth_uid, session_id):
+    """Links a pond to an account and opens a session for it, as Supabase
+    Auth and link_pond_to_account would."""
+    for row in storage._tables["UserData"]:
+        if str(row["userID"]) == str(user_id):
+            row["auth_uid"] = auth_uid
+    storage.add_rows("auth.sessions", [{"id": session_id, "user_id": auth_uid, "not_after": None}])
+
+
 def make_storage():
-    """A MemoryStorage holding the fixture pond: UserData, 10 days of
-    daily temp, LUX and TDS averages, and the dashboard payload."""
+    """A MemoryStorage holding the fixture pond: UserData (linked to
+    USER_AUTH_UID, with session USER_SESSION_ID active), 10 days of daily
+    temp, LUX and TDS averages, and the dashboard payload."""
     from koi.storage import MemoryStorage
 
-    return MemoryStorage.from_json(POND_FIXTURE, clock=ticking_clock())
+    storage = MemoryStorage.from_json(POND_FIXTURE, clock=ticking_clock())
+    link_account(storage, USER, USER_AUTH_UID, USER_SESSION_ID)
+    return storage
+
+
+def api_client(app, token=None):
+    """A test client that sends the fixture account's token (or token)."""
+    client = app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token or mint_token()}"
+    return client
 
 
 @pytest.fixture
@@ -94,7 +138,9 @@ def make_settings(**overrides):
     Supabase credentials, with in-memory storage."""
     from koi.settings import Settings
 
-    values = {"env": "test", "storage": "memory", "supabase_url": "", "supabase_servicerole_key": ""}
+    values = {"env": "test", "storage": "memory", "supabase_url": "", "supabase_servicerole_key": "",
+              "auth": "required", "jwt_algorithm": "HS256", "supabase_jwt_secret": TEST_JWT_SECRET,
+              "supabase_jwks_url": "", "jwt_issuer": TEST_ISSUER, "jwt_audience": "authenticated"}
     values.update(overrides)
     return Settings(_env_file=None, **values)
 

@@ -19,21 +19,36 @@ Table notes (schema in supabase/migrations/):
 - Snapshot saves and the worker lease go through the save_pond_snapshot
   and take_worker_lease functions (migration 0002), which compare and set
   in one statement.
+- Weather ingestion writes only through ingest_weather_batch, and the
+  as-of weather reads are the database functions of migration 0009.
 """
 from __future__ import annotations
 
+import json
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
-from koi.storage.base import StaleSnapshotError, StorageError, daily_stats, pond_config_from_userdata_row
+from koi.storage.base import (
+    CAMERA_CONFIG_COLUMNS,
+    CAMERA_MASK_VERSION_COLUMNS,
+    IMAGE_COLUMNS,
+    PROFILE_COLUMNS,
+    DuplicateProfileError,
+    StaleSnapshotError,
+    StorageError,
+    daily_stats,
+    pond_config_from_userdata_row,
+)
 
 if TYPE_CHECKING:
     from supabase import Client
 
-IMAGE_COLUMNS = "id, created_at, green_ratio, current_state, imageURL"
 DAILY_COLUMNS = "avg_value, min_value, max_value, record_date"
+WINDOW_COLUMNS = ("product, window_start, window_end, status, attempts, pages, records, inserted, duplicates, "
+                  "malformed, last_error, updated_at")
 
 
 @contextmanager
@@ -333,7 +348,7 @@ class SupabaseStorage:
         with _operation("fetch_image_by_id"):
             res = (
                 self._db().table("imageTable")
-                .select(IMAGE_COLUMNS)
+                .select(", ".join(IMAGE_COLUMNS))
                 .eq("user_ID", user_id)
                 .eq("id", image_id)
                 .limit(1)
@@ -347,7 +362,7 @@ class SupabaseStorage:
         with _operation("fetch_image_history"):
             res = (
                 self._db().table("imageTable")
-                .select(IMAGE_COLUMNS)
+                .select(", ".join(IMAGE_COLUMNS))
                 .eq("user_ID", user_id)
                 .order("created_at", desc=True)
                 .limit(limit)
@@ -355,14 +370,21 @@ class SupabaseStorage:
             )
             return list(res.data or [])
 
-    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str) -> None:
+    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
         with _operation("insert_image"):
-            self._db().table("imageTable").insert({
+            row = {
                 "user_ID": user_id,
                 "green_ratio": green_ratio,
                 "current_state": current_state,
                 "imageURL": image_url,
-            }).execute()
+                "mask_version": mask_version,
+                "baseline_reset": baseline_reset,
+                "quality": quality,
+                "thumbnail_path": thumbnail_path,
+            }
+            self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         """Stores a JPEG and returns its public URL."""
@@ -372,6 +394,38 @@ class SupabaseStorage:
             # supabase-py has historically appended a bare "?" here, which
             # makes cache keys inconsistent downstream. Strip it at the source.
             return str(files.get_public_url(path)).rstrip("?&")
+
+    def delete_images(self, bucket: str, paths: list[str]) -> None:
+        with _operation("delete_images"):
+            self._db().storage.from_(bucket).remove(paths)
+
+    # --- camera water mask --------------------------------------------
+    def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
+        with _operation("fetch_camera_mask"):
+            res = (
+                self._db().table("camera_config")
+                .select(", ".join(CAMERA_CONFIG_COLUMNS))
+                .eq("pond_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            return res.data[0] if res.data else None
+
+    def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
+        with _operation("fetch_camera_mask_versions"):
+            res = (
+                self._db().table("camera_mask_version")
+                .select(", ".join(CAMERA_MASK_VERSION_COLUMNS))
+                .eq("pond_id", user_id)
+                .order("mask_version")
+                .execute()
+            )
+            return list(res.data or [])
+
+    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+        with _operation("save_camera_mask"):
+            res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
+            return res.data[0]
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:
@@ -399,6 +453,50 @@ class SupabaseStorage:
                 .execute()
             )
             return pond_config_from_userdata_row(res.data[0]) if res.data else None
+
+    # --- pond profile -------------------------------------------------
+    def fetch_pond_profiles(self, user_id: int) -> list[dict]:
+        with _operation("fetch_pond_profiles"):
+            res = (
+                self._db().table("pond_profile")
+                .select(", ".join(PROFILE_COLUMNS))
+                .eq("pond_id", user_id)
+                .order("effective_from")
+                .order("id")
+                .execute()
+            )
+            return list(res.data or [])
+
+    def insert_pond_profile(self, user_id: int, profile: dict) -> dict:
+        with _operation("insert_pond_profile"):
+            row = {k: v for k, v in profile.items() if k in PROFILE_COLUMNS and k not in ("id", "created_at")}
+            row.update(pond_id=user_id, source="api")
+            try:
+                res = self._db().table("pond_profile").insert(row).execute()
+            except Exception as exc:
+                if getattr(exc, "code", None) == "23505":  # unique (pond_id, effective_from)
+                    raise DuplicateProfileError(user_id, str(row.get("effective_from"))) from exc
+                raise
+            return res.data[0]
+
+    # --- account links ------------------------------------------------
+    def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
+        with _operation("fetch_pond_id_for_account"):
+            res = (
+                self._db().table("UserData")
+                .select("userID")
+                .eq("auth_uid", auth_uid)
+                .limit(1)
+                .execute()
+            )
+            return int(res.data[0]["userID"]) if res.data else None
+
+    def is_session_active(self, session_id: str, auth_uid: str) -> bool:
+        with _operation("is_session_active"):
+            res = self._db().rpc(
+                "auth_session_active", {"p_session_id": session_id, "p_user_id": auth_uid}
+            ).execute()
+            return res.data is True
 
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:
@@ -448,3 +546,66 @@ class SupabaseStorage:
             .execute()
         )
         return list(res.data or [])
+
+    # --- weather history ----------------------------------------------
+    def ingest_weather_batch(self, batch: dict) -> dict:
+        """One call to ingest_weather_batch (migration 0009), which
+        deduplicates, guards the caches and updates the station lookup in
+        one transaction."""
+        with _operation("ingest_weather_batch"):
+            res = self._db().rpc("ingest_weather_batch", {"p_batch": batch}).execute()
+            return dict(res.data or {})
+
+    def fetch_weather_windows(self, product: str) -> list[dict]:
+        with _operation("fetch_weather_windows"):
+            res = (
+                self._db().table("weather_ingest_window")
+                .select(WINDOW_COLUMNS)
+                .eq("product", product)
+                .execute()
+            )
+            return list(res.data or [])
+
+    def record_weather_window(self, window: dict) -> None:
+        with _operation("record_weather_window"):
+            row = {**window, "updated_at": datetime.now(timezone.utc).isoformat()}
+            self._db().table("weather_ingest_window").upsert(row, on_conflict="product,window_start").execute()
+
+    def fetch_assigned_weather_slots(self) -> list[dict]:
+        """ClosestStations is a json column; PostgREST returns it parsed,
+        a text-encoded value is parsed here."""
+        with _operation("fetch_assigned_weather_slots"):
+            res = self._db().table("UserData").select("ClosestStations").execute()
+            slots = []
+            for row in res.data or []:
+                value = row.get("ClosestStations")
+                if isinstance(value, str):
+                    value = json.loads(value)
+                if isinstance(value, dict):
+                    slots.append(value)
+            return slots
+
+    def fetch_forecast_as_of(self, product: str, slot_id: str, as_of: datetime,
+                             valid_at: Optional[datetime] = None) -> Optional[dict]:
+        with _operation("fetch_forecast_as_of"):
+            res = self._db().rpc("weather_forecast_as_of", {
+                "p_product": product, "p_slot_id": slot_id, "p_as_of": as_of.isoformat(),
+                "p_valid_at": valid_at.isoformat() if valid_at else None}).execute()
+            rows = list(res.data or [])
+            return rows[0] if rows else None
+
+    def fetch_weather_observations(self, station_id: str, metric: str, start: datetime, end: datetime,
+                                   as_of: datetime) -> list[dict]:
+        with _operation("fetch_weather_observations"):
+            res = self._db().rpc("weather_observations_as_of", {
+                "p_station_id": station_id, "p_metric": metric, "p_from": start.isoformat(),
+                "p_to": end.isoformat(), "p_as_of": as_of.isoformat()}).execute()
+            return list(res.data or [])
+
+    def fetch_rainfall_total(self, station_id: str, start: datetime, end: datetime,
+                             as_of: Optional[datetime] = None) -> dict:
+        with _operation("fetch_rainfall_total"):
+            res = self._db().rpc("weather_rainfall_total", {
+                "p_station_id": station_id, "p_from": start.isoformat(), "p_to": end.isoformat(),
+                "p_as_of": as_of.isoformat() if as_of else None}).execute()
+            return dict(res.data or {})

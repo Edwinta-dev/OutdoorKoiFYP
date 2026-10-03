@@ -3,6 +3,34 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Camera frame quality gate (issue #40)
+
+Files: `Backend/koi/camera/quality.py`, `Backend/koi/camera/imageSchedule.py`.
+New constants; no existing constant changed. The thresholds were chosen
+against synthetic frames (noise-textured water and algae, darkened,
+brightened, glared and Gaussian-blurred copies), not yet against real
+ESP32-CAM frames from the pond. Every stored result carries its metrics
+and the thresholds in force, so frames can be re-judged once real
+frames have been reviewed.
+
+| Constant | Value | Rule |
+|---|---|---|
+| `V_MEAN_MIN` | 40 (V, 0..255) | Mean V below this: `too_dark`. |
+| `V_MEAN_MAX` | 220 | Mean V above this: `too_bright`. |
+| `CLIP_LOW_V`, `CLIP_HIGH_V` | 5, 250 | A pixel at or below / at or above these counts as clipped. |
+| `CLIPPED_FRACTION_MAX` | 0.25 | More clipped pixels than this: `clipped`. A sun-glare patch over about 15% of the frame still passes. |
+| `DETAIL_MIN_V_STD` | 8 | Below this V spread the frame is featureless and is not judged for blur (a calm, evenly lit pond). |
+| `BLUR_LAPLACIAN_MIN` | 5.0 | Variance of the Laplacian below this, on a frame with detail: `blurred`. Low on purpose: a single sharp edge between water and algae scores about 8 to 20. |
+| `QUALITY_RETRY_SEC` | 30 min | Wake after a failed frame in daylight, when the state's own wake is later. At night the night schedule stands. |
+| `THUMBNAIL_WIDTH`, `THUMBNAIL_JPEG_QUALITY` | 320 px, 80 | Thumbnail stored beside each frame. |
+
+A failed frame does not change the state machine: its `current_state`
+repeats the previous accepted frame's, and the next frame is evaluated
+against the newest frame that did not fail (searching the last 50 rows,
+`PREV_SCAN_ROWS`; after 50 failed frames in a row the baseline restarts at
+0.15 as for a first frame). Failed frames are also left out of the algae
+fit (`algae_engine.parse_image_rows`).
+
 ## Local calendar days in the chemistry engine (issue #15)
 
 No numeric constant changed. `DAILY_RETENTION_DAYS` is still 30, and the

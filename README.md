@@ -154,6 +154,7 @@ Backend/koi/storage/                Storage interface: Supabase and in-memory im
 Backend/koi/api/                    Digital twin Flask API
 Backend/koi/worker/                 Environmental poller
 Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
+Backend/koi/weather/                NEA ingestion job and weather history reads (docs/weather-ingestion.md)
 Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
 Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
@@ -195,6 +196,7 @@ cp .env.example .env      # SUPABASE_URL, SUPABASE_SERVICEROLE_KEY, KOI_ENV, ...
 python -m koi.api         # digital twin API on :8080 (runs the poller too when KOI_ENV=development)
 python -m koi.worker      # the poller on its own, for any other KOI_ENV
 python -m koi.camera      # camera service on :5000
+python -m koi.weather live   # one NEA fetch into the weather caches and history
 ```
 
 Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;
@@ -252,6 +254,8 @@ python simulator.py                    # interactive four-arm simulator
 | `GET` | `/forecast/<user_id>` | Chemistry: first-breach day + full trajectory |
 | `GET` | `/forecast/evaporation/<user_id>` | Next top-up, feed-ration guidance |
 | `GET` | `/forecast/algae/<user_id>` | Next scrub, and what scrubbing today buys you |
+| `GET`, `PUT` | `/v1/ponds/{pond}/profile` | Pond profile (volume, depth, fish, tap water, aeration); PUT adds a row effective now or at `effective_from`, earlier rows are kept |
+| `GET`, `PUT` | `/v1/ponds/{pond}/camera/mask` | Water mask for the camera's green ratio: a polygon of `[x, y]` points as fractions of the frame (3 to 64 points, at least 1% of the frame). Each PUT is a new mask version; the camera restarts its smoothed baseline on the first frame with a new version |
 | `GET` | `/health`, `/ready`, `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating

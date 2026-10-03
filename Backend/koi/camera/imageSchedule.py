@@ -18,6 +18,8 @@ Reason codes (issue #38), sent as `reason` in every reply:
   night_base       outside daylight, any state sleeps to the next slot
   error_fallback   the request failed before a schedule was computed
   test_mode        TEST_MODE short intervals
+  quality_retry    the frame failed the quality gate (issue #40): retry within
+                   QUALITY_RETRY_SEC in daylight instead of the state's wake
 
 CHANGES FOR HOSTING (PythonAnywhere):
 - Server clocks run in UTC. All times are now computed in Asia/Singapore explicitly,
@@ -33,6 +35,10 @@ CHANGES FOR HOSTING (PythonAnywhere):
 - Dynamic interval (issue #38): replaces the fixed 30 min placeholder. The
   frame's green-ratio rise over the smoothed baseline picks the step:
   2 h up to DYNAMIC_RATE_LEVELS[0], 1 h up to DYNAMIC_RATE_LEVELS[1], 30 min above.
+- Quality retry (issue #40): a frame that fails the quality gate does not
+  change the state, and the wake becomes the shorter of the state's wake and
+  QUALITY_RETRY_SEC (30 min) in daylight. At night and in TEST_MODE the
+  state's wake stands.
 '''
 from datetime import datetime, timedelta
 from typing import NamedTuple
@@ -52,7 +58,10 @@ DYNAMIC_STEP_SEC = (2 * 60 * 60, 60 * 60, 30 * 60)
 
 TEST_SLEEP_SEC = {"base": 100, "obstruction": 80, "dynamic": 60}
 
-REASONS = ("slot", "dynamic_rising", "obstruction_hold", "night_base", "error_fallback", "test_mode")
+QUALITY_RETRY_SEC = 30 * 60
+
+REASONS = ("slot", "dynamic_rising", "obstruction_hold", "night_base", "error_fallback", "test_mode",
+           "quality_retry")
 
 MIN_SLEEP_SEC = 60
 MAX_SLEEP_SEC = 24 * 60 * 60
@@ -140,6 +149,15 @@ def next_wake(state_label: str, now: datetime | None = None, test_mode: bool = F
     if state_label == "dynamic":
         return _wake(now, _clamp(get_dynamicstate_sleep_seconds(rise, levels)), "dynamic_rising")
     return _wake(now, get_base_schedule_sleep_seconds(now), "slot")
+
+
+def quality_retry_wake(wake: NextWake, now: datetime | None = None, test_mode: bool = False) -> NextWake:
+    """The wake for a frame that failed the quality gate: wake (the state's
+    own) or QUALITY_RETRY_SEC in daylight, whichever is sooner."""
+    now = now or datetime.now(TZ)
+    if test_mode or not is_daylight(now) or wake.sleep_sec <= QUALITY_RETRY_SEC:
+        return wake
+    return _wake(now, QUALITY_RETRY_SEC, "quality_retry")
 
 
 def sleep_for_state(state_label: str, now: datetime | None = None, test_mode: bool = False,

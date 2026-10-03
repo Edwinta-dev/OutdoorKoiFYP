@@ -19,17 +19,54 @@ Configuration comes from koi.settings.Settings:
 Metrics (GET /metrics, see camera_metrics): uploads by result, the time
 the HSV analysis and state evaluation take, and state transitions from
 the previous frame's state to the new one.
+
+Water mask (issue #39, migration 0010): each upload reads the pond's
+camera_config row once and computes the green ratio over that row's
+polygon only, storing that row's mask_version with the frame, so the
+stored version always names the polygon used even if the mask is saved
+again mid-upload. When the frame's mask_version differs from the previous
+frame's (null counts as the whole frame), the smoothed baseline and the
+frame counters restart from this frame and the row records
+baseline_reset = "mask_changed". The decision uses only stored rows, so
+it holds across service restarts. If the mask cannot be read the frame
+is analysed over the whole frame and stored without a mask_version.
+
+Quality gate (issue #40, migration 0011, koi/camera/quality.py): every
+frame is measured (V mean and spread, clipped fraction, variance of the
+Laplacian) and the versioned result is stored in imageTable.quality. A
+failed frame is stored and shown, but the state machine skips it: its row
+carries the previous accepted frame's state unchanged, the next frame is
+evaluated against the newest frame that did not fail (from stored rows, so
+this holds across restarts), and the reply wakes the camera within 30
+minutes in daylight (imageSchedule.quality_retry_wake).
+
+Thumbnails: a 320 px wide JPEG is stored beside each frame
+("{user_id}/{ts}_photo_thumb.jpg") and its object path, not a URL, is
+stored in imageTable.thumbnail_path, so who may read it follows the
+bucket's access rules (issue #12) rather than a URL fixed at upload time.
+imageURL is written as before.
+
+Storage failures, in upload order:
+  frame upload fails      503, nothing stored.
+  thumbnail fails         the frame is kept without one (thumbnail_path
+                          null); the original is what the app shows anyway.
+  row insert fails        the objects just uploaded are deleted and the
+                          reply is 503, so no frame is left without a row.
+                          If that delete fails too, a frame_orphaned event
+                          names the bucket and paths for manual removal.
 """
 import logging
 import time
 from datetime import datetime
+
+import cv2
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
 # print call in koi/, issue #10) does not mistake for one.
 from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 
-from koi.camera import hsvEngine, imageSchedule
+from koi.camera import hsvEngine, imageSchedule, quality
 from koi.errors import STORAGE_RETRY_AFTER_SEC, error_response
 from koi.logs import log_event
 from koi.metrics import Counter, Histogram, Metrics
@@ -89,29 +126,90 @@ def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWa
     return response, status
 
 
+# Baseline reset reason stored in imageTable.baseline_reset (migration 0010).
+RESET_MASK_CHANGED = "mask_changed"
+
+
+# Rows searched for the newest frame that did not fail the quality gate.
+# After this many failed frames in a row the baseline restarts as for a
+# first frame.
+PREV_SCAN_ROWS = 50
+DEFAULT_BASELINE = 0.15
+
+
 # Helper Function: Fetch Previous Image Data
 def get_prev_image_data(user_id: str):
-    """Returns (prev_raw_green_ratio, prev_current_state).
+    """Returns (prev_raw_green_ratio, prev_current_state, prev_row).
 
     The whole current_state value is returned untouched and handed
     straight to evalstate(), which recovers the smoothed baseline from it
     itself. The raw ratio is still returned as a fallback for the very
-    first reading, when no pair exists yet.
+    first reading, when no pair exists yet. prev_row is the previous
+    imageTable row (for its mask_version), or None for the first reading.
+
+    Frames that failed the quality gate are skipped: the previous frame is
+    the newest one whose quality is "pass" or "unknown" (rows stored
+    before the gate).
     """
-    rows: list[dict] = fail_soft(lambda: _storage().fetch_image_history(user_id, limit=1), [])
-    if rows:
-        latest = rows[0]
-        prev_green_ratio = latest.get("green_ratio", 0.15)
+    rows: list[dict] = fail_soft(lambda: _storage().fetch_image_history(user_id, limit=PREV_SCAN_ROWS), [])
+    for latest in rows:
+        if quality.is_failed(latest):
+            continue
+        prev_green_ratio = latest.get("green_ratio", DEFAULT_BASELINE)
         prev_state = latest.get("current_state", hsvEngine.DEFAULT_STATE)
-        return prev_green_ratio, prev_state
+        return prev_green_ratio, prev_state, latest
 
     log_event(log, "camera_baseline_defaulted")
-    return 0.15, hsvEngine.DEFAULT_STATE
+    return DEFAULT_BASELINE, hsvEngine.DEFAULT_STATE, None
+
+
+def get_mask(user_id: str) -> tuple[list | None, int | None]:
+    """(polygon, mask_version) from one read of the pond's camera_config
+    row; (None, None) when the pond has no mask or it cannot be read."""
+    config = fail_soft(lambda: _storage().fetch_camera_mask(user_id), None)
+    if not config:
+        return None, None
+    return config["mask"], int(config["mask_version"])
+
+
+def carried_state(prev_state, prev_green_ratio) -> list:
+    """The state a failed frame stores: the previous accepted frame's
+    [label, baseline, raised, stable] unchanged, so it is shown as the
+    camera's current state and moves nothing."""
+    raised, stable = hsvEngine._coerce_counters(prev_state)
+    return [hsvEngine._coerce_state(prev_state),
+            round(hsvEngine._coerce_baseline(prev_state, prev_green_ratio), 4), raised, stable]
+
+
+def store_thumbnail(bucket: str, frame_path: str, img) -> str | None:
+    """Uploads the frame's thumbnail and returns its object path, or None
+    (logged) when it could not be made or stored; the frame is kept."""
+    path = quality.thumbnail_path(frame_path)
+    try:
+        _storage().upload_image(bucket, path, quality.thumbnail(img))
+    except (StorageError, ValueError, cv2.error) as exc:
+        log_event(log, "thumbnail_failed", level=logging.WARNING, bucket=bucket, path=path, error=str(exc))
+        return None
+    return path
+
+
+def discard_objects(bucket: str, paths: list[str]) -> None:
+    """Deletes objects whose imageTable row could not be written. If that
+    fails as well, logs frame_orphaned with the paths to remove by hand."""
+    try:
+        _storage().delete_images(bucket, paths)
+        log_event(log, "frame_discarded", level=logging.WARNING, bucket=bucket, paths=paths)
+    except StorageError as exc:
+        log_event(log, "frame_orphaned", level=logging.ERROR, bucket=bucket, paths=paths, error=str(exc))
 
 
 # Helper Function: Insert Current Reading Record
-def push_current_data(green_ratio: float, user_id: str, state, public_url: str):
-    fail_soft(lambda: _storage().insert_image(user_id, green_ratio, state, public_url), None)
+def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
+                      mask_version: int | None = None, baseline_reset: str | None = None,
+                      frame_quality: dict | None = None, thumbnail_path: str | None = None):
+    """Raises StorageError when the row cannot be written."""
+    _storage().insert_image(user_id, green_ratio, state, public_url, mask_version=mask_version,
+                            baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path)
 
 
 @bp.route('/', methods=['GET'])
@@ -136,49 +234,83 @@ def upload_image():
     user_id = request.headers.get('X-User-ID', 'default_user')
     uploads, analysis_seconds, transitions = _metrics()
 
-    # 1. Compute HSV Green Ratio for current frame
+    # 1. Compute HSV Green Ratio for current frame, over the pond's water
+    # mask. The polygon and its version come from one read, and that
+    # version is the one stored with the frame.
     # CHANGED: a corrupt JPEG used to raise here, outside any try, and the ESP32
     # got an HTML 500 page with no sleep time in it.
+    polygon, mask_version = get_mask(user_id)
     started = time.perf_counter()
     try:
-        green_ratio = hsvEngine.analyze_image_bytes(file_bytes)
+        green_ratio = hsvEngine.analyze_image_bytes(file_bytes, polygon=polygon)
+        img = quality.decode(file_bytes)
+        frame_quality = quality.assess(img, polygon)
     except Exception as e:
         return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
     analysis_time = time.perf_counter() - started
+    passed = frame_quality["status"] != quality.FAIL
 
     # 2. Fetch historical state & baseline
-    prev_green_ratio, prev_state = get_prev_image_data(user_id)
+    prev_green_ratio, prev_state, prev_row = get_prev_image_data(user_id)
 
-    # 3. Compute new state transition.
+    # 3. Compute new state transition. A failed frame changes nothing: it
+    # carries the previous state. A different mask from the previous
+    # frame's means the stored baseline covers another area: restart it
+    # from this frame, with the counters at zero.
     started = time.perf_counter()
-    state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
-                                enter_frames=settings.camera_dynamic_enter_frames,
-                                exit_frames=settings.camera_dynamic_exit_frames)
-    rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
+    baseline_reset = None
+    if not passed:
+        log_event(log, "frame_quality_failed", reasons=frame_quality["reasons"], **frame_quality["metrics"])
+        state = carried_state(prev_state, prev_green_ratio)
+        rise = 0.0
+    elif prev_row is not None and prev_row.get("mask_version") != mask_version:
+        baseline_reset = RESET_MASK_CHANGED
+        log_event(log, "camera_baseline_reset", reason=baseline_reset,
+                  from_mask_version=prev_row.get("mask_version"), to_mask_version=mask_version)
+        state = (hsvEngine.DEFAULT_STATE, green_ratio, 0, 0)
+        rise = 0.0
+    else:
+        state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
+                                    enter_frames=settings.camera_dynamic_enter_frames,
+                                    exit_frames=settings.camera_dynamic_exit_frames)
+        rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
     analysis_seconds.observe(analysis_time + time.perf_counter() - started)
     from_state = hsvEngine._coerce_state(prev_state)
     transitions.inc(from_state=from_state, to_state=state[0])
 
     # 4. Next wake
     # CHANGED: one call, local pond time, night-time fallback to base schedule
+    now = datetime.now(settings.tz)
     wake = imageSchedule.next_wake(
-        state[0], now=datetime.now(settings.tz), test_mode=settings.test_mode,
+        state[0], now=now, test_mode=settings.test_mode,
         rise=rise, levels=settings.camera_dynamic_rate_levels)
-    log_event(log, "frame_analysed", green_ratio=green_ratio, from_state=from_state, to_state=state[0],
+    if not passed:
+        wake = imageSchedule.quality_retry_wake(wake, now=now, test_mode=settings.test_mode)
+    log_event(log, "frame_analysed", green_ratio=green_ratio, mask_version=mask_version,
+              quality=frame_quality["status"],
+              from_state=from_state, to_state=state[0],
               analysis_ms=round(analysis_time * 1000, 1), rise=round(rise, 4), sleep_sec=wake.sleep_sec,
               reason=wake.reason, next_at=wake.reply()["next_at"])
 
+    bucket = settings.pond_image_bucket
     try:
-        # 5. Upload the frame to the configured bucket.
+        # 5. Upload the frame and its thumbnail to the configured bucket.
         # Object path is "{user_id}/{unix_seconds}_photo.jpg" - the same
         # id the app onboards with, so the client can resolve a user's
         # frames without any help from this service.
         filename = f"{user_id}/{int(time.time())}_photo.jpg"
-        public_url = _storage().upload_image(settings.pond_image_bucket, filename, file_bytes)
-        log_event(log, "frame_stored", bucket=settings.pond_image_bucket, path=filename)
+        public_url = _storage().upload_image(bucket, filename, file_bytes)
+        log_event(log, "frame_stored", bucket=bucket, path=filename)
+        thumb_path = store_thumbnail(bucket, filename, img)
 
-        # 6. Save the reading to imageTable
-        push_current_data(green_ratio, user_id, state, public_url)
+        # 6. Save the reading to imageTable. Without a row, the objects
+        # just stored are removed again.
+        try:
+            push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset,
+                              frame_quality, thumb_path)
+        except StorageError:
+            discard_objects(bucket, [filename] + ([thumb_path] if thumb_path else []))
+            raise
 
         # 7. Return payload to ESP32
         uploads.inc(result="stored")

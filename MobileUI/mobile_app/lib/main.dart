@@ -50,7 +50,7 @@ class KoiMonitorApp extends StatelessWidget {
     const accentMint = Color(0xFF00E676);
 
     return MaterialApp(
-      title: 'Koi Monitor',
+      title: 'OutdoorKoi',
       debugShowCheckedModeBanner:
           false, // Removes the "DEBUG" banner in the corner
       theme: ThemeData(
@@ -62,7 +62,6 @@ class KoiMonitorApp extends StatelessWidget {
           primary: accentMint,
           secondary: Colors.tealAccent,
           surface: surfaceTeal,
-          background: primaryNavy,
           onPrimary: Colors.black,
           onSurface: Colors.white,
         ),
@@ -84,12 +83,12 @@ class KoiMonitorApp extends StatelessWidget {
         // --- BOTTOM BANNER (NAVIGATION BAR) STYLING ---
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: primaryNavy,
-          indicatorColor: accentMint.withOpacity(0.2),
-          labelTextStyle: MaterialStateProperty.all(
+          indicatorColor: accentMint.withValues(alpha: 0.2),
+          labelTextStyle: WidgetStateProperty.all(
             const TextStyle(color: Colors.white70, fontSize: 12),
           ),
-          iconTheme: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
               return const IconThemeData(color: accentMint);
             }
             return const IconThemeData(color: Colors.white54);

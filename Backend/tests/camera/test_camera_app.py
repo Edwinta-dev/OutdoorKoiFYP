@@ -70,7 +70,9 @@ def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(st
     body = resp.get_json()
     assert body["status"] == "success"
     assert body["sleep_sec"] == imageSchedule.TEST_SLEEP_SEC[body["state"][0]]
-    assert [(b, p.split("/")[0]) for b, p in storage.uploads] == [("frames", "15")]
+    [frame_key, thumb_key] = storage.uploads
+    assert frame_key[0] == thumb_key[0] == "frames" and frame_key[1].split("/")[0] == "15"
+    assert thumb_key[1] == frame_key[1].replace("_photo.jpg", "_photo_thumb.jpg")
     [row] = storage.rows("imageTable")
     assert row["user_ID"] == "15"
     assert row["imageURL"].startswith("memory://frames/15/")

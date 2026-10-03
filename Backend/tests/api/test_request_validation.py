@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import USER, make_settings, make_storage
+from conftest import USER, api_client, make_settings, make_storage
 from koi.api import create_app
 
 UNKNOWN = 999  # no UserData row and no snapshot in the fixture storage
@@ -17,6 +17,16 @@ UNKNOWN = 999  # no UserData row and no snapshot in the fixture storage
 @pytest.fixture
 def client():
     app = create_app(make_settings(), storage=make_storage())
+    app.config["TESTING"] = True
+    return api_client(app)
+
+
+@pytest.fixture
+def open_client():
+    """Auth off (development only). With auth on, a pond the account is
+    not linked to is 403 before the pond is looked up (tests/api/test_auth.py),
+    so the unknown-pond 404 is only reachable this way."""
+    app = create_app(make_settings(env="development", auth="disabled"), storage=make_storage())
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -60,7 +70,6 @@ BODY_CASES = [
     # wrong type
     ("/events/feeding", {**FEED, "food_grams": "lots"}, "food_grams"),
     ("/events/feeding", {**FEED, "user_id": "455"}, "user_id"),
-    ("/events/feeding", {**FEED, "fish_count": True}, "fish_count"),
     ("/events/water-change", {**VOLUME, "volume_percent": "half"}, "volume_percent"),
     ("/events/top-up", {**VOLUME, "volume_litres": [5]}, "volume_litres"),
     ("/events/algal-scrub", {**SCRUB, "scrub_type": 5}, "scrub_type"),
@@ -89,14 +98,14 @@ def test_body_validation_names_the_invalid_field(client, path, body, field):
     ("/events/feeding", FEED), ("/events/water-change", VOLUME), ("/events/top-up", VOLUME),
     ("/events/algal-scrub", SCRUB), ("/events/algae-rating", RATING), ("/events/algae-rating/undo", UNDO),
 ])
-def test_body_validation_unknown_pond_is_404(client, path, body):
-    error = assert_envelope(client.post(path, json={**body, "user_id": UNKNOWN}), 404, "pond_not_configured")
+def test_body_validation_unknown_pond_is_404(open_client, path, body):
+    error = assert_envelope(open_client.post(path, json={**body, "user_id": UNKNOWN}), 404, "pond_not_configured")
     assert error["details"] == {"user_id": UNKNOWN}
 
 
-def test_body_validation_unknown_pond_stores_no_rating(client):
-    storage = client.application.extensions["koi_storage"]
-    client.post("/events/algae-rating", json={**RATING, "user_id": UNKNOWN})
+def test_body_validation_unknown_pond_stores_no_rating(open_client):
+    storage = open_client.application.extensions["koi_storage"]
+    open_client.post("/events/algae-rating", json={**RATING, "user_id": UNKNOWN})
     assert storage.rows("algae_severity_ratings") == []
 
 
@@ -163,8 +172,8 @@ READS = ["/ratings/algae/{}", "/assessment/{}", "/assessment/evaporation/{}", "/
 
 
 @pytest.mark.parametrize("path", READS)
-def test_read_validation_unknown_pond_is_404(client, path):
-    assert_envelope(client.get(path.format(UNKNOWN)), 404, "pond_not_configured")
+def test_read_validation_unknown_pond_is_404(open_client, path):
+    assert_envelope(open_client.get(path.format(UNKNOWN)), 404, "pond_not_configured")
 
 
 @pytest.mark.parametrize("path", READS)

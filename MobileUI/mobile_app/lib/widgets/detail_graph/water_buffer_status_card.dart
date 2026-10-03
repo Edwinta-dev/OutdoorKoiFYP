@@ -75,8 +75,8 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.science_outlined, color: Colors.white38, size: 18),
               SizedBox(width: 8),
               Text(
@@ -126,10 +126,10 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF131B2A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -164,9 +164,9 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: statusColor.withOpacity(0.5)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   a.category.toUpperCase(),
@@ -270,12 +270,12 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.amberAccent.withOpacity(0.12),
+                color: Colors.amberAccent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amberAccent.withOpacity(0.4)),
+                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
               ),
-              child: Row(
-                children: const [
+              child: const Row(
+                children: [
                   Icon(Icons.science, color: Colors.amberAccent, size: 15),
                   SizedBox(width: 8),
                   Expanded(
@@ -320,7 +320,7 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF131B2A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: child,
     );
@@ -331,13 +331,13 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       decoration: BoxDecoration(
         color: isHighlight
-            ? valueColor.withOpacity(0.1)
-            : Colors.white.withOpacity(0.03),
+            ? valueColor.withValues(alpha: 0.1)
+            : Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isHighlight
-              ? valueColor.withOpacity(0.3)
-              : Colors.white.withOpacity(0.05),
+              ? valueColor.withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.05),
         ),
       ),
       child: Column(
@@ -385,9 +385,9 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

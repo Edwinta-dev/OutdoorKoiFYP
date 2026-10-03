@@ -240,7 +240,7 @@ class FishTipsViewState extends State<FishTipsView> {
                           borderRadius: BorderRadius.circular(3),
                           color: _currentCarouselIndex == entry.key
                               ? const Color(0xFF38BDF8)
-                              : Colors.white.withOpacity(0.3),
+                              : Colors.white.withValues(alpha: 0.3),
                         ),
                       ),
                     );

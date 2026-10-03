@@ -121,15 +121,15 @@ class _MainLayoutState extends State<MainLayout> {
             height: 66,
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withOpacity(0.90),
+              color: const Color(0xFF1E293B).withValues(alpha: 0.90),
               borderRadius: BorderRadius.circular(33),
               border: Border.all(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha: 0.12),
                 width: 1.0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withValues(alpha: 0.35),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -167,7 +167,7 @@ class _MainLayoutState extends State<MainLayout> {
                   height: 28,
                   width: 1,
                   margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                 ),
                 _buildActionPillButton(context),
               ],
@@ -196,7 +196,7 @@ class _MainLayoutState extends State<MainLayout> {
         padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
         decoration: BoxDecoration(
           color: isSelected
-              ? activeColor.withOpacity(0.12)
+              ? activeColor.withValues(alpha: 0.12)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
         ),

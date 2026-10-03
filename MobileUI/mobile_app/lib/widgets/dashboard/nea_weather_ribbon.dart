@@ -121,7 +121,7 @@ class NeaWeatherRibbon extends StatelessWidget {
               width: 24,
               height: 24,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
+              errorBuilder: (_, _, _) => const Icon(
                 Icons.cloud_queue,
                 color: Colors.cyanAccent,
                 size: 20,

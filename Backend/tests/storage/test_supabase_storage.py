@@ -3,7 +3,7 @@ supabase client. No network: the client is injected."""
 import pytest
 
 from conftest import ALGAE_ASSESSMENT, make_settings
-from koi.storage import StaleSnapshotError, StorageError, SupabaseStorage
+from koi.storage import DuplicateProfileError, StaleSnapshotError, StorageError, SupabaseStorage
 
 
 class _Query:
@@ -34,6 +34,11 @@ class _Bucket:
     def get_public_url(self, path):
         return f"https://storage.invalid/{self.name}/{path}?"
 
+    def remove(self, paths):
+        if self.db.error is not None:
+            raise self.db.error
+        self.db.removed.append((self.name, list(paths)))
+
 
 class FakeClient:
     def __init__(self, data=None, error=None):
@@ -41,6 +46,7 @@ class FakeClient:
         self.error = error
         self.queries = []
         self.uploads = []
+        self.removed = []
         self.storage = type("Storage", (), {"from_": lambda _s, name: _Bucket(self, name)})()
 
     def table(self, name):
@@ -180,3 +186,63 @@ def test_worker_status_read_failure_is_a_storage_error():
     storage, _ = _storage(error=RuntimeError("down"))
     with pytest.raises(StorageError, match="fetch_worker_status"):
         storage.fetch_worker_status("poller")
+
+
+def test_auth_pond_for_account_filters_userdata_by_auth_uid():
+    uid = "6c1f0c4e-5b1a-4a39-9d0e-455000000455"
+    storage, client = _storage(data={"UserData": [{"userID": 455}]})
+    assert storage.fetch_pond_id_for_account(uid) == 455
+    calls = client.queries[-1].calls
+    assert ("select", ("userID",), {}) in calls
+    assert ("eq", ("auth_uid", uid), {}) in calls
+    unlinked, _ = _storage(data={"UserData": []})
+    assert unlinked.fetch_pond_id_for_account(uid) is None
+
+
+def test_auth_session_check_calls_the_rpc_and_needs_a_true_answer():
+    storage, client = _storage(data={"rpc:auth_session_active": True})
+    assert storage.is_session_active("s-1", "u-1") is True
+    assert client.queries[-1].calls[0] == (
+        "rpc", ("auth_session_active", {"p_session_id": "s-1", "p_user_id": "u-1"}), {})
+    for answer in (False, None, [], "true"):
+        refused, _ = _storage(data={"rpc:auth_session_active": answer})
+        assert refused.is_session_active("s-1", "u-1") is False
+
+
+def test_auth_session_check_errors_are_storage_errors():
+    storage, _ = _storage(error=ConnectionError("down"))
+    with pytest.raises(StorageError, match="is_session_active"):
+        storage.is_session_active("s-1", "u-1")
+
+
+# --- pond profile (issue #16) ---------------------------------------------
+
+PROFILE_ROW = {"effective_from": "2026-09-01T06:00:00+00:00", "volume_l": 1200.0, "biomass_g": 3000.0}
+
+
+def test_profile_supabase_reads_by_pond_oldest_first():
+    storage, client = _storage(data={"pond_profile": [PROFILE_ROW]})
+    assert storage.fetch_pond_profiles(4) == [PROFILE_ROW]
+    calls = client.queries[-1].calls
+    assert ("eq", ("pond_id", 4), {}) in calls
+    assert ("order", ("effective_from",), {}) in calls
+
+
+def test_profile_supabase_insert_sets_pond_and_source():
+    storage, client = _storage(data={"pond_profile": [{**PROFILE_ROW, "id": 1}]})
+    assert storage.insert_pond_profile(4, {**PROFILE_ROW, "id": 99, "source": "userdata"})["id"] == 1
+    [(method, (row,), _)] = client.queries[-1].calls
+    assert method == "insert" and row["pond_id"] == 4 and row["source"] == "api" and "id" not in row
+
+
+def test_profile_supabase_unique_violation_is_a_duplicate_profile_error():
+    class UniqueViolation(Exception):
+        code = "23505"
+
+    storage, _ = _storage(error=UniqueViolation("duplicate key"))
+    with pytest.raises(DuplicateProfileError):
+        storage.insert_pond_profile(4, PROFILE_ROW)
+    other, _ = _storage(error=ConnectionError("down"))
+    with pytest.raises(StorageError, match="insert_pond_profile") as info:
+        other.insert_pond_profile(4, PROFILE_ROW)
+    assert not isinstance(info.value, DuplicateProfileError)

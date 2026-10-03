@@ -48,7 +48,7 @@ class FishImageHelper {
             initAspectRatio: CropAspectRatioPreset.ratio16x9,
             lockAspectRatio: false,
             activeControlsWidgetColor: const Color(0xFF38BDF8),
-            statusBarColor: const Color(0xFF070B12),
+            statusBarLight: false,
             backgroundColor: const Color(0xFF070B12),
           ),
           IOSUiSettings(title: 'Refocus Image Viewport'),

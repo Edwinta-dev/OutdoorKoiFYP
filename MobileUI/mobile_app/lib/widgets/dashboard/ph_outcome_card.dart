@@ -237,7 +237,7 @@ class PhOutcomeCard extends StatelessWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -302,7 +302,7 @@ class PhOutcomeCard extends StatelessWidget {
                   64 *
                   ((targetMaxPh - targetMinPh) / (maxPhScale - minPhScale)),
               decoration: BoxDecoration(
-                color: const Color(0xFF50C878).withOpacity(0.35),
+                color: const Color(0xFF50C878).withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -317,7 +317,7 @@ class PhOutcomeCard extends StatelessWidget {
                 color: activeColor,
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: [
-                  BoxShadow(color: activeColor.withOpacity(0.6), blurRadius: 4),
+                  BoxShadow(color: activeColor.withValues(alpha: 0.6), blurRadius: 4),
                 ],
               ),
             ),
@@ -346,7 +346,7 @@ class PhOutcomeCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF4D4D).withOpacity(0.2),
+                  color: const Color(0xFFFF4D4D).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(

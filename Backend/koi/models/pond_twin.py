@@ -54,6 +54,7 @@ from typing import Optional
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine
+from koi.models.profile import PondProfile, ProfileHistory
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +74,12 @@ class PondTwin:
         self.chemistry = chemistry
         self.evaporation = evaporation
         self.algae = algae
+        # The pond's profile history (koi/models/profile.py), set by the
+        # registry before each call. Not part of the snapshot: the
+        # pond_profile table is its record. With it set, every step reads
+        # the profile in force at its own time; without it the engines
+        # keep the config they hold.
+        self.profiles: Optional[ProfileHistory] = None
 
     # ----------------------------------------------------------
     @classmethod
@@ -96,8 +103,13 @@ class PondTwin:
     # ==========================================================
     # Interventions - fan out to every affected engine
     # ==========================================================
-    def apply_event(self, event: PondEvent) -> None:
+    def apply_event(self, event: PondEvent, now: Optional[datetime] = None) -> None:
         """Applies one logged intervention across all engines.
+
+        With a profile history set, the event is applied under the
+        profile in force at event.time (a percentage or litre volume is
+        read against the pond as it was then), and the engines are left
+        on the profile in force at now (default: the current time).
 
         Chemistry always sees the event (it owns the canonical event
         ledger used by the sensor gate's "was there a volume event
@@ -105,6 +117,9 @@ class PondTwin:
         own pools). The other two engines are notified only for the
         events that physically affect them.
         """
+        if self.profiles is not None:
+            self.use_profile(self.profiles.at(event.time))
+
         self.chemistry.apply_event(event)
 
         if event.kind == EventKind.WATER_CHANGE:
@@ -123,6 +138,9 @@ class PondTwin:
 
         # FEEDING affects chemistry only (directly). Its downstream effect
         # on algae arrives through the projected NO3 term, not here.
+
+        if self.profiles is not None:
+            self.use_profile(self.profiles.at(now or datetime.now(timezone.utc)))
 
     # ==========================================================
     # Environmental update - the poller's per-cycle entry point
@@ -148,8 +166,11 @@ class PondTwin:
              level and then immediately overwritten.
           2. sensor ingest into chemistry (which internally advances its
              own pools over elapsed time).
-          3. evaporation and algae time-advance.
-          4. assess all three.
+          3. evaporation and algae time-advance. With a profile history
+             set, the evaporation integral is split at each profile
+             change since the last advance, so each part uses the
+             surface area in force over it.
+          4. assess all three, under the profile in force at now.
         """
         result: dict = {"assimilated_camera_frames": 0}
 
@@ -175,15 +196,24 @@ class PondTwin:
 
         # --- 3. time advance ---
         if evaporation_env is not None:
+            config_changes = None
+            last = self.evaporation.last_advance_time
+            if self.profiles is not None and last is not None:
+                self.evaporation.config = self._evaporation_config(self.profiles.at(last))
+                config_changes = [(at, self._evaporation_config(p))
+                                  for at, p in self.profiles.changes_between(last, now)]
             self.evaporation.advance_state(
                 now,
                 evaporation_env,
                 measured_water_temp_c=sample.temp_c if sample is not None else None,
+                config_changes=config_changes,
             )
         if algae_env is not None:
             self.algae.advance_state(now, algae_env)
 
         # --- 4. assess ---
+        if self.profiles is not None:
+            self.use_profile(self.profiles.at(now))
         chem = self.chemistry.assess(
             rain_incoming=rain_incoming,
             rain_intensity=rain_intensity,
@@ -313,6 +343,24 @@ class PondTwin:
         return cls(chemistry=chemistry, evaporation=evaporation, algae=algae)
 
     # ==========================================================
+    @staticmethod
+    def _evaporation_config(profile: PondProfile) -> ev.EvaporationConfig:
+        """The evaporation config under a profile. An unmeasured depth
+        uses the model's default depth (DEFAULT_POND_DEPTH_M), which the
+        forecast reports as assumed_depth_m."""
+        return ev.EvaporationConfig(
+            volume_litres=float(profile.volume_l),
+            estimated_biomass_grams=float(profile.biomass_g),
+            pond_depth_m=float(profile.depth_m) if profile.depth_m is not None else ev.DEFAULT_POND_DEPTH_M,
+        )
+
+    def use_profile(self, profile: PondProfile) -> None:
+        """Puts every engine on one profile: volume, biomass, fish and tap
+        water for chemistry, volume, biomass and depth for evaporation.
+        The algae engine reads none of them."""
+        self.chemistry.config = profile.pond_config(base=self.chemistry.config)
+        self.evaporation.config = self._evaporation_config(profile)
+
     def sync_config(self, pond_config: PondConfig, pond_depth_m: Optional[float] = None) -> None:
         """Re-applies pond volume/biomass from UserData onto every engine.
 

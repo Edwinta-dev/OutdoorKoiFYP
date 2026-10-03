@@ -1,0 +1,173 @@
+{
+  "_comment": "Synthetic data.gov.sg v2 real-time responses in the documented shapes (keys as the reference scrapers in PythonSimulatorProject read them). Values are invented; no live data. Station ids S43/S06 match tools/rehearsal/legacy_rows.sql.",
+  "air-temperature": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "stations": [
+        {"id": "S43", "deviceId": "S43", "name": "Kim Chuan Road", "location": {"latitude": 1.3399, "longitude": 103.8878}},
+        {"id": "S06", "deviceId": "S06", "name": "Woodlands", "location": {"latitude": 1.4332, "longitude": 103.7829}},
+        {"id": "S109", "deviceId": "S109", "name": "Ang Mo Kio Avenue 5", "location": {"latitude": 1.3764, "longitude": 103.8492}}
+      ],
+      "readings": [
+        {"timestamp": "2026-10-02T10:05:00+08:00", "data": [
+          {"stationId": "S43", "value": 30.7},
+          {"stationId": "S06", "value": 29.9},
+          {"stationId": "S109", "value": 30.2}
+        ]},
+        {"timestamp": "2026-10-02T10:04:00+08:00", "data": [
+          {"stationId": "S43", "value": 30.6}
+        ]}
+      ],
+      "readingType": "DBT 1M F",
+      "readingUnit": "deg C"
+    }
+  },
+  "rainfall": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "stations": [
+        {"id": "S43", "deviceId": "S43", "name": "Kim Chuan Road", "location": {"latitude": 1.3399, "longitude": 103.8878}},
+        {"id": "S06", "deviceId": "S06", "name": "Woodlands", "location": {"latitude": 1.4332, "longitude": 103.7829}},
+        {"id": "S211", "deviceId": "S211", "name": "Yishun Avenue 5", "location": {"latitude": 1.4252, "longitude": 103.8202}}
+      ],
+      "readings": [
+        {"timestamp": "2026-10-02T10:05:00+08:00", "data": [
+          {"stationId": "S43", "value": 0.2},
+          {"stationId": "S06", "value": 0},
+          {"stationId": "S211", "value": 1.4}
+        ]}
+      ],
+      "readingType": "TB1 Rainfall 5 Minute Total F",
+      "readingUnit": "mm"
+    }
+  },
+  "wind-speed": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "stations": [
+        {"id": "S43", "deviceId": "S43", "name": "Kim Chuan Road", "location": {"latitude": 1.3399, "longitude": 103.8878}}
+      ],
+      "readings": [
+        {"timestamp": "2026-10-02T10:05:00+08:00", "data": [{"stationId": "S43", "value": 4.1}]}
+      ],
+      "readingType": "Wind Speed AVG(1M) M/M",
+      "readingUnit": "knots"
+    }
+  },
+  "relative-humidity": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "stations": [
+        {"id": "S43", "deviceId": "S43", "name": "Kim Chuan Road", "location": {"latitude": 1.3399, "longitude": 103.8878}}
+      ],
+      "readings": [
+        {"timestamp": "2026-10-02T10:05:00+08:00", "data": [{"stationId": "S43", "value": 71.5}]}
+      ],
+      "readingType": "RH 1M F",
+      "readingUnit": "percentage"
+    }
+  },
+  "wind-direction": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "stations": [
+        {"id": "S43", "deviceId": "S43", "name": "Kim Chuan Road", "location": {"latitude": 1.3399, "longitude": 103.8878}}
+      ],
+      "readings": [
+        {"timestamp": "2026-10-02T10:05:00+08:00", "data": [{"stationId": "S43", "value": 140}]}
+      ],
+      "readingType": "Wind Dir AVG (S) Degree",
+      "readingUnit": "degrees"
+    }
+  },
+  "uv": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "records": [
+        {"date": "2026-10-02", "updatedTimestamp": "2026-10-02T10:00:30+08:00", "timestamp": "2026-10-02T10:00:00+08:00",
+         "index": [
+           {"hour": "2026-10-02T10:00:00+08:00", "value": 5},
+           {"hour": "2026-10-02T09:00:00+08:00", "value": 3},
+           {"hour": "2026-10-02T08:00:00+08:00", "value": 1}
+         ]}
+      ]
+    }
+  },
+  "two-hr-forecast": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "area_metadata": [
+        {"name": "Serangoon", "label_location": {"latitude": 1.357, "longitude": 103.865}},
+        {"name": "Woodlands", "label_location": {"latitude": 1.432, "longitude": 103.786}}
+      ],
+      "items": [
+        {"update_timestamp": "2026-10-02T10:02:00+08:00", "timestamp": "2026-10-02T10:00:00+08:00",
+         "valid_period": {"start": "2026-10-02T10:00:00+08:00", "end": "2026-10-02T12:00:00+08:00", "text": "10 am to 12 pm"},
+         "forecasts": [
+           {"area": "Serangoon", "forecast": "Cloudy"},
+           {"area": "Woodlands", "forecast": "Thundery Showers"}
+         ]}
+      ]
+    }
+  },
+  "twenty-four-hr-forecast": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "records": [
+        {"date": "2026-10-02", "updatedTimestamp": "2026-10-02T05:46:00+08:00", "timestamp": "2026-10-02T05:30:00+08:00",
+         "general": {
+           "temperature": {"low": 25, "high": 35, "unit": "Degrees Celsius"},
+           "relativeHumidity": {"low": 60, "high": 95, "unit": "Percentage"},
+           "forecast": {"code": "TL", "text": "Thundery Showers"},
+           "validPeriod": {"start": "2026-10-02T06:00:00+08:00", "end": "2026-10-03T06:00:00+08:00", "text": "6 AM 2 Oct to 6 AM 3 Oct"},
+           "wind": {"speed": {"low": 5, "high": 15}, "direction": "VARIABLE"}
+         },
+         "periods": [
+           {"timePeriod": {"start": "2026-10-02T06:00:00+08:00", "end": "2026-10-02T12:00:00+08:00", "text": "6 am to Midday 2 Oct"},
+            "regions": {"west": {"code": "PC", "text": "Partly Cloudy (Day)"}, "east": {"code": "PC", "text": "Partly Cloudy (Day)"},
+                        "central": {"code": "CL", "text": "Cloudy"}, "south": {"code": "PC", "text": "Partly Cloudy (Day)"},
+                        "north": {"code": "PC", "text": "Partly Cloudy (Day)"}}},
+           {"timePeriod": {"start": "2026-10-02T12:00:00+08:00", "end": "2026-10-02T18:00:00+08:00", "text": "Midday to 6 pm 2 Oct"},
+            "regions": {"west": {"code": "TL", "text": "Thundery Showers"}, "east": {"code": "TL", "text": "Thundery Showers"},
+                        "central": {"code": "TL", "text": "Thundery Showers"}, "south": {"code": "TL", "text": "Thundery Showers"},
+                        "north": {"code": "TL", "text": "Thundery Showers"}}}
+         ]}
+      ]
+    }
+  },
+  "four-day-outlook": {
+    "code": 0,
+    "errorMsg": "",
+    "data": {
+      "records": [
+        {"date": "2026-10-02", "updatedTimestamp": "2026-10-02T05:40:00+08:00", "timestamp": "2026-10-02T05:30:00+08:00",
+         "forecasts": [
+           {"temperature": {"low": 25, "high": 34, "unit": "Degrees Celsius"}, "relativeHumidity": {"low": 60, "high": 95, "unit": "Percentage"},
+            "forecast": {"summary": "Thundery showers in the afternoon", "code": "TL", "text": "Thundery Showers"},
+            "day": "Saturday", "timestamp": "2026-10-03T00:00:00+08:00",
+            "wind": {"speed": {"low": 10, "high": 20}, "direction": "S"}},
+           {"temperature": {"low": 25, "high": 33, "unit": "Degrees Celsius"}, "relativeHumidity": {"low": 60, "high": 95, "unit": "Percentage"},
+            "forecast": {"summary": "Showers", "code": "SH", "text": "Showers"},
+            "day": "Sunday", "timestamp": "2026-10-04T00:00:00+08:00",
+            "wind": {"speed": {"low": 10, "high": 20}, "direction": "S"}},
+           {"temperature": {"low": 26, "high": 34, "unit": "Degrees Celsius"}, "relativeHumidity": {"low": 55, "high": 90, "unit": "Percentage"},
+            "forecast": {"summary": "Fair", "code": "FA", "text": "Fair (Day)"},
+            "day": "Monday", "timestamp": "2026-10-05T00:00:00+08:00",
+            "wind": {"speed": {"low": 10, "high": 20}, "direction": "SE"}},
+           {"temperature": {"low": 26, "high": 34, "unit": "Degrees Celsius"}, "relativeHumidity": {"low": 55, "high": 90, "unit": "Percentage"},
+            "forecast": {"summary": "Fair", "code": "FA", "text": "Fair (Day)"},
+            "day": "Tuesday", "timestamp": "2026-10-06T00:00:00+08:00",
+            "wind": {"speed": {"low": 10, "high": 20}, "direction": "SE"}}
+         ]}
+      ]
+    }
+  }
+}

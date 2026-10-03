@@ -226,11 +226,19 @@ def parse_image_rows(rows: list) -> list:
     Prefers the smoothed value over the raw green_ratio when fitting,
     because single frames are noisy (passing cloud, surface glare, a fish
     breaking the surface) while the EMA is the filtered signal.
+
+    Frames that failed the camera's quality gate (issue #40: imageTable.quality
+    version 1 with status "fail", see koi/camera/quality.py) are skipped, so
+    a dark, blown-out or blurred frame never reaches the fit. Rows without
+    a quality result (stored before the gate) are kept as before.
     """
     import json
 
     samples = []
     for row in rows or []:
+        quality = row.get("quality")
+        if isinstance(quality, dict) and quality.get("version") == 1 and quality.get("status") == "fail":
+            continue
         ts = row.get("created_at")
         if ts is None:
             continue

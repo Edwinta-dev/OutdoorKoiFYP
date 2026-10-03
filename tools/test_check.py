@@ -181,3 +181,38 @@ def test_stage_sketch_compiles_against_the_example_not_real_secrets(monkeypatch,
 def test_pytest_count_pattern():
     out = "....\n334 assertions passed\n69 passed, 2 skipped in 0.60s\n"
     assert check.last_match(check.PYTEST_COUNTS, out) == "69 passed, 2 skipped"
+
+
+def test_firmware_skips_compile_when_board_core_missing(monkeypatch):
+    monkeypatch.setattr(check.shutil, "which",
+                        lambda name: "arduino-cli" if name == "arduino-cli" else None)
+    monkeypatch.setattr(check, "installed_cores", lambda cli: set())
+    r = check.Runner(strict=False)
+    check.check_firmware(r)
+    compiles = r.results[1:]
+    assert [x.status for x in compiles] == ["SKIP"] * len(check.SKETCHES)
+    assert compiles[0].detail == "arduino-cli core esp32:esp32 not found"
+    assert not r.failed
+
+
+def test_firmware_missing_board_core_fails_under_strict(monkeypatch):
+    monkeypatch.setattr(check.shutil, "which",
+                        lambda name: "arduino-cli" if name == "arduino-cli" else None)
+    monkeypatch.setattr(check, "installed_cores", lambda cli: set())
+    r = check.Runner(strict=True)
+    check.check_firmware(r)
+    assert r.failed
+
+
+@pytest.mark.parametrize("payload, expected", [
+    ('{"platforms": []}', set()),
+    ('{"platforms": [{"id": "esp32:esp32"}]}', {"esp32:esp32"}),
+    ('{"platforms": [{"metadata": {"id": "esp32:esp32"}}]}', {"esp32:esp32"}),
+    ('[{"id": "esp32:esp32"}]', {"esp32:esp32"}),
+    ("not json", set()),
+])
+def test_installed_cores_parses_core_list(monkeypatch, payload, expected):
+    class Proc:
+        stdout = payload
+    monkeypatch.setattr(check.subprocess, "run", lambda *a, **k: Proc())
+    assert check.installed_cores("arduino-cli") == expected

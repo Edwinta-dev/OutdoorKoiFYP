@@ -100,6 +100,10 @@ _BOUNDS = {
     SensorChannel.LUX: (0.0, 150000.0, 0.0),
 }
 _TDS_OUT_OF_WATER_THRESHOLD = 5.0
+
+# Light below this (lux, pond sensor) counts as night: the cut for the
+# night pH samples here and for the hypoxia flag (koi/models/hypoxia.py).
+NIGHT_LUX_THRESHOLD = 20.0
 _STALE_RUN_LENGTH = 4
 
 
@@ -238,10 +242,9 @@ class PondConfig:
     volume_litres: float
     estimated_biomass_grams: float
     # Not currently consumed by any chemistry calculation below - descriptive
-    # only. Not stored server-side (UserData has no fish_type/fish_count
-    # columns); sourced from the phone's SharedPreferences when available,
-    # see app.py's event endpoints. Default when unavailable (e.g. the
-    # poller, which has no per-request phone input to read from).
+    # only. Set from the pond's profile (koi/models/profile.py, the
+    # pond_profile table); the defaults stand in when the profile leaves
+    # them unknown.
     fish_type: str = "Unspecified"
     fish_count: int = 0
     tap_tds_ppm: float = 30.0
@@ -575,7 +578,7 @@ class WaterChemistryEngine:
         if gated.ph.is_trusted and gated.lux.is_trusted:
             day.trusted_ph.append(gated.ph.value)
             day.trusted_lux.append(gated.lux.value)
-            if gated.lux.value < 20:
+            if gated.lux.value < NIGHT_LUX_THRESHOLD:
                 day.night_ph.append(gated.ph.value)
         if gated.tds.is_trusted:
             day.trusted_tds.append(gated.tds.value)

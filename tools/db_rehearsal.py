@@ -60,6 +60,23 @@ LEGACY_TABLES = {
     '"Fish_Database"': '"Title", "Common Name", "pH", "Temperature"',
 }
 
+# 0008_pond_profile seeds one profile per legacy pond with a positive
+# volume and a biomass: effective from created_at, volume in litres,
+# biomass converted from kg to g, everything else unknown. Prints
+# mismatched|seeded|eligible.
+SEED_CHECK = """
+with eligible as (
+    select "userID" as pond_id, created_at, volume::numeric as volume_l, biomass * 1000 as biomass_g
+    from public."UserData" where volume > 0 and biomass >= 0),
+seeded as (
+    select pond_id, effective_from, volume_l, biomass_g from public.pond_profile
+    where source = 'userdata_seed' and depth_m is null and fish_type is null and fish_count is null
+      and tap_tds_ppm is null and tap_nitrate_ppm is null and aeration is null)
+select (select count(*) from (select * from eligible except select * from seeded) a)
+     + (select count(*) from (select * from seeded except select * from eligible) b)
+     || '|' || (select count(*) from seeded) || '|' || (select count(*) from eligible)
+"""
+
 STORAGE_QUERY = (
     "select 'bucket ' || id || ' public=' || public "
     "|| ' mime=' || coalesce(array_to_string(allowed_mime_types, ','), '-') "
@@ -134,6 +151,7 @@ def main() -> int:
     for path in later:
         psql(path.read_bytes())
     rows_after = snapshot_rows()
+    profile_seed = query(SEED_CHECK).strip()
     schema_b = schema_text()
 
     print("A  fresh path: supabase db reset")
@@ -150,6 +168,11 @@ def main() -> int:
         print(f"PASS every legacy row kept ({len(LEGACY_TABLES)} tables)")
     if empty:
         print("NOTE no legacy rows loaded for:", ", ".join(empty))
+    if profile_seed.startswith("0|"):
+        print(f"PASS pond_profile seeded from UserData ({profile_seed.split('|')[1]} ponds, biomass kg to g)")
+    else:
+        ok = False
+        print(f"FAIL pond_profile seed (mismatched|seeded|eligible): {profile_seed}")
 
     diff = list(difflib.unified_diff(normalise(schema_a), normalise(schema_b), "fresh (A)", "upgrade (B)",
                                      lineterm="", n=2))

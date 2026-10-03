@@ -13,9 +13,11 @@ swallowed inside storage. The caller decides whether a failure is fatal
 (a lost snapshot write) or can be skipped (a missing evaluation log row);
 fail_soft below is the one way to say "skip".
 
-Weather has no operation of its own: the NEA telemetry and forecast reach
-the backend inside the dashboard payload (fetch_dashboard_payload), which
-get_bundled_dashboard_payload assembles in the database.
+The current NEA telemetry and forecast reach the services inside the
+dashboard payload (fetch_dashboard_payload), which
+get_bundled_dashboard_payload assembles from the latest caches. The
+weather operations below are the ingestion job's writes (koi/weather) and
+the as-of reads over weather history (migration 0009).
 """
 from __future__ import annotations
 
@@ -48,6 +50,16 @@ class StaleSnapshotError(StorageError):
         self.user_id = user_id
         self.base_version = base_version
         super().__init__("save_engine_snapshot", f"snapshot for user {user_id} is newer than version {base_version}")
+
+
+class DuplicateProfileError(StorageError):
+    """insert_pond_profile was given an effective_from at which the pond
+    already has a profile row ((pond_id, effective_from) is unique)."""
+
+    def __init__(self, user_id: int, effective_from: str):
+        self.user_id = user_id
+        self.effective_from = effective_from
+        super().__init__("insert_pond_profile", f"pond {user_id} already has a profile effective {effective_from}")
 
 
 def fail_soft(call: Callable[[], T], default: T) -> T:
@@ -143,14 +155,64 @@ class Storage(Protocol):
 
     def fetch_image_history(self, user_id: int | str, limit: int = 200) -> list[dict]: ...
 
-    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str) -> None: ...
+    def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
+                     mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
+        """mask_version and baseline_reset (migration 0010), quality and
+        thumbnail_path (migration 0011) are left out of the insert when
+        None, so a row without them is stored the same way as before."""
+        ...
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str: ...
+
+    def delete_images(self, bucket: str, paths: list[str]) -> None:
+        """Removes stored objects; used to clean up after a failed row insert."""
+        ...
+
+    # --- camera water mask (camera_config, migration 0010) -------------
+    def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
+        """The pond's camera_config row {pond_id, mask, mask_version,
+        updated_at}, or None when no mask has been saved."""
+        ...
+
+    def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
+        """Every saved mask of the pond {pond_id, mask_version, mask,
+        created_at}, oldest version first."""
+        ...
+
+    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+        """Stores mask (a validated polygon, koi/camera/mask.py) as the
+        pond's next mask version and makes it the one in force, in one
+        step (save_camera_mask). Returns the new camera_config row."""
+        ...
 
     # --- pond config (UserData) ---------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]: ...
 
     def fetch_pond_config(self, user_id: int) -> Optional[dict]: ...
+
+    # --- pond profile (pond_profile, migration 0008) -------------------
+    def fetch_pond_profiles(self, user_id: int) -> list[dict]:
+        """Every profile row of the pond (PROFILE_COLUMNS), oldest
+        effective_from first. Empty when the pond has none."""
+        ...
+
+    def insert_pond_profile(self, user_id: int, profile: dict) -> dict:
+        """Inserts one row from profile (effective_from as ISO 8601 and
+        the PROFILE_FIELDS of koi/models/profile.py) with source 'api',
+        and returns the stored row. Raises DuplicateProfileError when the
+        pond already has a row at that effective_from."""
+        ...
+
+    # --- account links (UserData.auth_uid, migration 0007) -------------
+    def fetch_pond_id_for_account(self, auth_uid: str) -> Optional[int]:
+        """The userID of the pond linked to this Supabase account, or None."""
+        ...
+
+    def is_session_active(self, session_id: str, auth_uid: str) -> bool:
+        """True while the account's auth session exists and has not reached
+        its not_after time (the auth_session_active function)."""
+        ...
 
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]: ...
@@ -161,20 +223,68 @@ class Storage(Protocol):
 
     def fetch_daily_sensor_series(self, user_id: int, sensor_type: str, days: int = 30) -> list[dict]: ...
 
+    # --- weather history (migration 0009, koi/weather) -----------------
+    def ingest_weather_batch(self, batch: dict) -> dict:
+        """Stores one fetch through ingest_weather_batch: history rows
+        deduplicated, latest caches updated only by newer values, station
+        lookup maintained. batch and the returned counts are described
+        in the migration."""
+        ...
+
+    def fetch_weather_windows(self, product: str) -> list[dict]:
+        """Every weather_ingest_window row of the product."""
+        ...
+
+    def record_weather_window(self, window: dict) -> None:
+        """Inserts or replaces the (product, window_start) row."""
+        ...
+
+    def fetch_assigned_weather_slots(self) -> list[dict]:
+        """The "ClosestStations" map of every pond that has one."""
+        ...
+
+    def fetch_forecast_as_of(self, product: str, slot_id: str, as_of: datetime,
+                             valid_at: Optional[datetime] = None) -> Optional[dict]:
+        """The forecast issuance usable at as_of (weather_forecast_as_of),
+        with issued_at, source_updated_at, available_at and fetched_at."""
+        ...
+
+    def fetch_weather_observations(self, station_id: str, metric: str, start: datetime, end: datetime,
+                                   as_of: datetime) -> list[dict]:
+        """Station observations inside [start, end] observed by as_of, with
+        observed_from, observed_to and fetched_at (weather_observations_as_of)."""
+        ...
+
+    def fetch_rainfall_total(self, station_id: str, start: datetime, end: datetime,
+                             as_of: Optional[datetime] = None) -> dict:
+        """Rainfall over [start, end] with coverage (weather_rainfall_total)."""
+        ...
+
 
 # ---------------------------------------------------------------------
 # Row conversions shared by both implementations
 # ---------------------------------------------------------------------
 _BIOMASS_KG_TO_GRAMS = 1000.0
 
+# imageTable columns the services read (mask_version, baseline_reset: 0010;
+# quality, thumbnail_path: 0011).
+IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
+                 "quality", "thumbnail_path")
+# camera_config and camera_mask_version columns (migration 0010).
+CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
+CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
+
+# pond_profile's columns (migration 0008).
+PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",
+                   "fish_count", "tap_tds_ppm", "tap_nitrate_ppm", "aeration", "source", "created_at")
+
 
 def pond_config_from_userdata_row(row: dict) -> Optional[dict]:
     """UserData is populated at onboarding (see onboarding_screen.dart) and
     only has volume (litres) + biomass (KG, aggregated across all fish
-    entries) - not fish_type/fish_count, which live in the phone's
-    SharedPreferences and never get synced server-side. Callers that need
-    those two fields (the event endpoints) fill them in from the request
-    body; the poller falls back to PondConfig's own defaults."""
+    entries). It is the legacy pond configuration: a pond's profile
+    (pond_profile, koi/models/profile.py) is built from this only when
+    the pond has no pond_profile rows."""
     if row.get("volume") is None or row.get("biomass") is None:
         return None
     return {

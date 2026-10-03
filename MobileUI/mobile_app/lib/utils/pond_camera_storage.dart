@@ -113,8 +113,8 @@ class PondCameraStorage {
   /// it against the live Supabase client.
   ///
   /// A stored URL looks like:
-  ///   https://<proj>.supabase.co/storage/v1/object/public/<bucket>/<uid>/<ts>_photo.jpg
-  /// Everything after "/public/<bucket>/" is the object path. Returns null
+  ///   `https://<proj>.supabase.co/storage/v1/object/public/<bucket>/<uid>/<ts>_photo.jpg`
+  /// Everything after `/public/<bucket>/` is the object path. Returns null
   /// if the URL doesn't match that shape, in which case the caller keeps
   /// the stored value as-is.
   static String? _rebuildUrl(String? storedUrl) {

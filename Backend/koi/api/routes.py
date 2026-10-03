@@ -42,14 +42,15 @@ koi.api.schemas. Every non-2xx response is the koi.errors envelope,
 {"error": {"code", "message", "details"}}; routes raise ApiError or
 PondNotConfigured rather than building error responses themselves.
 
-Auth note: every endpoint below trusts a caller-supplied user_id (in the
-body for events, in the path for reads). That is NOT safe for production
-- anyone who can reach this service can read or write state for any user.
-Before shipping, verify the caller's Supabase JWT (Flutter already holds
-one from its own auth session) and derive user_id from the verified token
-rather than from the request. See the write-up.
+Auth: every route except /health and /ready verifies the caller's
+Supabase access token, and the user_id in the path or body must be the
+pond linked to that account (koi/api/auth.py): 401 without a valid token,
+403 for any other pond. Path user_ids are checked before the view runs;
+_parse_body checks the body's user_id.
 """
+import dataclasses
 import logging
+from datetime import datetime, timezone
 from typing import Optional, TypeVar
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
@@ -59,17 +60,21 @@ from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
 from koi.api import schemas
+from koi.api.auth import authenticate, require_pond
 from koi.api.health import readiness
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
-from koi.models.engine import EventKind, PondConfig, PondEvent, WaterChemistryEngine
+from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
+from koi.models.hypoxia import algae_is_high, assess_hypoxia
+from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.registry import EngineRegistry
-from koi.storage import Storage, fail_soft
+from koi.storage import DuplicateProfileError, Storage, fail_soft
 
 bp = RouteGroup("twin", __name__)
+bp.before_request(authenticate)
 
 log = logging.getLogger(__name__)
 
@@ -90,11 +95,14 @@ def _registry() -> EngineRegistry:
 
 def _parse_body(model: type[M]) -> M:
     """The JSON body validated against model; a ValidationError becomes
-    a 400 with field-level detail (koi.errors)."""
+    a 400 with field-level detail (koi.errors). Every body names a pond,
+    which must be the caller's (403 otherwise)."""
     body = request.get_json(force=True, silent=True)
     if not isinstance(body, dict):
         raise ApiError("The request body must be a JSON object.", code="invalid_body")
-    return model.model_validate(body)
+    parsed = model.model_validate(body)
+    require_pond(getattr(parsed, "user_id"))  # noqa: B009 - every body model has user_id
+    return parsed
 
 
 def _parse_query(model: type[M]) -> M:
@@ -103,26 +111,16 @@ def _parse_query(model: type[M]) -> M:
 
 def _require_pond(user_id: int) -> None:
     """Raises PondNotConfigured unless the pond has a stored snapshot or
-    a UserData config to start one from."""
-    if _storage().fetch_snapshot_version(user_id) == 0 and _storage().fetch_pond_config(user_id) is None:
+    a profile (pond_profile rows or a UserData config) to start one from."""
+    if _storage().fetch_snapshot_version(user_id) == 0 and _registry().profile_history(user_id) is None:
         raise PondNotConfigured(user_id)
 
 
-def _default_config_for(user_id: int, body: Optional[schemas.EventBody] = None) -> PondConfig | None:
-    """Bootstraps a PondConfig for a user with no persisted snapshot yet.
-    volume/biomass come from UserData (Storage.fetch_pond_config);
-    fish_type/fish_count aren't stored there, so the caller (Flutter) sends
-    them from its own SharedPreferences - see quick_log_modals.dart. Both
-    are optional and fall back to PondConfig's own defaults if omitted."""
-    row = _storage().fetch_pond_config(user_id)
-    if row is None:
-        return None
-    kwargs = dict(row)
-    if body is not None and body.fish_type is not None:
-        kwargs["fish_type"] = body.fish_type
-    if body is not None and body.fish_count is not None:
-        kwargs["fish_count"] = body.fish_count
-    return PondConfig(**kwargs)
+def _profiles_for(user_id: int) -> Optional[ProfileHistory]:
+    """The pond's profile history (EngineRegistry.profile_history). Every
+    engine call gets it, so volume, biomass, depth, fish and tap water
+    always come from the pond's stored profile, never from a request."""
+    return _registry().profile_history(user_id)
 
 
 def _environment_for(user_id: int):
@@ -268,9 +266,7 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         twin.apply_event(event)
         return _recompute_and_push(user_id, twin, ctx)
 
-    return _registry().with_twin(
-        user_id, mutate, default_config=_default_config_for(user_id, body)
-    )
+    return _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
 
 # ===================================================================
@@ -398,9 +394,7 @@ def log_algae_rating():
         summary["assessments"] = assessments
         return summary
 
-    result = _registry().with_twin(
-        user_id, mutate, default_config=_default_config_for(user_id, body)
-    )
+    result = _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
     result["rating_id"] = rating_id
     result["rated_image_id"] = image_row.get("id") if image_row else None
@@ -445,7 +439,7 @@ def undo_algae_rating():
             "assessments": assessments,
         }
 
-    result = _registry().with_twin(user_id, mutate)
+    result = _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
     if not result.get("undone"):
         raise ApiError(
             "Nothing to undo, or that rating is no longer the most recent one. "
@@ -476,7 +470,7 @@ def get_algae_ratings(user_id):
         }
 
     calibration = _registry().with_twin(
-        user_id, read, default_config=_default_config_for(user_id), persist=False
+        user_id, read, profiles=_profiles_for(user_id), persist=False
     )
 
     latest_image = _storage().fetch_image_history(user_id, limit=1)
@@ -537,7 +531,7 @@ def get_latest_algae_assessment(user_id):
 def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
     populate every outcome card and its alert badge from a single
-    request instead of three."""
+    request instead of three - plus the night-time hypoxia flag."""
     assessments = {
         "chemistry": _storage().fetch_latest_evaluation(user_id),
         "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
@@ -545,7 +539,33 @@ def get_all_assessments(user_id):
     }
     if all(a is None for a in assessments.values()):
         _require_pond(user_id)
+    assessments["hypoxia"] = _hypoxia_now(user_id, assessments["algae"])
     return jsonify(assessments), 200
+
+
+def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
+    """The night-time hypoxia flag (koi/models/hypoxia.py) from the
+    latest sensor reading, the profile in force now and the cached algae
+    assessment: the inputs the poller uses, read fresh. A missing reading
+    gives level "unknown" rather than an error."""
+    payload = fail_soft(lambda: _storage().fetch_dashboard_payload(user_id), None) or {}
+    raw = payload.get("raw_sensor")
+    raw = raw if isinstance(raw, dict) else {}
+
+    def number(key: str) -> Optional[float]:
+        try:
+            return float(raw[key]) if raw.get(key) is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    profiles = _profiles_for(user_id)
+    return assess_hypoxia(
+        lux=number("LUX"),
+        water_temp_c=number("temp"),
+        aeration=profiles.at(datetime.now(timezone.utc)).aeration if profiles is not None else None,
+        algae_high=algae_is_high(algae_assessment),
+        thresholds=_registry().hypoxia_thresholds,
+    ).to_dict()
 
 
 # ===================================================================
@@ -599,7 +619,7 @@ def get_forecast(user_id):
         )
 
     result = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id), persist=False
+        user_id, run, profiles=_profiles_for(user_id), persist=False
     )
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
     result["temp_baseline"] = temp_stats
@@ -622,15 +642,20 @@ def get_evaporation_forecast(user_id):
     env = _evaporation_env(ctx)
 
     def run(twin):
-        return twin.evaporation.project_forward(
-            daily_environment=env, horizon_days=query.horizon_days
-        )
+        stored = twin.evaporation.config
+        if query.depth_m is not None:
+            twin.evaporation.config = dataclasses.replace(stored, pond_depth_m=query.depth_m)
+        try:
+            return twin.evaporation.project_forward(
+                daily_environment=env, horizon_days=query.horizon_days
+            )
+        finally:
+            twin.evaporation.config = stored
 
     result = _registry().with_twin(
         user_id,
         run,
-        default_config=_default_config_for(user_id),
-        pond_depth_m=query.depth_m,
+        profiles=_profiles_for(user_id),
         persist=False,
     )
 
@@ -712,7 +737,7 @@ def get_algae_forecast(user_id):
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
     result, assimilated = _registry().with_twin(
-        user_id, run, default_config=_default_config_for(user_id), persist=True
+        user_id, run, profiles=_profiles_for(user_id), persist=True
     )
 
     if "error" in result:
@@ -722,6 +747,95 @@ def get_algae_forecast(user_id):
     image_rows = _storage().fetch_image_history(user_id, limit=1)
     result["latest_image_url"] = image_rows[0].get("imageURL") if image_rows else None
     return jsonify(result), 200
+
+
+# ===================================================================
+# Pond profile (pond_profile, migration 0008)
+# ===================================================================
+# Effective-dated: each PUT adds a row in force from its effective_from
+# until the next row's, and old rows stay, so a change applies from its
+# own time onward (koi/models/profile.py). A past effective_from is
+# recorded and used from the next engine step on; steps the engines have
+# already taken are not recomputed.
+
+def _profile_response(user_id: int) -> dict:
+    rows = _storage().fetch_pond_profiles(user_id)
+    history = _registry().profile_history(user_id)
+    if history is None:
+        raise PondNotConfigured(user_id)
+    return {
+        "pond_id": user_id,
+        "source": "pond_profile" if rows else "userdata",
+        "current": history.at(schemas.utc_now()).to_dict(),
+        "history": rows,
+    }
+
+
+@bp.route("/v1/ponds/<int:user_id>/profile", methods=["GET"])
+def get_pond_profile(user_id):
+    """The profile in force now and every stored profile row, oldest
+    first. source is "userdata" for a pond with no profile rows yet,
+    whose profile is its onboarding volume and biomass."""
+    return jsonify(_profile_response(user_id)), 200
+
+
+@bp.route("/v1/ponds/<int:user_id>/profile", methods=["PUT"])
+def put_pond_profile(user_id):
+    """Adds a profile row effective now, or at the body's effective_from.
+    409 when the pond already has a profile at that exact time."""
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    update = schemas.ProfileUpdate.model_validate(body)
+    row = {name: getattr(update, name) for name in PROFILE_FIELDS}
+    row["effective_from"] = update.effective_time().isoformat()
+    try:
+        stored = _storage().insert_pond_profile(user_id, row)
+    except DuplicateProfileError as exc:
+        raise ApiError(f"Pond {user_id} already has a profile starting at {exc.effective_from}. "
+                       "Send a different effective_from.", status=409, code="profile_exists") from exc
+    log_event(log, "pond_profile_added", pond_id=user_id, effective_from=row["effective_from"])
+    return jsonify({**_profile_response(user_id), "added": stored}), 201
+
+
+# ===================================================================
+# Camera water mask (camera_config, migration 0010)
+# ===================================================================
+# The camera service computes the green ratio inside this polygon only.
+# Each PUT is a new mask_version; earlier versions are kept, so a stored
+# frame's mask_version still names the polygon it was analysed over.
+# The camera restarts its smoothed baseline on the first frame with the
+# new version (koi/camera/camera.py).
+
+def _camera_mask_response(user_id: int) -> dict:
+    config = _storage().fetch_camera_mask(user_id)
+    return {
+        "pond_id": user_id,
+        "mask": config["mask"] if config else None,
+        "mask_version": config["mask_version"] if config else None,
+        "updated_at": config["updated_at"] if config else None,
+        "versions": _storage().fetch_camera_mask_versions(user_id),
+    }
+
+
+@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["GET"])
+def get_camera_mask(user_id):
+    """The mask in force and every saved version, oldest first. mask is
+    null when none has been saved: the whole frame is analysed."""
+    return jsonify(_camera_mask_response(user_id)), 200
+
+
+@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["PUT"])
+def put_camera_mask(user_id):
+    """Saves the body's polygon as the pond's next mask version."""
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    update = schemas.CameraMaskUpdate.model_validate(body)
+    saved = _storage().save_camera_mask(user_id, update.polygon)
+    log_event(log, "camera_mask_saved", pond_id=user_id, mask_version=saved["mask_version"],
+              points=len(update.polygon))
+    return jsonify(_camera_mask_response(user_id)), 200
 
 
 # ===================================================================

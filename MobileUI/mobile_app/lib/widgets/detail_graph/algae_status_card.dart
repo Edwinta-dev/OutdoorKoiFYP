@@ -81,8 +81,8 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: const [
+        const Row(
+          children: [
             Icon(Icons.grass_outlined, color: Colors.white38, size: 18),
             SizedBox(width: 8),
             Text(
@@ -132,10 +132,10 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF131B2A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withOpacity(0.3)),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -230,9 +230,9 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.tealAccent.withOpacity(0.10),
+                color: Colors.tealAccent.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.tealAccent.withOpacity(0.35)),
+                border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.35)),
               ),
               child: Row(
                 children: [
@@ -291,7 +291,7 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
         height: size,
         child: f.latestImageUrl == null
             ? Container(
-                color: Colors.white.withOpacity(0.04),
+                color: Colors.white.withValues(alpha: 0.04),
                 child: const Icon(
                   Icons.photo_camera_outlined,
                   color: Colors.white24,
@@ -304,8 +304,8 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
                 // The pond camera is on the LAN and the bucket is public,
                 // but a phone on mobile data may not reach either - fail
                 // to a placeholder rather than a broken-image glyph.
-                errorBuilder: (_, __, ___) => Container(
-                  color: Colors.white.withOpacity(0.04),
+                errorBuilder: (_, _, _) => Container(
+                  color: Colors.white.withValues(alpha: 0.04),
                   child: const Icon(
                     Icons.broken_image_outlined,
                     color: Colors.white24,
@@ -315,7 +315,7 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
                   return Container(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withValues(alpha: 0.04),
                     child: const Center(
                       child: SizedBox(
                         width: 16,
@@ -396,7 +396,7 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
           child: LinearProgressIndicator(
             value: f.thresholdProgress,
             minHeight: 6,
-            backgroundColor: Colors.white.withOpacity(0.06),
+            backgroundColor: Colors.white.withValues(alpha: 0.06),
             valueColor: AlwaysStoppedAnimation<Color>(accent),
           ),
         ),
@@ -427,9 +427,9 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -479,7 +479,7 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     decoration: BoxDecoration(
       color: const Color(0xFF131B2A),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withOpacity(0.08)),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
     ),
     child: child,
   );
@@ -487,9 +487,9 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
   Widget _pill(String text, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.15),
+      color: color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withOpacity(0.5)),
+      border: Border.all(color: color.withValues(alpha: 0.5)),
     ),
     child: Text(
       text,
@@ -500,9 +500,9 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
   Widget _metricBox(String label, String value, Color valueColor) => Container(
     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.03),
+      color: Colors.white.withValues(alpha: 0.03),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.white.withOpacity(0.05)),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,

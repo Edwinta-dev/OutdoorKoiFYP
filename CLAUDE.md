@@ -4,9 +4,10 @@ Read README.md for the project, layout and run commands. This file is only
 the working rules for agents.
 
 ## Before you commit
-- Run `python tools/check.py all`. Everything must be PASS. Flutter and
-  arduino-cli aren't installed on this machine, so their SKIPs are expected;
-  CI runs them with --strict. After pushing, confirm with `gh run list`.
+- Run `python tools/check.py all`. Everything must be PASS. Flutter is
+  installed here; arduino-cli is, but without the esp32 core, so the three
+  firmware compile SKIPs are expected; CI runs them with --strict. After
+  pushing, confirm with `gh run list`.
 - One issue per commit (or a small series), message `issue #N: <summary>`.
 
 ## Git
@@ -16,6 +17,12 @@ the working rules for agents.
 ## Choosing issues
 - Pick open `block:NEXT` issues, lowest number first; leave `stretch` for last.
 - Skip `owner-action` and `hardware` issues, plus #74; they need the owner.
+- Skip `deferred` issues (#12, #17). The owner is live-testing the sensor
+  sketch. Until they lift this, no change may break its upload path: the
+  anonymous insert into `SensorData` with the publishable key (columns,
+  grants, RLS, triggers, `sensor_type` spellings) or the camera's
+  `POST /upload` contract. If an issue needs such a change, stop and
+  comment on the issue instead.
 - When finished, comment on the issue: what changed, how it was verified,
   and what is still unverified. Leave closing to the owner.
 

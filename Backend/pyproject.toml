@@ -22,6 +22,9 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.7",
     "python-dotenv>=1.0",
+    # Verifies the app's Supabase access tokens (koi/api/auth.py); crypto
+    # adds the ES256/RS256 keys served by the project's JWKS endpoint.
+    "pyjwt[crypto]>=2.8",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     # Windows has no system time zone database for zoneinfo.

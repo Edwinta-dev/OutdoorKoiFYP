@@ -128,10 +128,10 @@ class SolarOutcomeCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: kWarningAmber.withOpacity(0.12),
+                            color: kWarningAmber.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: kWarningAmber.withOpacity(0.4),
+                              color: kWarningAmber.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(
@@ -214,7 +214,7 @@ class _MutedArcPainter extends CustomPainter {
     const sweepAngle = 4.6;
 
     final bgPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
+      ..color = Colors.white.withValues(alpha: 0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;

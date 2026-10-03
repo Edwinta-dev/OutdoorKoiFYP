@@ -116,7 +116,7 @@ class HistoricalLineChart extends StatelessWidget {
           lineCol = _getEventColor(eType);
           strokeW = 1.5;
         } else {
-          lineCol = Colors.white.withOpacity(0.12);
+          lineCol = Colors.white.withValues(alpha: 0.12);
           strokeW = 1.0;
         }
 
@@ -140,10 +140,10 @@ class HistoricalLineChart extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF131B2A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -161,8 +161,8 @@ class HistoricalLineChart extends StatelessWidget {
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (spot) =>
-                  const Color(0xFF0F172A).withOpacity(0.92),
-              tooltipBorder: BorderSide(color: lineColor.withOpacity(0.5)),
+                  const Color(0xFF0F172A).withValues(alpha: 0.92),
+              tooltipBorder: BorderSide(color: lineColor.withValues(alpha: 0.5)),
               tooltipPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 6,
@@ -186,7 +186,7 @@ class HistoricalLineChart extends StatelessWidget {
                   return spotIndexes.map((spotIndex) {
                     return TouchedSpotIndicatorData(
                       FlLine(
-                        color: lineColor.withOpacity(0.5),
+                        color: lineColor.withValues(alpha: 0.5),
                         strokeWidth: 1.5,
                         dashArray: [4, 4],
                       ),
@@ -210,7 +210,7 @@ class HistoricalLineChart extends StatelessWidget {
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (value) =>
-                FlLine(color: Colors.white.withOpacity(0.03), strokeWidth: 1),
+                FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1),
           ),
 
           // Titles & Axis Formatting
@@ -227,12 +227,13 @@ class HistoricalLineChart extends StatelessWidget {
                 reservedSize: 42,
                 interval: yInterval,
                 getTitlesWidget: (val, meta) {
-                  if (val <= minY || val >= maxY)
+                  if (val <= minY || val >= maxY) {
                     return const SizedBox.shrink();
+                  }
                   return Text(
                     _formatValue(val, isLuxOrAlgae),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.35),
+                      color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
                     ),
@@ -252,7 +253,7 @@ class HistoricalLineChart extends StatelessWidget {
                     child: Text(
                       dateLabels[idx] ?? '',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
+                        color: Colors.white.withValues(alpha: 0.35),
                         fontSize: 9,
                         fontWeight: FontWeight.w500,
                       ),
@@ -281,8 +282,8 @@ class HistoricalLineChart extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    lineColor.withOpacity(0.28),
-                    lineColor.withOpacity(0.0),
+                    lineColor.withValues(alpha: 0.28),
+                    lineColor.withValues(alpha: 0.0),
                   ],
                 ),
               ),

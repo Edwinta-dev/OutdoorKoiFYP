@@ -77,8 +77,8 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: const [
+        const Row(
+          children: [
             Icon(Icons.water_damage_outlined, color: Colors.white38, size: 18),
             SizedBox(width: 8),
             Text(
@@ -128,10 +128,10 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF131B2A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withOpacity(0.3)),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -348,7 +348,7 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 6,
-            backgroundColor: Colors.white.withOpacity(0.06),
+            backgroundColor: Colors.white.withValues(alpha: 0.06),
             valueColor: AlwaysStoppedAnimation<Color>(accent),
           ),
         ),
@@ -374,9 +374,9 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -417,7 +417,7 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
     decoration: BoxDecoration(
       color: const Color(0xFF131B2A),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withOpacity(0.08)),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
     ),
     child: child,
   );
@@ -425,9 +425,9 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
   Widget _pill(String text, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.15),
+      color: color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withOpacity(0.5)),
+      border: Border.all(color: color.withValues(alpha: 0.5)),
     ),
     child: Text(
       text,
@@ -442,9 +442,9 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
   Widget _metricBox(String label, String value, Color valueColor) => Container(
     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.03),
+      color: Colors.white.withValues(alpha: 0.03),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.white.withOpacity(0.05)),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,

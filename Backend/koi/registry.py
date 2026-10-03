@@ -31,13 +31,16 @@ state, so that is harmless.
 import logging
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from koi.errors import PondNotConfigured
 from koi.logs import log_event
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
+from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.pond_twin import PondTwin
+from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
 from koi.storage import StaleSnapshotError, Storage
 
 log = logging.getLogger(__name__)
@@ -53,8 +56,11 @@ class EngineRegistry:
     """One per process, shared by the API routes and the poller when both
     run in it (see koi.api.create_app and koi.worker)."""
 
-    def __init__(self, storage: Storage):
+    def __init__(self, storage: Storage, hypoxia_thresholds: Optional[HypoxiaThresholds] = None):
         self.storage = storage
+        # Temperature levels for the night-time hypoxia flag (Settings),
+        # read by the poller and /assessment/all.
+        self.hypoxia_thresholds = hypoxia_thresholds or HypoxiaThresholds()
         self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above
@@ -65,11 +71,22 @@ class EngineRegistry:
                 self._locks[user_id] = threading.Lock()
             return self._locks[user_id]
 
+    def profile_history(self, user_id: int) -> Optional[ProfileHistory]:
+        """The pond's profile history: its pond_profile rows, or, for a
+        pond with none, one undated profile from its UserData volume and
+        biomass. None when the pond has neither."""
+        rows = self.storage.fetch_pond_profiles(user_id)
+        if rows:
+            return ProfileHistory([profile_from_row(r) for r in rows])
+        config = self.storage.fetch_pond_config(user_id)
+        return ProfileHistory([profile_from_userdata_config(config)]) if config is not None else None
+
     def _load_or_create(
         self,
         user_id: int,
         default_config: Optional[PondConfig],
         pond_depth_m: float,
+        profiles: Optional[ProfileHistory] = None,
     ) -> _Loaded:
         """The pond's twin, reloaded from storage if another process has
         saved a newer snapshot since this registry loaded it."""
@@ -87,6 +104,8 @@ class EngineRegistry:
             twin = PondTwin.from_snapshot(snapshot, pond_depth_m=pond_depth_m)
         elif default_config is not None:
             twin = PondTwin.create(default_config, pond_depth_m=pond_depth_m)
+        elif profiles is not None:
+            twin = PondTwin.create(profiles.at(datetime.now(timezone.utc)).pond_config(), pond_depth_m=pond_depth_m)
         else:
             raise PondNotConfigured(user_id)
 
@@ -112,8 +131,15 @@ class EngineRegistry:
         default_config: Optional[PondConfig] = None,
         pond_depth_m: float = ev.DEFAULT_POND_DEPTH_M,
         persist: bool = True,
+        profiles: Optional[ProfileHistory] = None,
     ):
         """Runs fn(twin) under this user's lock, then persists the snapshot.
+
+        profiles (from profile_history) is handed to the twin, which is put
+        on the profile in force now before fn runs; the twin's own steps
+        then read the profile in force at each step's time. It also
+        creates the twin of a pond with no snapshot when default_config
+        is not given.
 
         Use this for every mutation (event application, sensor ingest,
         camera assimilation) so locking + persistence can never be
@@ -133,18 +159,21 @@ class EngineRegistry:
         lock = self._lock_for(user_id)
         with lock:
             try:
-                return self._run(user_id, fn, default_config, pond_depth_m, persist)
+                return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles)
             except StaleSnapshotError as exc:
                 log_event(log, "stale_snapshot_retry", level=logging.WARNING, pond_id=user_id, error=str(exc))
                 self._twins.pop(user_id, None)
             try:
-                return self._run(user_id, fn, default_config, pond_depth_m, persist)
+                return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles)
             except StaleSnapshotError:
                 self._twins.pop(user_id, None)
                 raise
 
-    def _run(self, user_id, fn, default_config, pond_depth_m, persist):
-        loaded = self._load_or_create(user_id, default_config, pond_depth_m)
+    def _run(self, user_id, fn, default_config, pond_depth_m, persist, profiles=None):
+        loaded = self._load_or_create(user_id, default_config, pond_depth_m, profiles)
+        loaded.twin.profiles = profiles
+        if profiles is not None:
+            loaded.twin.use_profile(profiles.at(datetime.now(timezone.utc)))
         result = fn(loaded.twin)
         if persist:
             loaded.version = self.storage.save_engine_snapshot(
