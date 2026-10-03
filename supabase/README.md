@@ -10,12 +10,12 @@ change belongs in a migration; do not make an unrecorded live-only change.
 | `0003_worker_status.sql` | The `worker_status` table: the poller's last-cycle report, read by the API's `/ready` and `/metrics` (issue #10). | Applied 2026-10-01. |
 | `0004_observed_storage.sql` | The live storage buckets (`imageAnalysisBucket`, `FishImages`) and their eight anon policies, as observed. | Applied 2026-10-01 (no change on live). |
 | `0005_algae_severity_ratings.sql` | The `algae_severity_ratings` table for the app's rating card. | Applied 2026-10-01. |
-| `0006_hourly_history_utc_instants.sql` | `get_pond_telemetry_history` returns UTC instants whatever the session time zone (defect D9, issue #15). | Not yet applied. |
-| `0007_auth_link.sql` | `UserData.auth_uid` (nullable, unique: one pond per account until #67), a trigger refusing app-role changes to the link, `auth_session_active` (backend only) and `link_pond_to_account` (owner only, SQL editor) for the API's sign-in check (issue #11). Access per function is listed in its header. | Not yet applied. |
-| `0008_pond_profile.sql` | The effective-dated `pond_profile` table (volume, depth, biomass in grams, fish, tap water, aeration), seeded from `UserData` with biomass converted from kg to g, and a trigger recording later `UserData` volume or biomass writes as new rows (issue #16). Backend only; the trigger function is security definer so the app's onboarding upsert keeps working. | Not yet applied. |
-| `0009_weather_history.sql` | NEA weather history beside the latest caches (issue #24): `weather_observation`, `weather_forecast_issuance`, `weather_ingest_window`, the seeded `weather_station_regime`, nullable `weather_telemetry.source_times` and `weather_forecasts.source_issued_at`, the job's write path `ingest_weather_batch` and the as-of reads `weather_forecast_as_of`, `weather_observations_as_of`, `weather_rainfall_total`. Backend only. Rules in the file header and [docs/weather-ingestion.md](../docs/weather-ingestion.md). | Not yet applied. |
-| `0010_camera_mask.sql` | The camera's per-pond water mask (issue #39): `camera_config` (the mask in force, a normalised polygon, with its `mask_version`), the immutable `camera_mask_version` history, `camera_mask_is_valid` (3 to 64 points in 0..1, area at least 0.01 of the frame) and `save_camera_mask` (next version, one transaction, serialised per pond), plus nullable `imageTable.mask_version` and `imageTable.baseline_reset`. New tables and functions backend only; `imageTable` grants unchanged. | Not yet applied. |
-| `0011_frame_quality.sql` | The camera's frame quality gate and thumbnails (issue #40): nullable `imageTable.quality` (versioned result: status pass/fail/unknown, reason codes, metrics and thresholds; null on older rows reads as unknown) and `imageTable.thumbnail_path` (object path beside the frame, checked not to be a URL), and `image_quality_status` (backend only). No index; `imageTable` grants unchanged. | Not yet applied. |
+| `0006_hourly_history_utc_instants.sql` | `get_pond_telemetry_history` returns UTC instants whatever the session time zone (defect D9, issue #15). | Applied 2026-10-03. |
+| `0007_auth_link.sql` | `UserData.auth_uid` (nullable, unique: one pond per account until #67), a trigger refusing app-role changes to the link, `auth_session_active` (backend only) and `link_pond_to_account` (owner only, SQL editor) for the API's sign-in check (issue #11). Access per function is listed in its header. | Applied 2026-10-03. |
+| `0008_pond_profile.sql` | The effective-dated `pond_profile` table (volume, depth, biomass in grams, fish, tap water, aeration), seeded from `UserData` with biomass converted from kg to g, and a trigger recording later `UserData` volume or biomass writes as new rows (issue #16). Backend only; the trigger function is security definer so the app's onboarding upsert keeps working. | Applied 2026-10-03. |
+| `0009_weather_history.sql` | NEA weather history beside the latest caches (issue #24): `weather_observation`, `weather_forecast_issuance`, `weather_ingest_window`, the seeded `weather_station_regime`, nullable `weather_telemetry.source_times` and `weather_forecasts.source_issued_at`, the job's write path `ingest_weather_batch` and the as-of reads `weather_forecast_as_of`, `weather_observations_as_of`, `weather_rainfall_total`. Backend only. Rules in the file header and [docs/weather-ingestion.md](../docs/weather-ingestion.md). | Applied 2026-10-03. |
+| `0010_camera_mask.sql` | The camera's per-pond water mask (issue #39): `camera_config` (the mask in force, a normalised polygon, with its `mask_version`), the immutable `camera_mask_version` history, `camera_mask_is_valid` (3 to 64 points in 0..1, area at least 0.01 of the frame) and `save_camera_mask` (next version, one transaction, serialised per pond), plus nullable `imageTable.mask_version` and `imageTable.baseline_reset`. New tables and functions backend only; `imageTable` grants unchanged. | Applied 2026-10-03. |
+| `0011_frame_quality.sql` | The camera's frame quality gate and thumbnails (issue #40): nullable `imageTable.quality` (versioned result: status pass/fail/unknown, reason codes, metrics and thresholds; null on older rows reads as unknown) and `imageTable.thumbnail_path` (object path beside the frame, checked not to be a URL), and `image_quality_status` (backend only). No index; `imageTable` grants unchanged. | Applied 2026-10-03. |
 
 How each file was derived, the live evidence and every known difference
 and defect are in
@@ -90,6 +90,27 @@ restored and compared).
 
 Agents must not run `migration repair` or `db push`; these steps are the
 owner's.
+
+## Applying 0006-0011 (owner, 2026-10-03)
+
+The same steps, without `migration repair`, for the next batch:
+
+1. Rehearsed locally first: `supabase db reset`, `tools/db_rehearsal.py`
+   (all legacy rows kept, `pond_profile` seeded, fresh and upgrade paths
+   converge) and `tests/sql` (126 passed).
+2. Read-only backup of roles, schema and data with `supabase db dump
+   --linked` (`--role-only`; default; `--data-only --use-copy`), kept
+   off-repo by the owner. It does not include storage object files.
+3. `supabase migration list --linked` showed `0001`-`0005` applied and
+   `0006`-`0011` pending; the owner ran `supabase db push --dry-run`, then
+   `supabase db push`.
+4. Checked afterwards: history shows `0001`-`0011`; every new object exists;
+   `pond_profile` has one row per `UserData` pond (8); the `SensorData`
+   definition, grants, policies and triggers are identical before and
+   after, so the sensor sketch's anonymous insert is unaffected.
+
+The repository was unlinked again afterwards (`supabase unlink`), so local
+commands cannot reach live by accident. The next migration is `0012`.
 
 ## Rules for new migrations
 
