@@ -2,5 +2,7 @@
   "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
   "SUPABASE_PUBLISHABLE_KEY": "REPLACE_ME",
   "DIGITAL_TWIN_BASE_URL": "https://YOUR_DIGITAL_TWIN_HOST",
-  "POND_IMAGE_BUCKET": "imageAnalysisBucket"
+  "POND_IMAGE_BUCKET": "imageAnalysisBucket",
+  "SENTRY_DSN": "",
+  "SENTRY_ENVIRONMENT": "production"
 }

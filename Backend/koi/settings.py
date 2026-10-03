@@ -135,6 +135,16 @@ class Settings(BaseSettings):
     hypoxia_high_temp_c: float = Field(
         default=32.0, validation_alias=AliasChoices("KOI_HYPOXIA_HIGH_TEMP_C", "hypoxia_high_temp_c"))
 
+    # Error tracking (issue #66, koi/error_tracking.py). Empty DSN: off.
+    # The environment defaults to KOI_ENV and the release to koi@<package
+    # version>; set SENTRY_RELEASE to name a deploy (a git commit, say).
+    sentry_dsn: SecretStr = Field(
+        default=SecretStr(""), validation_alias=AliasChoices("SENTRY_DSN", "sentry_dsn"))
+    sentry_environment: str = Field(
+        default="", validation_alias=AliasChoices("SENTRY_ENVIRONMENT", "sentry_environment"))
+    sentry_release: str = Field(
+        default="", validation_alias=AliasChoices("SENTRY_RELEASE", "sentry_release"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))

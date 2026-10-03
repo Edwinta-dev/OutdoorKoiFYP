@@ -25,6 +25,8 @@ dependencies = [
     # Verifies the app's Supabase access tokens (koi/api/auth.py); crypto
     # adds the ES256/RS256 keys served by the project's JWKS endpoint.
     "pyjwt[crypto]>=2.8",
+    # Error tracking (koi/error_tracking.py), off unless SENTRY_DSN is set.
+    "sentry-sdk>=2.0",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     # Windows has no system time zone database for zoneinfo.

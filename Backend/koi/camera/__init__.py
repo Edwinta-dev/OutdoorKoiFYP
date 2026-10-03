@@ -6,7 +6,8 @@ analysis and tells the camera how long to sleep.
 
 Errors use the koi.errors envelope plus top-level sleep_sec, reason and
 next_at, which the ESP32-CAM firmware reads from every reply. Logs are JSON lines (koi.logs);
-GET /metrics serves upload, analysis and state-transition metrics.
+GET /metrics serves upload, analysis and state-transition metrics. Errors go
+to Sentry when SENTRY_DSN is set (koi/error_tracking.py).
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from typing import Optional
 from flask import Flask
 from flask_cors import CORS
 
+from koi.error_tracking import init_error_tracking
 from koi.errors import register_error_handlers
 from koi.logs import configure_logging
 from koi.observability import instrument_app
@@ -25,6 +27,7 @@ from koi.storage import Storage, build_storage
 def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] = None) -> Flask:
     settings = settings or get_settings()
     configure_logging(settings, "camera")
+    init_error_tracking(settings, "camera")
     app = Flask(__name__)
     app.config["KOI_SETTINGS"] = settings
     app.extensions["koi_storage"] = storage if storage is not None else build_storage(settings)

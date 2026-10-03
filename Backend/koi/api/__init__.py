@@ -12,7 +12,8 @@ GET /health is liveness only. GET /ready checks storage and the poller
 (koi/api/health.py) and returns 503 when not ready. GET /metrics is
 Prometheus text: request counts and latency by route, and the poller's
 cycle, failure, sensor-age and snapshot-age gauges. Logs are JSON lines
-(koi.logs) at settings.log_level.
+(koi.logs) at settings.log_level. Errors go to Sentry when SENTRY_DSN is
+set (koi/error_tracking.py).
 
 Every pond route needs the caller's Supabase access token (koi/api/auth.py).
 create_app raises koi.api.auth.AuthConfigError when auth is required but
@@ -28,6 +29,7 @@ from flask_cors import CORS
 
 from koi.api.auth import SigningKeys
 from koi.api.auth import init_app as init_auth
+from koi.error_tracking import init_error_tracking
 from koi.errors import register_error_handlers
 from koi.logs import configure_logging
 from koi.observability import instrument_app
@@ -40,6 +42,7 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
                signing_keys: Optional[SigningKeys] = None) -> Flask:
     settings = settings or get_settings()
     configure_logging(settings, "api")
+    init_error_tracking(settings, "api")
     storage = storage if storage is not None else build_storage(settings)
     app = Flask(__name__)
     app.config["KOI_SETTINGS"] = settings

@@ -135,12 +135,13 @@ def storage():
 
 def make_settings(**overrides):
     """Settings that ignore Backend/.env and the process environment's
-    Supabase credentials, with in-memory storage."""
+    Supabase credentials and Sentry DSN, with in-memory storage."""
     from koi.settings import Settings
 
     values = {"env": "test", "storage": "memory", "supabase_url": "", "supabase_servicerole_key": "",
               "auth": "required", "jwt_algorithm": "HS256", "supabase_jwt_secret": TEST_JWT_SECRET,
-              "supabase_jwks_url": "", "jwt_issuer": TEST_ISSUER, "jwt_audience": "authenticated"}
+              "supabase_jwks_url": "", "jwt_issuer": TEST_ISSUER, "jwt_audience": "authenticated",
+              "sentry_dsn": ""}
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
