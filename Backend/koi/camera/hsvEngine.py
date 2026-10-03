@@ -76,6 +76,15 @@ docstring says so.
 [Issue #39] Water mask. analyze_image_bytes also takes the pond's mask, a
 normalised polygon (koi/camera/mask.py), and counts green over the
 pixels inside it only. camera.py passes the mask stored for the pond.
+
+[Issue #80] Obstruction off-ramp. A latched obstruction only cleared by
+returning near the frozen baseline, and the app reset meant to handle a
+genuine change of view was never connected, so a moved camera or a new
+scene stayed "obstruction" for good. While latched, consecutive frames
+within OBSTRUCTION_TOLERANCE of each other build a candidate level; after
+OBSTRUCTION_CONFIRM_FRAMES of them the baseline restarts at their mean
+(see rebaselined). A lone spike breaks the run and confirms nothing. The
+candidate is stored as current_state[4:6] = [candidate_mean, count].
 """
 import cv2
 import numpy as np
@@ -97,6 +106,10 @@ CLEAR_THRESHOLD = 0.15            # [FIX 4] back within 15% of baseline = clear
 # Hysteresis (issue #38), overridable through Settings
 DYNAMIC_ENTER_FRAMES = 2          # consecutive raised frames to enter DYNAMIC
 DYNAMIC_EXIT_FRAMES = 3           # consecutive stable frames to leave DYNAMIC
+
+# Obstruction off-ramp (issue #80), overridable through Settings
+OBSTRUCTION_CONFIRM_FRAMES = 3    # consistent obstructed frames to re-baseline; 0 = never
+OBSTRUCTION_TOLERANCE = 0.05      # max distance of a frame from the candidate mean
 
 
 def analyze_image_bytes(image_bytes: bytes, roi_bounds: tuple | None = None,
@@ -206,6 +219,37 @@ def _coerce_counters(current_state) -> tuple[int, int]:
         return 0, 0
 
 
+def _coerce_candidate(current_state) -> tuple[float | None, int]:
+    """(candidate_mean, count) stored after the counters while obstruction
+    is latched, or (None, 0) for any other row, including one written
+    before issue #80."""
+    if isinstance(current_state, str) and current_state.strip().startswith("["):
+        try:
+            import json
+            current_state = json.loads(current_state)
+        except (ValueError, TypeError):
+            return None, 0
+    if not isinstance(current_state, (list, tuple)) or len(current_state) < 6:
+        return None, 0
+    try:
+        mean, count = float(current_state[4]), max(0, int(current_state[5]))
+    except (TypeError, ValueError):
+        return None, 0
+    return (mean, count) if count > 0 else (None, 0)
+
+
+def rebaselined(prev_state, new_state) -> bool:
+    """Whether evalstate left obstruction through the off-ramp (a confirmed
+    new level) rather than by clearing. A normal clear smooths in a frame
+    within CLEAR_THRESHOLD of the old baseline, so the baseline moves by at
+    most ALPHA * CLEAR_THRESHOLD; the off-ramp moves it to a level more
+    than CLEAR_THRESHOLD away."""
+    if _coerce_state(prev_state) != "obstruction" or _coerce_state(new_state) == "obstruction":
+        return False
+    old = _coerce_baseline(prev_state, 0.0)
+    return abs(_coerce_baseline(new_state, old) - old) > CLEAR_THRESHOLD
+
+
 def frame_rise(current_green_ratio: float, last_smoothed_green: float, current_state=DEFAULT_STATE) -> float:
     """Green-ratio rise of this frame over the smoothed baseline: the rate
     of change per frame that sets the dynamic capture interval."""
@@ -218,6 +262,8 @@ def evalstate(
     current_state=DEFAULT_STATE,
     enter_frames: int = DYNAMIC_ENTER_FRAMES,
     exit_frames: int = DYNAMIC_EXIT_FRAMES,
+    confirm_frames: int = OBSTRUCTION_CONFIRM_FRAMES,
+    tolerance: float = OBSTRUCTION_TOLERANCE,
 ) -> tuple:
     """Evaluates state transitions and updates the low-pass baseline.
 
@@ -235,6 +281,11 @@ def evalstate(
     raised_frames and stable_frames are the current streaks of raised and
     stable frames; at most one is non-zero. An obstruction frame resets both.
 
+    An obstruction result also carries [candidate_mean, count] (issue #80).
+    When confirm_frames consecutive obstructed frames have stayed within
+    tolerance of their running mean, the result is base at that mean with
+    both streaks at 0; rebaselined() tells the caller it happened.
+
     last_smoothed_green should be the SMOOTHED baseline from the previous
     row, not its raw green_ratio. If the caller passes the stored
     (state, smoothed, ...) list as current_state, the correct baseline and
@@ -246,17 +297,31 @@ def evalstate(
 
     delta_g = current_green_ratio - baseline
 
+    def obstructed() -> tuple:
+        # [Issue #80] Extend the run of consistent obstructed frames, or
+        # start a new one at this frame. A confirmed run is a new view, not
+        # an obstruction: restart the baseline at its mean.
+        mean, count = _coerce_candidate(current_state) if state_label == "obstruction" else (None, 0)
+        if mean is not None and abs(current_green_ratio - mean) <= tolerance:
+            mean, count = (mean * count + current_green_ratio) / (count + 1), count + 1
+        else:
+            mean, count = current_green_ratio, 1
+        if 0 < confirm_frames <= count:
+            return ("base", round(mean, 4), 0, 0)
+        # Do NOT let the obstructed frame touch the baseline.
+        return ("obstruction", round(baseline, 4), 0, 0, round(mean, 4), count)
+
     # --- PRIORITY 1: OBSTRUCTION ---------------------------------
     if delta_g > ANOMALY_THRESHOLD:
         # A jump this large is not algae growing - it is something in
-        # front of the lens. Do NOT let it touch the baseline.
-        return ("obstruction", round(baseline, 4), 0, 0)
+        # front of the lens.
+        return obstructed()
 
     if state_label == "obstruction":
         # [FIX 4] Latched from a previous frame - stay latched until the
         # view returns close to the trusted baseline.
         if abs(delta_g) > CLEAR_THRESHOLD:
-            return ("obstruction", round(baseline, 4), 0, 0)
+            return obstructed()
         # Cleared. Resume smoothing from this frame; the streaks restart here.
         state_label, raised, stable = "base", 0, 0
 

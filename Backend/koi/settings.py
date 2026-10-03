@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     camera_dynamic_rate_levels: Annotated[tuple[float, float], NoDecode] = Field(
         default=(0.10, 0.20),
         validation_alias=AliasChoices("CAMERA_DYNAMIC_RATE_LEVELS", "camera_dynamic_rate_levels"))
+    # Obstruction off-ramp (issue #80): consecutive obstructed frames within
+    # the tolerance of their mean that restart the baseline there (0 turns
+    # the off-ramp off, so only a return near the old baseline clears).
+    camera_obstruction_confirm_frames: int = Field(
+        default=3, ge=0,
+        validation_alias=AliasChoices("CAMERA_OBSTRUCTION_CONFIRM_FRAMES", "camera_obstruction_confirm_frames"))
+    camera_obstruction_tolerance: float = Field(
+        default=0.05, gt=0, lt=1,
+        validation_alias=AliasChoices("CAMERA_OBSTRUCTION_TOLERANCE", "camera_obstruction_tolerance"))
 
     # Digital twin API authentication (issue #11). "required" verifies the
     # Supabase access token on every pond request; "disabled" trusts the

@@ -200,13 +200,14 @@ def test_base_to_obstruction_on_a_leaf_keeps_the_baseline():
     not enter the EMA."""
     storage = _storage((0.10, ["base", 0.10]))
     state = post(_client(storage), leaf_frame())
-    assert state == ["obstruction", 0.10, 0, 0]
-    assert storage.rows("imageTable")[-1]["current_state"] == ["obstruction", 0.10, 0, 0]
+    assert state[:4] == ["obstruction", 0.10, 0, 0]
+    assert state[5] == 1  # the leaf frame starts an off-ramp candidate (issue #80)
+    assert storage.rows("imageTable")[-1]["current_state"] == state
 
 
 def test_dynamic_to_obstruction_on_a_leaf_resets_the_counters():
     state = post(_client(_storage((0.30, ["dynamic", 0.20, 3, 0]))), leaf_frame())
-    assert state == ["obstruction", 0.20, 0, 0]
+    assert state[:4] == ["obstruction", 0.20, 0, 0]
 
 
 @pytest.mark.parametrize("frame", [leaf_frame(), water_frame(0.3)], ids=["leaf", "partly-blocked"])
@@ -214,7 +215,8 @@ def test_obstruction_held_while_the_view_is_blocked(frame):
     """[FIX 4] a frame more than CLEAR_THRESHOLD from the baseline keeps
     the latch; 0.30 against 0.10 is below the 0.40 anomaly jump."""
     state = post(_client(_storage((0.95, ["obstruction", 0.10]))), frame)
-    assert state == ["obstruction", 0.10, 0, 0]
+    assert state[:4] == ["obstruction", 0.10, 0, 0]
+    assert state[5] == 1
 
 
 @pytest.mark.parametrize("fraction", [0.2, 0.0], ids=["above-baseline", "below-baseline"])
@@ -247,7 +249,7 @@ def test_glare_does_not_trip_obstruction_or_dynamic():
 def test_obstruction_latch_read_back_from_a_json_text_pair():
     """[FIX 2] current_state may come back as text rather than an array."""
     state = post(_client(_storage((0.95, '["obstruction", 0.1]'))), water_frame(0.3))
-    assert state == ["obstruction", 0.10, 0, 0]
+    assert state[:4] == ["obstruction", 0.10, 0, 0]
 
 
 def test_smoothed_baseline_is_used_not_the_raw_ratio():
