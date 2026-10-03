@@ -3,6 +3,7 @@ import 'package:flutter/services.dart'; // Added for native system bar styling
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Updated import for Supabase Flutter
 import 'config/app_config.dart';
+import 'config/error_tracking.dart';
 import 'screens/config_error_screen.dart';
 // Import your screens
 import 'screens/onboarding_screen.dart';
@@ -11,6 +12,11 @@ import 'screens/main_layout.dart';
 void main() async {
   // Ensure Flutter engine bindings are initialized before async tasks
   WidgetsFlutterBinding.ensureInitialized();
+  // Reports crashes to Sentry when the build has a SENTRY_DSN.
+  await runWithErrorTracking(ErrorTrackingConfig.build, _startApp);
+}
+
+Future<void> _startApp() async {
   const config = AppConfig.environment;
   final problems = config.problems;
   if (problems.isNotEmpty) {

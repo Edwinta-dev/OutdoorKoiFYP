@@ -16,6 +16,7 @@ certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
+    #   sentry-sdk
 cffi==2.1.1
     # via cryptography
 click==8.5.0
@@ -101,6 +102,8 @@ python-dotenv==1.2.3
     #   pydantic-settings
 realtime==2.31.0
     # via supabase
+sentry-sdk==2.71.0
+    # via koi (pyproject.toml)
 storage3==2.31.0
     # via supabase
 strenum==0.4.15
@@ -124,6 +127,8 @@ typing-inspection==0.4.4
     #   pydantic-settings
 tzlocal==5.4.4
     # via apscheduler
+urllib3==2.8.0
+    # via sentry-sdk
 websockets==15.0.1
     # via realtime
 werkzeug==3.1.9

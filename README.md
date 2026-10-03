@@ -226,6 +226,13 @@ compile time with an `#error` naming the example file.
 
 `Backend/.env.example` lists every variable the backend reads; all of them
 are loaded through `koi/settings.py`.
+
+Error tracking: set `SENTRY_DSN` in `Backend/.env` (API, worker and camera
+service) and in the app's `env/*.json` to send errors to Sentry; without it
+nothing is sent. Events carry the environment and release (backend
+`koi@<version>+twin.<snapshot version>`, app `sg.edu.ntu.outdoorkoi@<version>`),
+and location, email addresses, tokens and request bodies are removed first
+(`Backend/koi/error_tracking.py`, `MobileUI/mobile_app/lib/config/error_tracking.dart`).
 The backend check scans tracked files for committed credentials (Wi-Fi
 password assignments, device-token literals, JWT-shaped strings,
 service-role references) outside `.example` files and `archive/`.

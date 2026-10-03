@@ -2,8 +2,8 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/pond_data_source.dart';
 import '../utils/pond_heuristics.dart';
 import '../utils/digital_twin_api.dart';
 import '../widgets/dashboard/nea_weather_ribbon.dart';
@@ -67,6 +67,7 @@ class DashboardViewState extends State<DashboardView> {
       setState(() => _isLoading = true);
     }
 
+    final source = PondDataScope.of(context);
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userid = prefs.getString('userID') ?? '0';
@@ -78,17 +79,14 @@ class DashboardViewState extends State<DashboardView> {
       // take down the bundled-payload fetch that already worked before
       // this backend assessment existed.
       final results = await Future.wait<dynamic>([
-        Supabase.instance.client.rpc(
-          'get_bundled_dashboard_payload',
-          params: {'p_user_id': userid},
-        ),
-        DigitalTwinApi.fetchLatestAssessment(int.tryParse(userid) ?? 0),
+        source.fetchDashboardPayload(userid),
+        source.fetchLatestAssessment(int.tryParse(userid) ?? 0),
       ]);
       final response = results[0];
       final assessment = results[1] as WaterChemistryAssessment?;
 
       if (mounted && response != null) {
-        final data = Map<String, dynamic>.from(response as Map);
+        final data = Map<String, dynamic>.from(response);
         // Parse once per actual data refresh (every 30s / on manual
         // refresh), not once per build() - see the field comment above.
         final history = _parseTelemetryHistory(data['telemetry_history']);

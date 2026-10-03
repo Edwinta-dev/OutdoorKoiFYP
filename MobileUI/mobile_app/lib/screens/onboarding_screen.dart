@@ -4,7 +4,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
+import '../data/pond_data_source.dart';
 import '../utils/app_log.dart';
+
+/// The live write behind PondDataSource.upsertUserProfile. It lives next
+/// to the `profile` map built in _saveAndContinue so the schema check can
+/// match its keys to UserData columns.
+Future<Map<String, dynamic>> upsertUserProfileRow(
+  Map<String, dynamic> profile,
+) async {
+  return await Supabase.instance.client
+      .from('UserData')
+      .upsert(profile)
+      .select()
+      .single();
+}
 
 // --- Data Model for Fish Inhabitant Items ---
 class FishEntry {
@@ -253,20 +267,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// Fetch species dictionary list from Supabase
   Future<void> _fetchFishSpeciesDictionary() async {
     try {
-      // 1. Use global client singleton
-      final supabase = Supabase.instance.client;
-
-      // 2. Fetch species list from database
-      final List<dynamic> response = await supabase
-          .from('Fish_Database') // Replace with your actual table name
-          .select('Title');
+      final names = await PondDataScope.of(context).fetchSpeciesNames();
 
       if (!mounted) return;
 
       setState(() {
-        _speciesDictionary = response
-            .map((row) => row['Title'].toString())
-            .toList();
+        _speciesDictionary = names;
         _isLoadingSpecies = false;
       });
     } catch (e) {
@@ -334,6 +340,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _saveAndContinue() async {
+    final source = PondDataScope.of(context);
     final prefs = await SharedPreferences.getInstance();
     final volume = _volumeController.text;
     final totalBiomassKg = _totalCalculatedBiomass.toStringAsFixed(2);
@@ -393,18 +400,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     log("User ID: $userID");
 
     try {
-      final response = await Supabase.instance.client
-          .from('UserData')
-          .upsert({
-            'volume': volume,
-            'biomass': totalBiomassKg,
-            'latitude': latitude,
-            'longitude': longitude,
-            'manualpostallocation': manualpostallocation,
-            'userID': userID,
-          })
-          .select()
-          .single();
+      final Map<String, dynamic> profile = {
+        'volume': volume,
+        'biomass': totalBiomassKg,
+        'latitude': latitude,
+        'longitude': longitude,
+        'manualpostallocation': manualpostallocation,
+        'userID': userID,
+      };
+      final response = await source.upsertUserProfile(profile);
       final Map<String, dynamic>? closestStations = response['ClosestStations'];
       if (closestStations != null) {
         log("Assigned NEA Stations: $closestStations");
