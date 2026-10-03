@@ -43,7 +43,9 @@ log = logging.getLogger(__name__)
 LEEWAY_SEC = 30
 
 # Endpoints that need no token.
-OPEN_ENDPOINTS = {"twin.health", "twin.ready"}
+# (koi/api/spec.py serves them at /v1/health and /v1/ready and the
+# unversioned /health and /ready.)
+OPEN_ENDPOINTS = {"twin.health", "twin.ready", "twin.unversioned_health", "twin.unversioned_ready"}
 
 _CHALLENGE = 'Bearer realm="koi"'
 

@@ -11,9 +11,10 @@ entry per invalid field.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from functools import cache
 from typing import Callable, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from koi.camera import mask as camera_mask
@@ -184,6 +185,17 @@ class CameraMaskUpdate(_Body):
             raise PydanticCustomError("mask_invalid", "{reason}", {"reason": str(exc)}) from None
 
 
+@cache
+def on_pond_path(model: type[BaseModel]) -> type[BaseModel]:
+    """model for a /v1/ponds/{pond}/... route, where the path names the
+    pond: user_id may be left out, and when sent must equal the path's
+    pond (checked by the route)."""
+    return create_model(
+        f"{model.__name__}OnPond", __base__=model,
+        user_id=(Optional[int], Field(default=None, gt=0, description="Optional; when sent it must be the "
+                                                                      "pond in the path.")))
+
+
 class EvaporationForecastQuery(_Query):
     """depth_m, when given, replaces the profile's depth for this one
     projection; otherwise the profile's depth (or the default depth when
@@ -195,4 +207,4 @@ class EvaporationForecastQuery(_Query):
 
 __all__ = ["AlgaeRatingEvent", "AlgaeRatingUndo", "AlgalScrubEvent", "CameraMaskUpdate", "EvaporationForecastQuery",
            "EventBody", "FeedingEvent", "ForecastQuery", "MAX_EVENT_AGE", "MAX_EVENT_LEAD", "ProfileUpdate",
-           "VolumeEvent", "parse_event_time"]
+           "VolumeEvent", "on_pond_path", "parse_event_time"]

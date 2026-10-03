@@ -19,7 +19,7 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/storage/supabase_storage.py` | `DigitalTwin/state_store.py`, the camera's own client | `SupabaseStorage`: all Supabase I/O, client built on first use |
 | `koi/storage/memory.py` | the tests' fake store | `MemoryStorage`: in-process tables, seedable from JSON |
 | `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user, reloaded when another process saved a newer snapshot |
-| `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes |
+| `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes, all under `/v1` (route table in `spec.py`, response models in `responses.py`, the dashboard in `dashboard.py`); `python -m koi.api.openapi` regenerates `docs/api/openapi.yaml` |
 | `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll, lease-gated `Worker`, pond thread pool |
 | `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
 
