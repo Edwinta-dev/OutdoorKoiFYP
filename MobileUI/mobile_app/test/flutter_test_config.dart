@@ -14,9 +14,9 @@
 // pickers) still uses the test font and renders as squares. That is
 // deterministic, so goldens stay stable; it does not happen on a device.
 //
-// Golden comparison: text anti-aliasing differs slightly between the
-// Windows machine that records goldens and the Linux CI runner, so a
-// golden passes when at most [goldenTolerance] of its pixels differ.
+// Golden comparison: goldens are recorded and checked on Linux only
+// (test/goldens_test.dart); a golden passes when at most
+// [goldenTolerance] of its pixels differ.
 
 import 'dart:async';
 import 'dart:io';

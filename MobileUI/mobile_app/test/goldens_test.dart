@@ -1,9 +1,15 @@
 // Golden images of the three dashboard outcome cards and the log sheet.
 // Font and comparator setup: test/flutter_test_config.dart.
 //
-// Regenerate after an intended visual change with:
-//   flutter test --update-goldens test/goldens_test.dart
+// The goldens are recorded on Linux, as CI runs them: text anti-aliasing
+// on Windows differs by 3-6 % of pixels, so this file is skipped there.
+// Regenerate after an intended visual change, from MobileUI/mobile_app:
+//   docker run --rm -v "$PWD:/app" -w /app ghcr.io/cirruslabs/flutter:<CI version> \
+//     flutter test --update-goldens test/goldens_test.dart
 // and review the PNG diff before committing.
+@TestOn('linux')
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/utils/pond_heuristics.dart';
