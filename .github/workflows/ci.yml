@@ -91,4 +91,7 @@ jobs:
         with:
           channel: stable
           cache: true
+      # The cached SDK can lack bin/cache/artifacts/material_fonts, which
+      # test/flutter_test_config.dart loads Roboto from (issue #46).
+      - run: flutter precache --universal --force
       - run: python tools/check.py mobile --strict
