@@ -17,12 +17,16 @@ the working rules for agents.
 ## Choosing issues
 - Pick open `block:NEXT` issues, lowest number first; leave `stretch` for last.
 - Skip `owner-action` and `hardware` issues, plus #74; they need the owner.
-- Skip `deferred` issues (#12, #17). The owner is live-testing the sensor
-  sketch. Until they lift this, no change may break its upload path: the
-  anonymous insert into `SensorData` with the publishable key (columns,
-  grants, RLS, triggers, `sensor_type` spellings) or the camera's
-  `POST /upload` contract. If an issue needs such a change, stop and
-  comment on the issue instead.
+- Skip issues labelled `deferred` (currently #86, camera) until the owner
+  removes the label.
+- The sensor-sketch freeze was lifted on 2026-10-04 (the live node was
+  retrieved). Changes to the `SensorData` insert path (columns, grants,
+  RLS, triggers, `sensor_type` spellings) and to the sensor sketch are
+  allowed, through new migrations; rows written before the change must
+  still load.
+- The camera stays frozen: no change may break its `POST /upload`
+  contract (request shape, auth, response). If an issue needs such a
+  change, stop and comment on the issue instead.
 - When finished, comment on the issue: what changed, how it was verified,
   and what is still unverified. Leave closing to the owner.
 

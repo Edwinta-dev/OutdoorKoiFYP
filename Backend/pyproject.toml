@@ -41,6 +41,10 @@ dev = [
     # SQL tests against the local Supabase stack (tests/sql); they skip
     # when no local database is reachable.
     "psycopg[binary]>=3.2",
+    # docs/api/openapi.yaml: written and read by koi.api.openapi, and every
+    # API response in the tests is validated against it.
+    "pyyaml>=6.0",
+    "jsonschema>=4.21",
 ]
 wsgi = ["gunicorn>=22.0"]
 

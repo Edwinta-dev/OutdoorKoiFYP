@@ -79,6 +79,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "volume_litres", "food_grams", "protein_percentage", "algae_method"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
+    # The sensor node's readings, read by fetch_dashboard_sources.
+    "SensorData": ("id", "created_at", "sensor_type", "data1", "userID"),
     "pond_profile": PROFILE_COLUMNS,
     # Supabase Auth's session table, read by auth_session_active (0007).
     "auth.sessions": ("id", "user_id", "not_after"),
@@ -110,6 +112,7 @@ USER_COLUMN = {
     "UserData": "userID",
     "pondInterventions": "userID",
     "daily_sensor_averages": "userid",
+    "SensorData": "userID",
     "pond_profile": "pond_id",
     "camera_config": "pond_id",
     "camera_mask_version": "pond_id",
@@ -131,6 +134,7 @@ _STAMPED = {
     "algae_severity_ratings": "rated_at",
     "imageTable": "created_at",
     "pondInterventions": "created_at",
+    "SensorData": "created_at",
     "UserData": "created_at",
     "pond_profile": "created_at",
     "camera_mask_version": "created_at",
@@ -501,6 +505,59 @@ class MemoryStorage:
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:
         self._check("fetch_dashboard_payload")
         return _copy(self._payloads.get(str(user_id)))
+
+    def fetch_dashboard_sources(self, user_id: int) -> dict:
+        """The same rows pond_dashboard_sources (migration 0012) returns,
+        from this store's tables."""
+        self._check("fetch_dashboard_sources")
+        users = self._select("UserData", user_id)
+        stations = users[0].get("ClosestStations") if users else None
+        if isinstance(stations, str):  # a json column can hold text
+            try:
+                stations = json.loads(stations)
+            except ValueError:
+                stations = None
+        slots = stations if isinstance(stations, dict) else {}
+
+        newest: dict[str, dict] = {}
+        for row in self._select("SensorData", user_id):
+            sensor_type = row.get("sensor_type")
+            if sensor_type is None:
+                continue
+            current = newest.get(sensor_type)
+            if current is None or self._reading_key(row) > self._reading_key(current):
+                newest[sensor_type] = row
+        readings = [{"id": r["id"], "sensor_type": t, "value": r.get("data1"), "created_at": r["created_at"]}
+                    for t, r in sorted(newest.items())]
+
+        assigned = {v for k, v in slots.items() if k in ("air-temperature", "rainfall", "wind-speed")}
+        telemetry = sorted(
+            ({k: r.get(k) for k in ("station_id", "metric_type", "data", "source_times", "valid_start", "valid_end",
+                                    "updated_at")}
+             for r in self.rows("weather_telemetry")
+             if r.get("metric_type") == "realtime_sensor" and r.get("station_id") in assigned),
+            key=lambda r: str(r["station_id"]))
+
+        def wanted(r: dict) -> bool:
+            kind, slot = r.get("forecast_type"), r.get("slot_id")
+            if kind == "2hr":
+                return slot is not None and slot == slots.get("two-hr-forecast")
+            if kind == "24hr":
+                return slot == "GENERAL" or (slot is not None and slot == slots.get("twenty-four-hr-forecast"))
+            return kind in ("4day", "uv")
+
+        forecasts = sorted(
+            ({k: r.get(k) for k in ("forecast_type", "slot_id", "data", "valid_period", "updated_at",
+                                    "source_issued_at")}
+             for r in self.rows("weather_forecasts") if wanted(r)),
+            key=lambda r: (str(r["forecast_type"]), str(r["slot_id"])))
+        return {"pond_exists": bool(users), "stations": stations, "readings": readings, "telemetry": telemetry,
+                "forecasts": forecasts}
+
+    @staticmethod
+    def _reading_key(row: dict) -> tuple[datetime, int]:
+        """Newest SensorData row: created_at, then id (the SQL tie breaker)."""
+        return parse_timestamp(row["created_at"]), int(row["id"])
 
     def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]:
         self._check("fetch_recent_feeding_events")

@@ -157,3 +157,23 @@ def pond_app():
     app = create_app(make_settings(), storage=make_storage())
     app.config["TESTING"] = True
     return app
+
+
+# ---------------------------------------------------------------------
+# Every digital twin API response in every test is checked against the
+# OpenAPI document (tests/api_contract.py).
+# ---------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _api_responses_match_openapi(monkeypatch):
+    import api_contract
+    from flask.testing import FlaskClient
+
+    original = FlaskClient.open
+
+    def open_and_check(self, *args, **kwargs):
+        response = original(self, *args, **kwargs)
+        if self.application.name == "koi.api":
+            api_contract.check_response(self.application, response)
+        return response
+
+    monkeypatch.setattr(FlaskClient, "open", open_and_check)

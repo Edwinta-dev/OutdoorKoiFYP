@@ -47,11 +47,17 @@ Supabase access token, and the user_id in the path or body must be the
 pond linked to that account (koi/api/auth.py): 401 without a valid token,
 403 for any other pond. Path user_ids are checked before the view runs;
 _parse_body checks the body's user_id.
+
+Versions: every route is declared with koi.api.spec.route, which serves
+it under /v1 (the pond in the path), keeps the old path as a deprecated
+alias, and records it for docs/api/openapi.yaml. Response models are in
+koi.api.responses. GET /v1/ponds/{pond}/dashboard is the one call the
+dashboard screen needs (koi/api/dashboard.py).
 """
 import dataclasses
 import logging
 from datetime import datetime, timezone
-from typing import Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
 # print call in koi/, issue #10) does not mistake for one.
@@ -59,9 +65,12 @@ from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
+from koi.api import responses as res
 from koi.api import schemas
 from koi.api.auth import authenticate, require_pond
+from koi.api.dashboard import build_dashboard
 from koi.api.health import readiness
+from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
@@ -75,6 +84,10 @@ from koi.storage import DuplicateProfileError, Storage, fail_soft
 
 bp = RouteGroup("twin", __name__)
 bp.before_request(authenticate)
+bp.after_request(after_request)
+
+# Error statuses every pond route can return, besides its own.
+POND_ERRORS = (401, 403, 404, 503)
 
 log = logging.getLogger(__name__)
 
@@ -93,15 +106,23 @@ def _registry() -> EngineRegistry:
 # Helpers
 # ===================================================================
 
-def _parse_body(model: type[M]) -> M:
+def _parse_body(model: type[M], pond: Optional[int] = None) -> M:
     """The JSON body validated against model; a ValidationError becomes
     a 400 with field-level detail (koi.errors). Every body names a pond,
-    which must be the caller's (403 otherwise)."""
+    which must be the caller's (403 otherwise). On a /v1 path, pond is
+    the path's: the body's user_id may be left out, and a different one
+    is a 400."""
     body = request.get_json(force=True, silent=True)
     if not isinstance(body, dict):
         raise ApiError("The request body must be a JSON object.", code="invalid_body")
-    parsed = model.model_validate(body)
-    require_pond(getattr(parsed, "user_id"))  # noqa: B009 - every body model has user_id
+    parsed: Any = (schemas.on_pond_path(model) if pond is not None else model).model_validate(body)
+    if pond is not None:
+        if parsed.user_id is None:
+            parsed.user_id = pond
+        elif parsed.user_id != pond:
+            raise ApiError(f"The body's user_id ({parsed.user_id}) is not the pond in the path ({pond}).",
+                           code="pond_mismatch", details={"user_id": parsed.user_id, "pond": pond})
+    require_pond(parsed.user_id)
     return parsed
 
 
@@ -278,9 +299,18 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
 # should be able to refresh every card from a single response rather
 # than firing three follow-up reads.
 
-@bp.route("/events/feeding", methods=["POST"])
-def log_feeding():
-    body = _parse_body(schemas.FeedingEvent)
+def _event_route(name: str, summary: str, body: type[BaseModel], response: type[BaseModel] = res.EventAssessments,
+                 errors: tuple[int, ...] = (400, *POND_ERRORS)):
+    return route(bp, "POST", f"/v1/ponds/<int:user_id>/events/{name}", legacy=f"/events/{name}",
+                 summary=summary, tag="events", body=schemas.on_pond_path(body), legacy_body=body,
+                 response=response, errors=errors)
+
+
+@_event_route("feeding", "Log a feeding", schemas.FeedingEvent)
+def log_feeding(user_id: Optional[int] = None):
+    """Applies the feeding to every engine, re-assesses and returns all
+    three assessments."""
+    body = _parse_body(schemas.FeedingEvent, user_id)
     event = PondEvent(
         kind=EventKind.FEEDING,
         time=body.event_time(),
@@ -290,8 +320,8 @@ def log_feeding():
     return jsonify(_handle_event(event, body)), 200
 
 
-def _log_volume_event(kind: EventKind):
-    body = _parse_body(schemas.VolumeEvent)
+def _log_volume_event(kind: EventKind, pond: Optional[int]):
+    body = _parse_body(schemas.VolumeEvent, pond)
     event = PondEvent(
         kind=kind,
         time=body.event_time(),
@@ -301,19 +331,25 @@ def _log_volume_event(kind: EventKind):
     return jsonify(_handle_event(event, body)), 200
 
 
-@bp.route("/events/water-change", methods=["POST"])
-def log_water_change():
-    return _log_volume_event(EventKind.WATER_CHANGE)
+@_event_route("water-change", "Log a water change", schemas.VolumeEvent)
+def log_water_change(user_id: Optional[int] = None):
+    """Dilutes chemistry, resets the water level and suspended algae,
+    re-assesses and returns all three assessments."""
+    return _log_volume_event(EventKind.WATER_CHANGE, user_id)
 
 
-@bp.route("/events/top-up", methods=["POST"])
-def log_top_up():
-    return _log_volume_event(EventKind.TOP_UP)
+@_event_route("top-up", "Log a top-up", schemas.VolumeEvent)
+def log_top_up(user_id: Optional[int] = None):
+    """Clears the evaporation engine's accrued loss, re-assesses and
+    returns all three assessments."""
+    return _log_volume_event(EventKind.TOP_UP, user_id)
 
 
-@bp.route("/events/algal-scrub", methods=["POST"])
-def log_algal_scrub():
-    body = _parse_body(schemas.AlgalScrubEvent)
+@_event_route("algal-scrub", "Log an algae scrub", schemas.AlgalScrubEvent)
+def log_algal_scrub(user_id: Optional[int] = None):
+    """Knocks the algae level down, re-assesses and returns all three
+    assessments."""
+    body = _parse_body(schemas.AlgalScrubEvent, user_id)
     event = PondEvent(
         kind=EventKind.ALGAL_SCRUB,
         time=body.event_time(),
@@ -333,8 +369,9 @@ def log_algal_scrub():
 # frame does, and simultaneously builds the calibration set that turns
 # guessed thresholds into measured ones.
 
-@bp.route("/events/algae-rating", methods=["POST"])
-def log_algae_rating():
+@_event_route("algae-rating", "Rate the algae in a camera frame", schemas.AlgaeRatingEvent,
+              response=res.AlgaeRatingResult)
+def log_algae_rating(user_id: Optional[int] = None):
     """Body: {user_id, severity, image_id?, green_ratio?, notes?}
 
     severity: "none" | "minor" | "moderate" | "severe" | "obstruction"
@@ -345,7 +382,7 @@ def log_algae_rating():
     corrupts the calibration set. When omitted the server falls back to
     the newest frame and says so in the response.
     """
-    body = _parse_body(schemas.AlgaeRatingEvent)
+    body = _parse_body(schemas.AlgaeRatingEvent, user_id)
     user_id = body.user_id
     severity = body.severity
     _require_pond(user_id)
@@ -410,8 +447,9 @@ def log_algae_rating():
     return jsonify(result), 200
 
 
-@bp.route("/events/algae-rating/undo", methods=["POST"])
-def undo_algae_rating():
+@_event_route("algae-rating/undo", "Undo the most recent algae rating", schemas.AlgaeRatingUndo,
+              response=res.AlgaeRatingUndoResult, errors=(400, 409, *POND_ERRORS))
+def undo_algae_rating(user_id: Optional[int] = None):
     """Reverses the most recent rating. Body: {user_id, rating_id?}
 
     Only the most recent rating is exactly reversible - that is the
@@ -419,7 +457,7 @@ def undo_algae_rating():
     level, thresholds, growth fit and camera history it had beforehand,
     and the persisted row is deleted so it leaves the calibration set too.
     """
-    body = _parse_body(schemas.AlgaeRatingUndo)
+    body = _parse_body(schemas.AlgaeRatingUndo, user_id)
     user_id = body.user_id
     rating_id = body.rating_id
     _require_pond(user_id)
@@ -451,7 +489,9 @@ def undo_algae_rating():
     return jsonify(result), 200
 
 
-@bp.route("/ratings/algae/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/ratings/algae", legacy="/ratings/algae/<int:user_id>",
+       summary="Algae rating history and calibration", tag="ratings", response=res.AlgaeRatingContext,
+       errors=POND_ERRORS)
 def get_algae_ratings(user_id):
     """Rating history plus the calibration state it produces. Drives the
     rating card's "last time you called this Moderate" anchor and its
@@ -496,7 +536,9 @@ def _no_assessment(user_id: int, message: str):
     raise ApiError(message, status=404, code="no_assessment_yet")
 
 
-@bp.route("/assessment/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/chemistry", legacy="/assessment/<int:user_id>",
+       summary="Latest water chemistry assessment", tag="assessments", response=res.WaterChemistryAssessment,
+       errors=POND_ERRORS)
 def get_latest_assessment(user_id):
     """Most recent chemistry assessment, whether produced by a poll tick
     or by an event endpoint's immediate re-assessment."""
@@ -507,8 +549,11 @@ def get_latest_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@bp.route("/assessment/evaporation/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/evaporation",
+       legacy="/assessment/evaporation/<int:user_id>", summary="Latest evaporation assessment", tag="assessments",
+       response=res.EvaporationAssessment, errors=POND_ERRORS)
 def get_latest_evaporation_assessment(user_id):
+    """Most recent evaporation and feed assessment."""
     assessment = fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None)
     if assessment is None:
         _no_assessment(user_id, "No evaporation assessment yet. This appears after the first "
@@ -517,8 +562,10 @@ def get_latest_evaporation_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@bp.route("/assessment/algae/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/algae", legacy="/assessment/algae/<int:user_id>",
+       summary="Latest algae assessment", tag="assessments", response=res.AlgaeAssessment, errors=POND_ERRORS)
 def get_latest_algae_assessment(user_id):
+    """Most recent algae assessment."""
     assessment = fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None)
     if assessment is None:
         _no_assessment(user_id, "No algae assessment yet. Needs at least one clean ESP32-CAM "
@@ -527,7 +574,9 @@ def get_latest_algae_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@bp.route("/assessment/all/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments", legacy="/assessment/all/<int:user_id>",
+       summary="All three latest assessments and the hypoxia flag", tag="assessments",
+       response=res.AllAssessments, errors=POND_ERRORS)
 def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
     populate every outcome card and its alert badge from a single
@@ -572,7 +621,9 @@ def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
 # Forecast reads (detail graph screens) - live, read-only
 # ===================================================================
 
-@bp.route("/forecast/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", legacy="/forecast/<int:user_id>",
+       summary="Water chemistry lookahead", tag="forecasts", query=schemas.ForecastQuery,
+       response=res.WaterChemistryForecast, errors=(400, 422, *POND_ERRORS))
 def get_forecast(user_id):
     """Water chemistry lookahead: projects TAN/NO2/NO3 assuming feeding
     continues at this pond's recent average rate and no further
@@ -627,7 +678,9 @@ def get_forecast(user_id):
     return jsonify(result), 200
 
 
-@bp.route("/forecast/evaporation/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/evaporation", legacy="/forecast/evaporation/<int:user_id>",
+       summary="Evaporation and feed lookahead", tag="forecasts", query=schemas.EvaporationForecastQuery,
+       response=res.EvaporationForecast, errors=(400, *POND_ERRORS))
 def get_evaporation_forecast(user_id):
     """Evaporation + feed lookahead for the Temperature & Feed screen.
 
@@ -674,7 +727,9 @@ def get_evaporation_forecast(user_id):
     return jsonify(result), 200
 
 
-@bp.route("/forecast/algae/<int:user_id>", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/algae", legacy="/forecast/algae/<int:user_id>",
+       summary="Algae lookahead", tag="forecasts", query=schemas.ForecastQuery, response=res.AlgaeForecast,
+       errors=(400, 422, *POND_ERRORS))
 def get_algae_forecast(user_id):
     """Algae lookahead for the Algal & Solar screen.
 
@@ -750,6 +805,36 @@ def get_algae_forecast(user_id):
 
 
 # ===================================================================
+# Dashboard (one call for the dashboard screen)
+# ===================================================================
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/dashboard", summary="Everything the dashboard screen shows",
+       tag="pond", response=res.Dashboard, errors=POND_ERRORS)
+def get_dashboard(user_id):
+    """Latest reading of each channel with its own times, the three
+    latest assessments and the hypoxia flag, next actions (empty for
+    now), weather now from the pond's assigned stations, and the 2-hour,
+    24-hour and 4-day forecasts. Reads only: no engine runs and nothing
+    is written. Field rules: docs/api/README.md."""
+    sources = _storage().fetch_dashboard_sources(user_id)
+    if not sources.get("pond_exists"):
+        _require_pond(user_id)
+    profiles = _profiles_for(user_id)
+    now = schemas.utc_now()
+    dashboard = build_dashboard(
+        pond_id=user_id,
+        sources=sources,
+        chemistry=_storage().fetch_latest_evaluation(user_id),
+        evaporation=fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
+        algae=fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
+        aeration=profiles.at(now).aeration if profiles is not None else None,
+        hypoxia_thresholds=_registry().hypoxia_thresholds,
+        now=now,
+    )
+    return jsonify(dashboard.model_dump(mode="json")), 200
+
+
+# ===================================================================
 # Pond profile (pond_profile, migration 0008)
 # ===================================================================
 # Effective-dated: each PUT adds a row in force from its effective_from
@@ -771,7 +856,8 @@ def _profile_response(user_id: int) -> dict:
     }
 
 
-@bp.route("/v1/ponds/<int:user_id>/profile", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/profile", summary="Pond profile", tag="pond",
+       response=res.PondProfileResponse, errors=POND_ERRORS)
 def get_pond_profile(user_id):
     """The profile in force now and every stored profile row, oldest
     first. source is "userdata" for a pond with no profile rows yet,
@@ -779,7 +865,8 @@ def get_pond_profile(user_id):
     return jsonify(_profile_response(user_id)), 200
 
 
-@bp.route("/v1/ponds/<int:user_id>/profile", methods=["PUT"])
+@route(bp, "PUT", "/v1/ponds/<int:user_id>/profile", summary="Add a pond profile row", tag="pond",
+       body=schemas.ProfileUpdate, response=res.PondProfileResponse, status=201, errors=(400, 409, *POND_ERRORS))
 def put_pond_profile(user_id):
     """Adds a profile row effective now, or at the body's effective_from.
     409 when the pond already has a profile at that exact time."""
@@ -818,14 +905,16 @@ def _camera_mask_response(user_id: int) -> dict:
     }
 
 
-@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["GET"])
+@route(bp, "GET", "/v1/ponds/<int:user_id>/camera/mask", summary="Camera water mask", tag="pond",
+       response=res.CameraMaskResponse, errors=(401, 403, 503))
 def get_camera_mask(user_id):
     """The mask in force and every saved version, oldest first. mask is
     null when none has been saved: the whole frame is analysed."""
     return jsonify(_camera_mask_response(user_id)), 200
 
 
-@bp.route("/v1/ponds/<int:user_id>/camera/mask", methods=["PUT"])
+@route(bp, "PUT", "/v1/ponds/<int:user_id>/camera/mask", summary="Save a new camera water mask", tag="pond",
+       body=schemas.CameraMaskUpdate, response=res.CameraMaskResponse, errors=(400, 401, 403, 503))
 def put_camera_mask(user_id):
     """Saves the body's polygon as the pond's next mask version."""
     body = request.get_json(force=True, silent=True)
@@ -840,13 +929,15 @@ def put_camera_mask(user_id):
 
 # ===================================================================
 
-@bp.route("/health", methods=["GET"])
+@route(bp, "GET", "/v1/health", alias="/health", summary="Liveness", tag="service", response=res.Health,
+       auth=False)
 def health():
     """Liveness: the process is up and answering. Checks nothing else."""
     return jsonify({"status": "ok", "domains": ["chemistry", "evaporation", "algae"]}), 200
 
 
-@bp.route("/ready", methods=["GET"])
+@route(bp, "GET", "/v1/ready", alias="/ready", summary="Readiness", tag="service", response=res.Ready,
+       auth=False, errors=(503,))
 def ready():
     """Readiness: storage answers and the poller succeeded recently
     (koi/api/health.py). 503 with the error envelope when not."""
