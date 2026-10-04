@@ -132,6 +132,11 @@ class SeedHistory:
     def _rows(self, table: str, column: str, pond: int) -> list[dict]:
         return [r for r in self.tables.get(table, []) if str(r.get(column)) == str(pond)]
 
+    def sensor_rows(self, pond: int) -> list[dict]:
+        """The pond's SensorData rows, ordered by created_at, then id."""
+        return sorted(self._rows("SensorData", "userID", pond),
+                      key=lambda r: (parse_timestamp(r["created_at"]), int(r["id"])))
+
     def poll_times(self, pond: int) -> list[datetime]:
         """Each distinct time the pond's node reported, oldest first."""
         return sorted({parse_timestamp(r["created_at"]) for r in self._rows("SensorData", "userID", pond)})

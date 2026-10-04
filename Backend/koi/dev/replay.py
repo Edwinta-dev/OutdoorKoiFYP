@@ -4,14 +4,16 @@ stack answers its first request with assessments already made.
 For each pond, at each time its node reported (oldest first), the
 interventions logged up to then are applied to the twin, then the
 poller's own pond step (koi.worker.poller._poll_user) runs at that time.
-The step reads the bundled payload, camera frames and feeds through
-ReplayStorage, which answers them from the seed as they stood at that
-time, so the engines never see a reading or a frame from their future.
+The step reads the sensor rows, bundled payload, camera frames and feeds
+through ReplayStorage, which answers them from the seed as they stood at
+that time, so the engines never see a reading or a frame from their
+future.
 
-ReplayStorage keeps the twin's snapshot and the evaluation rows to
-itself during the run and writes them to the real storage once at the
-end: the snapshot (against the version found at the start) and the last
-evaluation of each kind. A replay of 14 days of hourly readings then
+ReplayStorage keeps the twin's snapshot, the sensor ingest ledger and
+the evaluation rows to itself during the run and writes them to the real
+storage once at the end: the snapshot (against the version found at the
+start) with every sensor row ingested, and the last evaluation of each
+kind. A replay of 14 days of hourly readings then
 costs a handful of writes, which keeps the local database profile fast.
 Everything else (the pond list, profiles, rating history) is read from
 the real storage.
@@ -21,7 +23,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from koi.dev.seed import SeedHistory
@@ -31,6 +33,7 @@ from koi.models.pond_twin import PondTwin
 from koi.registry import EngineRegistry
 from koi.settings import Settings
 from koi.storage import Storage
+from koi.storage.base import parse_timestamp
 from koi.worker import poller
 
 log = logging.getLogger("koi.dev")
@@ -50,6 +53,9 @@ class ReplayStorage:
         self._snapshots: dict[int, tuple[dict, int]] = {}
         self._base_versions: dict[int, int] = {}
         self._evaluations: dict[tuple[str, int], dict] = {}
+        # Sensor rows ingested during the run, and each pond's watermark.
+        self._ledger: dict[int, list[dict]] = {}
+        self._watermarks: dict[int, str] = {}
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._storage, name)
@@ -68,6 +74,21 @@ class ReplayStorage:
 
     def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]:
         return self._history.feeds(user_id, self._now(), limit)
+
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        """sensor_ingest_pending over the seed, with this run's ledger."""
+        watermark = self._watermarks.get(user_id)
+        scan_from = parse_timestamp(watermark) - timedelta(seconds=overlap_seconds) if watermark else start
+        ingested = {e["sensor_row_id"] for e in self._ledger.get(user_id, [])}
+        until = until or self._now()
+        rows = [r for r in self._history.sensor_rows(user_id)
+                if r.get("sensor_type") in sensor_types and int(r["id"]) not in ingested
+                and parse_timestamp(r["created_at"]) <= until
+                and (scan_from is None or parse_timestamp(r["created_at"]) >= scan_from)]
+        return {"cursor": watermark, "scan_from": scan_from.isoformat() if scan_from else None,
+                "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                          "created_at": r["created_at"]} for r in rows[:limit]]}
 
     # --- snapshot, kept here until flush -------------------------------
     def _version(self, user_id: int) -> int:
@@ -90,9 +111,16 @@ class ReplayStorage:
     def fetch_snapshot_version(self, user_id: int) -> int:
         return self._version(user_id)
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         version = self._version(user_id) + 1
         self._snapshots[user_id] = (json.loads(json.dumps(snapshot)), version)
+        if ingest:
+            self._ledger.setdefault(user_id, []).extend(json.loads(json.dumps(ingest.get("rows") or [])))
+            mark = ingest.get("watermark")
+            old = self._watermarks.get(user_id)
+            if mark and (old is None or parse_timestamp(mark) > parse_timestamp(old)):
+                self._watermarks[user_id] = mark
         return version
 
     # --- evaluations, last of each kind kept until flush ---------------
@@ -108,7 +136,12 @@ class ReplayStorage:
     def flush(self) -> None:
         """Writes the final snapshots and evaluations to the real storage."""
         for user_id, (snapshot, _) in sorted(self._snapshots.items()):
-            self._storage.save_engine_snapshot(user_id, snapshot, base_version=self._base_versions.get(user_id, 0))
+            base = self._base_versions.get(user_id, 0)
+            if self._ledger.get(user_id):
+                ingest = {"rows": self._ledger[user_id], "watermark": self._watermarks.get(user_id)}
+                self._storage.save_engine_snapshot(user_id, snapshot, base_version=base, ingest=ingest)
+            else:
+                self._storage.save_engine_snapshot(user_id, snapshot, base_version=base)
         for name in _EVALUATIONS:
             for (kind, user_id), assessment in sorted(self._evaluations.items(), key=lambda item: item[0][1]):
                 if kind == name:
@@ -141,7 +174,7 @@ def fast_forward(storage: Storage, tables: dict[str, list[dict]], settings: Sett
     writes the result to storage. Returns what happened per pond."""
     history = SeedHistory(tables)
     replay = ReplayStorage(storage, history)
-    registry = EngineRegistry(replay, settings.hypoxia_thresholds)  # type: ignore[arg-type]
+    registry = EngineRegistry(replay, settings.hypoxia_thresholds, settings.sensor_ingest)  # type: ignore[arg-type]
     results = []
     for config in storage.fetch_active_pond_configs():
         pond = int(config["user_id"])

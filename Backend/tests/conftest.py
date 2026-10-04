@@ -121,6 +121,16 @@ def make_storage():
     return storage
 
 
+def add_upload(storage, reading, at=None, user_id=USER):
+    """One upload of the sensor node: a SensorData row per sensor_type in
+    reading ({"pH": 7.6, ...}), all at one insert time (default: now), as
+    the node's single batched insert stores them. Returns the rows."""
+    at = at or datetime.now(timezone.utc)
+    return storage.add_rows("SensorData", [
+        {"userID": user_id, "sensor_type": sensor_type, "data1": value, "created_at": at.isoformat()}
+        for sensor_type, value in reading.items()])
+
+
 def api_client(app, token=None):
     """A test client that sends the fixture account's token (or token)."""
     client = app.test_client()

@@ -11,6 +11,7 @@ from conftest import make_settings
 from koi.dev import seed as seed_data
 from koi.dev.__main__ import memory_storage
 from koi.dev.replay import ReplayStorage, fast_forward
+from koi.models.engine import SensorChannel
 from koi.models.pond_twin import PondTwin
 from koi.storage.base import parse_timestamp
 
@@ -52,10 +53,23 @@ def test_assessments_exist_after_the_fast_forward(replayed):
 
 def test_only_the_last_state_is_written(replayed):
     storage, _ = replayed
-    assert len(storage.rows("pond_chemistry_evaluations")) == 1
-    assert len(storage.rows("pond_evaporation_evaluations")) == 1
-    assert len(storage.rows("pond_algae_evaluations")) == 1
+    for table in ("pond_chemistry_evaluations", "pond_evaporation_evaluations", "pond_algae_evaluations"):
+        assert sorted(r["userid"] for r in storage.rows(table)) == [1, 2], table
     assert storage.fetch_snapshot_version(1) == 1
+
+
+def test_every_sensor_row_is_ingested_once_with_the_snapshot(replayed, tables):
+    storage, _ = replayed
+    seeded = sorted(r["id"] for r in tables["SensorData"] if r.get("userID") == 1)
+    ledger = [r for r in storage.rows("sensor_ingest_ledger") if r["pond_id"] == 1]
+    assert sorted(r["sensor_row_id"] for r in ledger) == seeded
+    assert {r["time_basis"] for r in ledger} == {"ingestion"}
+    assert {r["snapshot_version"] for r in ledger} == {1}
+    [cursor] = [r for r in storage.rows("sensor_ingest_cursor") if r["pond_id"] == 1]
+    assert parse_timestamp(cursor["watermark"]) == NOW
+    twin = PondTwin.from_snapshot(storage.load_engine_snapshot(1))
+    assert twin.last_input_at == NOW
+    assert {c["reading_at"] for c in twin.sensor_channels.values()} == {NOW.isoformat()}
 
 
 def test_snapshot_holds_the_logged_interventions(replayed):
@@ -65,17 +79,24 @@ def test_snapshot_holds_the_logged_interventions(replayed):
     assert "water_change" in kinds and "top_up" in kinds and "feeding" in kinds
 
 
-def test_pond_without_tds_is_skipped_and_its_old_snapshot_kept(replayed, tables):
+def test_pond_without_tds_is_advanced_with_tds_missing(replayed, tables):
     storage, results = replayed
     legacy = results[2]
-    assert legacy.polls_ok == 0 and legacy.polls_skipped == 1
-    assert legacy.skip_reasons == ["unusable sensor reading (KeyError: 'TDS')"]
-    assert storage.fetch_latest_evaluation(2) is None
-    # The snapshot from before snapshot_version is untouched and still loads.
-    assert storage.fetch_snapshot_version(2) == 1
-    stored = storage.load_engine_snapshot(2)
-    assert stored == next(r for r in tables["pond_chemistry_state"] if r["user_id"] == 2)["snapshot"]
-    PondTwin.from_snapshot(stored)
+    assert legacy.polls_ok == 1 and legacy.polls_skipped == 0
+    assert storage.fetch_latest_evaluation(2) is not None
+    # The snapshot from before snapshot_version loaded and was saved once.
+    assert storage.fetch_snapshot_version(2) == 2
+    old = next(r for r in tables["pond_chemistry_state"] if r["user_id"] == 2)["snapshot"]
+    twin = PondTwin.from_snapshot(storage.load_engine_snapshot(2))
+    assert [e.to_dict() for e in twin.chemistry._events] == old["chemistry"]["events"]
+    # TDS was not sent: no channel reading, and the gate keeps the last trusted value.
+    assert set(twin.sensor_channels) == {"ph", "temp", "lux"}
+    assert twin.chemistry._gate._last_trusted[SensorChannel.TDS] == old["chemistry"]["gate"]["last_trusted"]["tds"]
+    # Two pH rows at one time: the higher id is used, the other recorded as superseded.
+    assert twin.sensor_channels["ph"] == {**twin.sensor_channels["ph"], "value": 6.5, "row_id": 40002}
+    ledger = {r["sensor_row_id"]: r["disposition"] for r in storage.rows("sensor_ingest_ledger")
+              if r["pond_id"] == 2}
+    assert ledger == {40001: "superseded", 40002: "applied", 40003: "applied", 40004: "applied"}
 
 
 def test_replay_storage_reads_history_as_of_its_time(tables):

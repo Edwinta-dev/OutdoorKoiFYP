@@ -50,6 +50,10 @@ from koi.weather import history as weather_history
 # Columns of each table this store serves, from supabase/migrations/.
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
+    # Sensor ingestion progress (migration 0014).
+    "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
+    "sensor_ingest_ledger": ("pond_id", "sensor_row_id", "sensor_type", "effective_sample_time", "time_basis",
+                             "disposition", "snapshot_version", "ingested_at"),
     "worker_lease": ("name", "holder", "expires_at"),
     "worker_status": ("name", "holder", "cycle_started_at", "cycle_finished_at", "cycle_duration_sec",
                       "last_success_at", "ponds"),
@@ -104,6 +108,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 # The user column of each table (three spellings coexist in the schema).
 USER_COLUMN = {
     "pond_chemistry_state": "user_id",
+    "sensor_ingest_cursor": "pond_id",
+    "sensor_ingest_ledger": "pond_id",
     "pond_chemistry_evaluations": "userid",
     "pond_evaporation_evaluations": "userid",
     "pond_algae_evaluations": "userid",
@@ -278,22 +284,71 @@ class MemoryStorage:
         self._check("fetch_snapshot_version")
         return self._version(self._snapshot_row(user_id))
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         self._check("save_engine_snapshot")
         with self._lock:
             current = self._version(self._snapshot_row(user_id))
             if base_version is not None and base_version != current:
                 raise StaleSnapshotError(user_id, base_version)
-            row = {"user_id": user_id, "snapshot": snapshot, "updated_at": self._clock().isoformat(),
+            now = self._clock().isoformat()
+            row = {"user_id": user_id, "snapshot": snapshot, "updated_at": now,
                    "snapshot_version": current + 1}
             try:
                 row = _copy(row)
             except (TypeError, ValueError) as exc:  # a value jsonb could not hold
                 raise StorageError("save_engine_snapshot", exc) from exc
+            ledger = self._tables["sensor_ingest_ledger"]
+            entries = (ingest or {}).get("rows") or []
+            # Checked before anything is written, as the transaction rolls
+            # the save back in save_pond_snapshot_with_ingest.
+            seen = {(str(r["pond_id"]), int(r["sensor_row_id"])) for r in ledger}
+            for e in entries:
+                if (str(user_id), int(e["sensor_row_id"])) in seen:
+                    raise StorageError("save_engine_snapshot",
+                                       f"SensorData row {e['sensor_row_id']} is already in the ingest ledger")
             table = self._tables["pond_chemistry_state"]
             table[:] = [r for r in table if not _same_user(r, "user_id", user_id)]
             table.append(row)
+            for e in entries:
+                ledger.append({"pond_id": user_id, "sensor_row_id": int(e["sensor_row_id"]),
+                               "sensor_type": e.get("sensor_type"),
+                               "effective_sample_time": e["effective_sample_time"],
+                               "time_basis": e["time_basis"], "disposition": e["disposition"],
+                               "snapshot_version": row["snapshot_version"], "ingested_at": now})
+            watermark = (ingest or {}).get("watermark")
+            if watermark is not None:
+                cursors = self._tables["sensor_ingest_cursor"]
+                old = next((c for c in cursors if _same_user(c, "pond_id", user_id)), None)
+                if old is None:
+                    cursors.append({"pond_id": user_id, "watermark": watermark, "updated_at": now})
+                else:
+                    if parse_timestamp(watermark) > parse_timestamp(old["watermark"]):
+                        old["watermark"] = watermark
+                    old["updated_at"] = now
             return row["snapshot_version"]
+
+    # --- sensor ingestion ---------------------------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        """The same rows sensor_ingest_pending (migration 0014) returns."""
+        self._check("fetch_pending_sensor_rows")
+        with self._lock:
+            cursor = next((c for c in self._tables["sensor_ingest_cursor"] if _same_user(c, "pond_id", user_id)),
+                          None)
+            scan_from = (parse_timestamp(cursor["watermark"]) - timedelta(seconds=overlap_seconds)
+                         if cursor is not None else start)
+            ingested = {int(r["sensor_row_id"]) for r in self._tables["sensor_ingest_ledger"]
+                        if _same_user(r, "pond_id", user_id)}
+            rows = [r for r in self._select("SensorData", user_id)
+                    if r.get("sensor_type") in sensor_types and int(r["id"]) not in ingested
+                    and (scan_from is None or parse_timestamp(r["created_at"]) >= scan_from)
+                    and (until is None or parse_timestamp(r["created_at"]) <= until)]
+        rows.sort(key=self._reading_key)
+        return {"cursor": cursor["watermark"] if cursor is not None else None,
+                "scan_from": scan_from.isoformat() if scan_from is not None else None,
+                "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                          "created_at": r["created_at"]} for r in rows[:limit]]}
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:

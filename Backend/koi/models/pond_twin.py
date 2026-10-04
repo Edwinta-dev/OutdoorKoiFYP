@@ -44,6 +44,10 @@ snapshot (the shape WaterChemistryEngine.to_snapshot() emits). from_snapshot
 detects that legacy shape and wraps it, so deploying this does not lose
 any pond's accumulated nitrogen state. New snapshots are versioned and
 namespaced per engine.
+
+Version 3 adds "sensor_inputs": the newest reading of each sensor channel
+with its time and time basis, and the model time of the last sensor input
+applied (issue #18). A v2 or legacy snapshot loads with none.
 """
 from __future__ import annotations
 
@@ -55,10 +59,11 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine
 from koi.models.profile import PondProfile, ProfileHistory
+from koi.models.sensor_inputs import SensorInput, parse_timestamp
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 2
+SNAPSHOT_VERSION = 3
 
 
 class PondTwin:
@@ -80,6 +85,11 @@ class PondTwin:
         # the profile in force at its own time; without it the engines
         # keep the config they hold.
         self.profiles: Optional[ProfileHistory] = None
+        # Newest reading of each sensor channel: {channel: {value,
+        # reading_at, time_basis, row_id}}, and the model time of the
+        # last sensor input applied (ingest_sensor_inputs).
+        self.sensor_channels: dict[str, dict] = {}
+        self.last_input_at: Optional[datetime] = None
 
     # ----------------------------------------------------------
     @classmethod
@@ -143,6 +153,48 @@ class PondTwin:
             self.use_profile(self.profiles.at(now or datetime.now(timezone.utc)))
 
     # ==========================================================
+    # Sensor inputs - every reading once, in event-time order
+    # ==========================================================
+    def ingest_sensor_inputs(self, inputs: list[SensorInput]) -> tuple[list[dict], list[str]]:
+        """Applies the poller's discovered inputs (oldest first) to the
+        chemistry engine, each at its own time, and records each channel's
+        newest reading. Returns one provenance entry per input and the
+        sensor warnings of the newest input.
+
+        An input older than the last one applied (a reading committed
+        late, found by the scan's overlap) cannot be put back in the past:
+        it is applied at the last input's time, and its entry says
+        late=True with both times. Placing late readings by their sample
+        time is issue #82."""
+        provenance: list[dict] = []
+        warnings: list[str] = []
+        for item in inputs:
+            late = self.last_input_at is not None and item.time < self.last_input_at
+            model_time = self.last_input_at if late and self.last_input_at is not None else item.time
+            sample = RawSample(
+                time=model_time,
+                ph=item.channels.get("ph"),
+                tds=item.channels.get("tds"),
+                temp_c=item.channels.get("temp"),
+                lux=item.channels.get("lux"),
+            )
+            warnings = self.chemistry.ingest_sensor_sample(sample)
+            self.last_input_at = model_time
+            for channel, value in item.channels.items():
+                if value is None:
+                    continue
+                current = self.sensor_channels.get(channel)
+                if current is None or parse_timestamp(current["reading_at"]) <= item.time:
+                    self.sensor_channels[channel] = {
+                        "value": value, "reading_at": item.time.isoformat(),
+                        "time_basis": item.time_basis, "row_id": item.row_ids.get(channel)}
+            provenance.append({
+                "time": item.time.isoformat(), "time_basis": item.time_basis,
+                "model_time": model_time.isoformat(), "late": late,
+                "row_ids": dict(item.row_ids), "missing": item.missing})
+        return provenance, warnings
+
+    # ==========================================================
     # Environmental update - the poller's per-cycle entry point
     # ==========================================================
     def ingest_environment(
@@ -155,6 +207,8 @@ class PondTwin:
         camera_samples: Optional[list] = None,
         rain_incoming: bool = False,
         rain_intensity: str = "unknown",
+        measured_water_temp_c: Optional[float] = None,
+        sensor_warnings: Optional[list] = None,
     ) -> dict:
         """Advances every engine to `now` using freshly polled conditions,
         then produces one assessment per domain.
@@ -171,6 +225,12 @@ class PondTwin:
              change since the last advance, so each part uses the
              surface area in force over it.
           4. assess all three, under the profile in force at now.
+
+        The poller passes sample=None: its readings went in through
+        ingest_sensor_inputs first, and it passes the fresh water
+        temperature as measured_water_temp_c and that step's warnings as
+        sensor_warnings. With a sample, its temperature and warnings are
+        used instead.
         """
         result: dict = {"assimilated_camera_frames": 0}
 
@@ -190,9 +250,11 @@ class PondTwin:
                 )
 
         # --- 2. chemistry ---
-        warnings: list = []
+        warnings: list = list(sensor_warnings or [])
+        water_temp_c = measured_water_temp_c
         if sample is not None:
             warnings = self.chemistry.ingest_sensor_sample(sample)
+            water_temp_c = sample.temp_c
 
         # --- 3. time advance ---
         if evaporation_env is not None:
@@ -205,7 +267,7 @@ class PondTwin:
             self.evaporation.advance_state(
                 now,
                 evaporation_env,
-                measured_water_temp_c=sample.temp_c if sample is not None else None,
+                measured_water_temp_c=water_temp_c,
                 config_changes=config_changes,
             )
         if algae_env is not None:
@@ -220,9 +282,7 @@ class PondTwin:
             recent_sensor_warnings=warnings,
         )
         result["chemistry"] = chem
-        result["evaporation"] = self.evaporation.assess(
-            current_water_temp_c=sample.temp_c if sample is not None else None
-        )
+        result["evaporation"] = self.evaporation.assess(current_water_temp_c=water_temp_c)
         result["algae"] = self.algae.assess()
         return result
 
@@ -280,6 +340,10 @@ class PondTwin:
             "chemistry": self.chemistry.to_snapshot(),
             "evaporation": self.evaporation.to_snapshot(),
             "algae": self.algae.to_snapshot(),
+            "sensor_inputs": {
+                "channels": self.sensor_channels,
+                "last_input_at": self.last_input_at.isoformat() if self.last_input_at else None,
+            },
         }
 
     @classmethod
@@ -290,7 +354,8 @@ class PondTwin:
     ) -> "PondTwin":
         """Rehydrates a twin, tolerating three shapes:
 
-          v2  - the namespaced shape to_snapshot() emits now
+          v3  - the namespaced shape to_snapshot() emits now
+          v2  - the same without "sensor_inputs": no channel readings yet
           v1  - a BARE WaterChemistryEngine snapshot, which is what every
                 existing row in pond_chemistry_state contains. Detected by
                 the presence of 'tan_mg' at the top level. The chemistry
@@ -340,7 +405,12 @@ class PondTwin:
             else ae.AlgaeGrowthEngine()
         )
 
-        return cls(chemistry=chemistry, evaporation=evaporation, algae=algae)
+        twin = cls(chemistry=chemistry, evaporation=evaporation, algae=algae)
+        inputs = snapshot.get("sensor_inputs") or {}
+        twin.sensor_channels = dict(inputs.get("channels") or {})
+        last = inputs.get("last_input_at")
+        twin.last_input_at = parse_timestamp(last) if last else None
+        return twin
 
     # ==========================================================
     @staticmethod

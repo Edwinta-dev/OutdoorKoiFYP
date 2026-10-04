@@ -47,7 +47,7 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
     app = Flask(__name__)
     app.config["KOI_SETTINGS"] = settings
     app.extensions["koi_storage"] = storage
-    app.extensions["koi_registry"] = EngineRegistry(storage, settings.hypoxia_thresholds)
+    app.extensions["koi_registry"] = EngineRegistry(storage, settings.hypoxia_thresholds, settings.sensor_ingest)
     CORS(app, origins=list(settings.cors_origins))
     init_auth(app, settings, signing_keys)
 

@@ -185,7 +185,7 @@ def wait_for_worker(stack: Stack, timeout: float = 120.0) -> Outcome:
 def dashboard_body(storage: Storage, pond: int, now: datetime, settings: Settings) -> dict:
     """The dashboard the API would send at `now`, built the way the route
     builds it (koi.api.routes.get_dashboard), without an HTTP request."""
-    registry = EngineRegistry(storage, settings.hypoxia_thresholds)
+    registry = EngineRegistry(storage, settings.hypoxia_thresholds, settings.sensor_ingest)
     profiles = registry.profile_history(pond)
     return build_dashboard(
         pond_id=pond, sources=storage.fetch_dashboard_sources(pond),

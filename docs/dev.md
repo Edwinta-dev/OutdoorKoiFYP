@@ -53,7 +53,7 @@ rerun it rather than editing `seed.json`.
 | Pond | What it has |
 |---|---|
 | 1 | 5000 L, 8000 g of koi, a pond profile. 14 days of hourly pH, TDS, water temperature and light, ending on the sample reading (pH 7.64, TDS 220 ppm, 27.65 C, 22755 lux). Six camera frames a day with the green ratio rising about 20% a day. A 40 g feed every morning, a 30% water change on day 5 and a 2% top-up on day 10. |
-| 2 | Older data shapes: no pond profile (volume and biomass from `UserData`), pH, temperature and light but no TDS, two pH rows with the same time (the higher id is the newest), a camera row with the old plain-text state `base`, and an engine snapshot from before `snapshot_version` existed. The worker skips it ("no TDS"), so its dashboard has readings and weather but no assessments. |
+| 2 | Older data shapes: no pond profile (volume and biomass from `UserData`), pH, temperature and light but no TDS, two pH rows with the same time (the higher id is the newest), a camera row with the old plain-text state `base`, and an engine snapshot from before `snapshot_version` existed. The worker passes TDS as missing and advances it on the other channels, so its old snapshot is loaded, upgraded and saved once. |
 
 Also one sensor row with no pond (firmware from before the node sent a
 pond id), and the weather caches and station list that one NEA fetch

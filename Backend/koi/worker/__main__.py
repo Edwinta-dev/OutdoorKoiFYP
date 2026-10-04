@@ -23,7 +23,7 @@ def main(settings: Optional[Settings] = None, storage: Optional[Storage] = None)
     init_error_tracking(settings, "worker")
     log_event(logging.getLogger("koi.worker"), "worker_started", poll_interval_minutes=settings.poll_interval_minutes,
               worker_threads=settings.worker_threads, env=settings.env, storage=settings.storage)
-    poller.start(settings, EngineRegistry(storage, settings.hypoxia_thresholds), blocking=True)
+    poller.start(settings, EngineRegistry(storage, settings.hypoxia_thresholds, settings.sensor_ingest), blocking=True)
 
 
 if __name__ == "__main__":

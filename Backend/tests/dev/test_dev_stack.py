@@ -34,7 +34,7 @@ def test_check_passes_on_the_memory_profile(capsys):
     out = capsys.readouterr().out
     assert "PASS GET /v1/ponds/1/dashboard (200, matches the OpenAPI document)" in out
     assert "PASS pond 1 dashboard content (three assessments, every reading fresh)" in out
-    assert "PASS worker first cycle (pond 1 ok, pond 2 skipped)" in out
+    assert "PASS worker first cycle (pond 1 ok, pond 2 ok)" in out
     assert "PASS GET camera / (200)" in out
     assert "FAIL" not in out
     assert out.strip().endswith("0 failed (memory profile)")

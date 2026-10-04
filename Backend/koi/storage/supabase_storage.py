@@ -18,7 +18,9 @@ Table notes (schema in supabase/migrations/):
   them in the log.
 - Snapshot saves and the worker lease go through the save_pond_snapshot
   and take_worker_lease functions (migration 0002), which compare and set
-  in one statement.
+  in one statement. A save that also records ingested sensor rows goes
+  through save_pond_snapshot_with_ingest (migration 0014), one
+  transaction for the snapshot, the ledger and the cursor.
 - Weather ingestion writes only through ingest_weather_batch, and the
   as-of weather reads are the database functions of migration 0009.
 """
@@ -125,15 +127,32 @@ class SupabaseStorage:
             )
             return int(res.data[0].get("snapshot_version") or 1) if res.data else 0
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         with _operation("save_engine_snapshot"):
-            res = self._db().rpc(
-                "save_pond_snapshot",
-                {"p_user_id": user_id, "p_snapshot": snapshot, "p_base_version": base_version},
-            ).execute()
+            params = {"p_user_id": user_id, "p_snapshot": snapshot, "p_base_version": base_version}
+            if ingest is None:
+                res = self._db().rpc("save_pond_snapshot", params).execute()
+            else:
+                res = self._db().rpc("save_pond_snapshot_with_ingest", {**params, "p_ingest": ingest}).execute()
             if res.data is None:
                 raise StaleSnapshotError(user_id, base_version or 0)
             return int(res.data)
+
+    # --- sensor ingestion (migration 0014) ----------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        with _operation("fetch_pending_sensor_rows"):
+            res = self._db().rpc("sensor_ingest_pending", {
+                "p_pond_id": user_id, "p_sensor_types": list(sensor_types),
+                "p_start": start.isoformat() if start is not None else None,
+                "p_until": until.isoformat() if until is not None else None,
+                "p_overlap_seconds": overlap_seconds, "p_limit": limit,
+            }).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or {"cursor": None, "scan_from": None, "rows": []}
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:

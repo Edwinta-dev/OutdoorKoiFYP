@@ -87,10 +87,28 @@ class Storage(Protocol):
         """The stored snapshot_version, 0 when there is no row."""
         ...
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         """Stores the snapshot and returns its new version. With base_version
         set, raises StaleSnapshotError unless the stored version equals it
-        (0: no row may exist yet). None saves unconditionally."""
+        (0: no row may exist yet). None saves unconditionally.
+
+        ingest (Discovery.commit(), koi/models/sensor_inputs.py) records
+        the sensor rows the snapshot has applied in sensor_ingest_ledger
+        and moves the pond's sensor_ingest_cursor watermark forward, in the
+        same transaction as the save (save_pond_snapshot_with_ingest,
+        migration 0014). A row already in the ledger fails the whole save
+        with StorageError."""
+        ...
+
+    # --- sensor ingestion (migration 0014) ----------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        """The pond's SensorData rows not yet in the ingest ledger
+        (sensor_ingest_pending): {cursor, scan_from, rows: [{id,
+        sensor_type, value, created_at}]}, rows ordered by created_at, id.
+        The scan starts overlap_seconds before the cursor's watermark, or
+        at start when the pond has no cursor (None: every row)."""
         ...
 
     # --- worker lease (worker_lease) ----------------------------------

@@ -45,6 +45,8 @@ POND_TABLES = (
     ("pond_evaporation_evaluations", "userid"),
     ("pond_algae_evaluations", "userid"),
     ("pond_chemistry_state", "user_id"),
+    ("sensor_ingest_ledger", "pond_id"),
+    ("sensor_ingest_cursor", "pond_id"),
     ("camera_config", "pond_id"),
     ("camera_mask_version", "pond_id"),
     ("pond_profile", "pond_id"),
