@@ -217,6 +217,13 @@ class Storage(Protocol):
     # --- sensors, weather and interventions ---------------------------
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]: ...
 
+    def fetch_dashboard_sources(self, user_id: int) -> dict:
+        """The rows behind GET /v1/ponds/{pond}/dashboard
+        (pond_dashboard_sources, migration 0012): {pond_exists, stations,
+        readings, telemetry, forecasts}, uninterpreted. koi/api/dashboard.py
+        turns them into the response, the same way for both storages."""
+        ...
+
     def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]: ...
 
     def fetch_daily_sensor_stats(self, user_id: int, sensor_type: str, days: int = 14) -> Optional[dict]: ...

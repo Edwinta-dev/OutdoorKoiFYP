@@ -257,16 +257,24 @@ python simulator.py                    # interactive four-arm simulator
 
 ### API
 
+Every route is under `/v1`; the full description is
+[docs/api/openapi.yaml](docs/api/openapi.yaml) (generated, see
+[docs/api/README.md](docs/api/README.md)). The unversioned paths the app
+still calls (`/assessment/...`, `/forecast/...`, `/events/...`,
+`/ratings/...`) are deprecated aliases and answer with a `Deprecation`
+header. GET responses carry an `ETag` and answer `If-None-Match` with 304.
+
 | Method | Route | |
 |---|---|---|
-| `POST` | `/event/{feeding,water_change,top_up,algal_scrub}` | Mutates state, re-assesses, returns the fresh assessment |
-| `GET` | `/assessment/<user_id>` | Current Green / Amber / Red + advisory text |
-| `GET` | `/forecast/<user_id>` | Chemistry: first-breach day + full trajectory |
-| `GET` | `/forecast/evaporation/<user_id>` | Next top-up, feed-ration guidance |
-| `GET` | `/forecast/algae/<user_id>` | Next scrub, and what scrubbing today buys you |
+| `GET` | `/v1/ponds/{pond}/dashboard` | Everything the dashboard shows in one response: each channel's latest reading with its own times, the three assessments, next actions, weather now and the forecasts |
+| `POST` | `/v1/ponds/{pond}/events/{feeding,water-change,top-up,algal-scrub}` | Mutates state, re-assesses, returns the fresh assessments |
+| `GET` | `/v1/ponds/{pond}/assessments[/chemistry,/evaporation,/algae]` | Current Green / Amber / Red + advisory text |
+| `GET` | `/v1/ponds/{pond}/forecasts/chemistry` | Chemistry: first-breach day + full trajectory |
+| `GET` | `/v1/ponds/{pond}/forecasts/evaporation` | Next top-up, feed-ration guidance |
+| `GET` | `/v1/ponds/{pond}/forecasts/algae` | Next scrub, and what scrubbing today buys you |
 | `GET`, `PUT` | `/v1/ponds/{pond}/profile` | Pond profile (volume, depth, fish, tap water, aeration); PUT adds a row effective now or at `effective_from`, earlier rows are kept |
 | `GET`, `PUT` | `/v1/ponds/{pond}/camera/mask` | Water mask for the camera's green ratio: a polygon of `[x, y]` points as fractions of the frame (3 to 64 points, at least 1% of the frame). Each PUT is a new mask version; the camera restarts its smoothed baseline on the first frame with a new version |
-| `GET` | `/health`, `/ready`, `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
+| `GET` | `/health`, `/ready` (also under `/v1`), `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating
 forward, and return `422` with a human-readable reason rather than projecting from

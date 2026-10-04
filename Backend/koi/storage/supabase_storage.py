@@ -506,6 +506,13 @@ class SupabaseStorage:
             res = self._db().rpc("get_bundled_dashboard_payload", {"p_user_id": user_id}).execute()
             return res.data
 
+    def fetch_dashboard_sources(self, user_id: int) -> dict:
+        """The pond_dashboard_sources RPC (migration 0012): the rows behind
+        the /v1 dashboard, uninterpreted."""
+        with _operation("fetch_dashboard_sources"):
+            res = self._db().rpc("pond_dashboard_sources", {"p_pond_id": user_id}).execute()
+            return res.data or {}
+
     def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]:
         """Recent FEEDING interventions, newest first, with the timestamp
         the TAN-rate estimator needs to turn them into mg/day."""

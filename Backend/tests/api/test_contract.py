@@ -1,17 +1,20 @@
 """Contract test: every JSON key the Dart client reads must actually be
-emitted by the Python engines.
+emitted by the Python engines, and be part of the OpenAPI document.
 
-Dart cannot be compiled in this environment, so this closes the highest-
-risk gap that a compile WOULDN'T catch anyway: json['typo_key'] is
-perfectly valid Dart that silently yields null at runtime. This extracts
-every j['...'] / json['...'] literal from the Dart models and checks it
-against the real engine output.
+json['typo_key'] is perfectly valid Dart that silently yields null at
+runtime, and a compile does not catch it. This extracts every
+j['...'] / json['...'] literal from the Dart models and checks it
+against the real engine output and against the properties of the
+same-named schema in the OpenAPI document (docs/api/openapi.yaml). The
+payloads built here are validated against their schemas too; every API
+response in the test suite is validated by tests/api_contract.py.
 """
 import json
 import os
 import re
 from datetime import datetime, timedelta, timezone
 
+import api_contract
 import pytest
 
 from koi.models import algae_engine, forecast_utils
@@ -23,6 +26,11 @@ API = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..", "..", "..", "MobileUI", "mobile_app", "lib", "utils", "digital_twin_api.dart",
 )
+DASHBOARD_API = os.path.join(os.path.dirname(API), "pond_dashboard.dart")
+# Dart class -> OpenAPI schema, where the names differ.
+SCHEMA_FOR_DART_CLASS = {"PondDashboard": "Dashboard"}
+# Dart classes that read no JSON.
+NO_JSON = {"DigitalTwinApi"}
 
 OUTLOOK = [
     {"data": {"day": "Wednesday", "wind": {"speed": {"low": 10, "high": 20}},
@@ -37,11 +45,17 @@ OUTLOOK = [
 T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
+def dart_classes(path: str) -> list:
+    with open(path, encoding="utf-8") as f:
+        return re.findall(r"^class (\w+)", f.read(), re.M)
+
+
 def dart_keys(path: str, class_name: str) -> set:
     """Pulls j['key'] / json['key'] literals out of one Dart class body."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         src = f.read()
-    start = src.find(f"class {class_name}")
+    match = re.search(rf"^class {class_name}\b", src, re.M)
+    start = match.start() if match else -1
     if start == -1:
         return set()
     # Walk braces to find the class body end.
@@ -261,3 +275,31 @@ def test_rating_models_read_only_emitted_keys(rating_payloads):
     assert calibration["camera_drift"]["verdict"] in \
         {"stable", "drift_possible", "drift_suspected", "insufficient_data"}, \
         "drift verdict is one of the Dart branches"
+
+
+# ---------------------------------------------------------------------
+# The OpenAPI document
+# ---------------------------------------------------------------------
+@pytest.mark.parametrize("path", [API, DASHBOARD_API], ids=["digital_twin_api", "pond_dashboard"])
+def test_openapi_schemas_hold_every_dart_read_key(path):
+    schemas = api_contract.document()["components"]["schemas"]
+    classes = [c for c in dart_classes(path) if c not in NO_JSON]
+    assert classes, f"no Dart classes found in {path}"
+    for class_name in classes:
+        schema_name = SCHEMA_FOR_DART_CLASS.get(class_name, class_name)
+        assert schema_name in schemas, f"Dart class {class_name} has no OpenAPI schema {schema_name}"
+        keys = dart_keys(path, class_name)
+        assert keys, f"{class_name}: no keys parsed"
+        missing = sorted(keys - set(schemas[schema_name].get("properties", {})))
+        assert not missing, f"{class_name}: Dart reads keys {schema_name} does not document: {missing}"
+    # AlgaeForecast reads scrub_benefit's inner keys through a separate map.
+    if path == API:
+        assert {"days_bought", "post_scrub_green_ratio"} <= set(schemas["ScrubBenefit"]["properties"])
+
+
+def test_engine_payloads_match_their_schemas(evap_payload, algae_payload, rating_payloads):
+    api_contract.validate("EvaporationForecast", evap_payload)
+    api_contract.validate("AlgaeForecast", algae_payload)
+    api_contract.validate("AlgaeRatingContext", rating_payloads["context"])
+    api_contract.validate("AlgaeCalibration", rating_payloads["calibration"])
+    api_contract.validate("AlgaeRating", rating_payloads["row"])
