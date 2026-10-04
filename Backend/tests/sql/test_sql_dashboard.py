@@ -155,3 +155,21 @@ def test_sql_sensor_upload_grants_unchanged(db):
     # The sensor sketch inserts into SensorData with the publishable key.
     db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok")
     assert db.fetchone()["ok"] is True
+
+
+def test_sql_latest_reading_index_matches_the_read(db):
+    # Migration 0013: the newest-per-type read's order by, as an index.
+    db.execute("select indexdef from pg_indexes where schemaname = 'public' "
+               "and indexname = 'idx_sensordata_user_type_latest'")
+    row = db.fetchone()
+    assert row is not None, "run `supabase db reset` to apply 0013"
+    assert 'ON public."SensorData" USING btree ("userID", sensor_type, created_at DESC, id DESC)' in row["indexdef"]
+
+
+def test_sql_latest_reading_read_can_use_the_index(db):
+    db.execute("set local enable_seqscan = off")
+    db.execute('explain select distinct on (d.sensor_type) d.id from public."SensorData" d '
+               'where d."userID" = 9101 and d.sensor_type is not null '
+               'order by d.sensor_type, d.created_at desc, d.id desc')
+    plan = "\n".join(r["QUERY PLAN"] for r in db.fetchall())
+    assert "idx_sensordata_user_type_latest" in plan, plan

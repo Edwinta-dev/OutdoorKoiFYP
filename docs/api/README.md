@@ -147,6 +147,6 @@ caches.
 The newest row of a channel is the one with the latest `created_at`. When
 two rows have the same `created_at`, the higher `id` wins. SQL
 (`order by created_at desc, id desc`) and MemoryStorage apply the same
-rule. `SensorData` has no index for this read; it scans the pond's rows,
-as `get_bundled_dashboard_payload` already does. No index is added while
-the sensor sketch is live-tested.
+rule. Migration 0013 adds the index `idx_sensordata_user_type_latest`
+(`userID`, `sensor_type`, `created_at desc`, `id desc`) in that order, so
+the read does not scan the pond's rows.
