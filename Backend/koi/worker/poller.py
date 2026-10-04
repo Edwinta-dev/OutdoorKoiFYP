@@ -111,6 +111,10 @@ One APScheduler job per tick runs the cycle; within it, ponds are polled
 on a small thread pool (Settings.worker_threads, default 4). Each pond
 still goes through registry.with_twin, so one lock per pond and the
 snapshot version check apply exactly as they do to API requests.
+
+A second job runs once a day at 03:30 pond local time: evaluation
+retention (koi/worker/retention.py), which folds the evaluation rows of
+days older than Settings.evaluation_retention_days into evaluation_daily.
 """
 import logging
 import os
@@ -145,6 +149,7 @@ from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecas
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import StorageError, fail_soft
+from koi.worker import retention
 
 # How far ahead each cycle projects when writing the cached "days until
 # next intervention" figures into the evaluation rows. Kept modest - the
@@ -600,9 +605,10 @@ def _algae_forecast_env(forecast_days, baseline_lux, baseline_temp, no3_series, 
 
 def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool = False):
     """Schedules a Worker's run_cycle every poll_interval_minutes, first run
-    now. blocking=True runs the scheduler in the calling thread (the worker
-    process) and releases the lease when it stops; otherwise it runs on a
-    background thread and this returns the scheduler."""
+    now, and the evaluation retention job daily at RUN_HOUR:RUN_MINUTE pond
+    local time. blocking=True runs the scheduler in the calling thread (the
+    worker process) and releases the lease when it stops; otherwise it runs
+    on a background thread and this returns the scheduler."""
     settings = settings or get_settings()
     if blocking:
         from apscheduler.schedulers.blocking import BlockingScheduler as Scheduler
@@ -615,6 +621,11 @@ def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool
     scheduler.add_job(
         worker.run_cycle, "interval", minutes=settings.poll_interval_minutes,
         next_run_time=datetime.now(),
+    )
+    job = retention.RetentionJob(registry.storage, settings.evaluation_retention_days, worker.holder)
+    scheduler.add_job(
+        job.run, "cron", hour=retention.RUN_HOUR, minute=retention.RUN_MINUTE,
+        timezone=retention.DEFAULT_POND_TIME_ZONE, id="evaluation_retention",
     )
     if not blocking:
         scheduler.start()

@@ -44,6 +44,7 @@ POND_TABLES = (
     ("pond_chemistry_evaluations", "userid"),
     ("pond_evaporation_evaluations", "userid"),
     ("pond_algae_evaluations", "userid"),
+    ("evaluation_daily", "pond_id"),
     ("pond_chemistry_state", "user_id"),
     ("sensor_ingest_ledger", "pond_id"),
     ("sensor_ingest_cursor", "pond_id"),

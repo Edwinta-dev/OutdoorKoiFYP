@@ -77,19 +77,23 @@ def test_poller_schedules_at_the_configured_interval(monkeypatch):
     jobs = []
 
     class FakeScheduler:
-        def add_job(self, fn, trigger, minutes, next_run_time):
-            jobs.append((fn, trigger, minutes))
+        def add_job(self, fn, trigger, **kwargs):
+            jobs.append((fn, trigger, kwargs))
 
         def start(self):
             jobs.append("started")
 
     monkeypatch.setattr(background, "BackgroundScheduler", FakeScheduler, raising=False)
     registry = EngineRegistry(MemoryStorage())
-    poller.start(make_settings(poll_interval_minutes=3), registry)
-    [(fn, trigger, minutes), started] = jobs
-    assert (trigger, minutes, started) == ("interval", 3, "started")
+    poller.start(make_settings(poll_interval_minutes=3, evaluation_retention_days=45), registry)
+    [(fn, trigger, kwargs), (daily, daily_trigger, daily_kwargs), started] = jobs
+    assert (trigger, kwargs["minutes"], started) == ("interval", 3, "started")
     # The job is a lease-gated worker cycle over the given registry.
     assert fn.__func__ is poller.Worker.run_cycle and fn.__self__.registry is registry
+    # Evaluation retention runs once a day, local time, over the same storage.
+    assert daily_trigger == "cron"
+    assert (daily_kwargs["hour"], daily_kwargs["minute"], daily_kwargs["timezone"]) == (3, 30, "Asia/Singapore")
+    assert daily.__self__.storage is registry.storage and daily.__self__.retention_days == 45
 
 
 def test_blocking_worker_releases_the_lease_when_stopped(monkeypatch):
@@ -101,8 +105,9 @@ def test_blocking_worker_releases_the_lease_when_stopped(monkeypatch):
     storage = MemoryStorage()
 
     class FakeScheduler:
-        def add_job(self, fn, trigger, minutes, next_run_time):
-            self.fn = fn
+        def add_job(self, fn, trigger, **kwargs):
+            if trigger == "interval":
+                self.fn = fn
 
         def start(self):
             assert self.fn() is True  # one cycle takes the lease

@@ -22,7 +22,7 @@ the as-of reads over weather history (migration 0009).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional, Protocol, TypeVar
 
 from koi.logs import log_event
@@ -171,6 +171,21 @@ class Storage(Protocol):
     def fetch_latest_evaporation_evaluation(self, user_id: int) -> Optional[dict]: ...
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]: ...
+
+    # --- evaluation retention (evaluation_daily, migration 0017) -------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        """Folds the detailed evaluation rows of every pond and domain on
+        local dates before `before` (oldest max_days dates first, never a
+        pond's newest date) into evaluation_daily and deletes them, in one
+        transaction (summarize_evaluation_days). Returns {"days": [ISO
+        dates], "rows": n, "summaries": n}; no days means nothing was left.
+        Raises StorageError when before is after today in time_zone."""
+        ...
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        """The pond's evaluation_daily rows (EVALUATION_DAILY_COLUMNS),
+        oldest local_date first, then by domain."""
+        ...
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(

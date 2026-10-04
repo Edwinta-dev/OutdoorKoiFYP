@@ -270,3 +270,30 @@ def test_provenance_supabase_reads_give_old_rows_null_provenance():
     storage, _ = _storage(data={"pond_chemistry_evaluations": [{"id": 1, "status": "Green"}]})
     row = storage.fetch_latest_evaluation(4)
     assert row["status"] == "Green" and {c: row[c] for c in PROVENANCE_COLUMNS} == dict.fromkeys(PROVENANCE_COLUMNS)
+
+
+def test_retention_supabase_calls_the_rpc_with_the_cutoff():
+    from datetime import date
+
+    result = {"days": ["2026-08-01"], "rows": 3, "summaries": 1}
+    storage, client = _storage(data={"rpc:summarize_evaluation_days": result})
+    assert storage.summarize_evaluation_days(date(2026, 9, 4), "Asia/Singapore", 7) == result
+    assert client.queries[-1].calls == [("rpc", ("summarize_evaluation_days", {
+        "p_before": "2026-09-04", "p_time_zone": "Asia/Singapore", "p_max_days": 7}), {})]
+
+
+def test_retention_supabase_unexpected_result_is_a_storage_error():
+    from datetime import date
+
+    storage, _ = _storage(data={"rpc:summarize_evaluation_days": None})
+    with pytest.raises(StorageError, match="summarize_evaluation_days"):
+        storage.summarize_evaluation_days(date(2026, 9, 4), "Asia/Singapore", 7)
+
+
+def test_retention_supabase_reads_daily_summaries_by_pond_and_domain():
+    rows = [{"pond_id": 1, "domain": "algae", "local_date": "2026-08-01"}]
+    storage, client = _storage(data={"evaluation_daily": rows})
+    assert storage.fetch_evaluation_daily(1, domain="algae") == rows
+    calls = [(m, a) for m, a, _ in client.queries[-1].calls]
+    assert ("eq", ("pond_id", 1)) in calls and ("eq", ("domain", "algae")) in calls
+    assert calls[-2:] == [("order", ("local_date",)), ("order", ("domain",))]

@@ -21,6 +21,7 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user, reloaded when another process saved a newer snapshot |
 | `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes, all under `/v1` (route table in `spec.py`, response models in `responses.py`, the dashboard in `dashboard.py`); `python -m koi.api.openapi` regenerates `docs/api/openapi.yaml` |
 | `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll, lease-gated `Worker`, pond thread pool |
+| `koi/worker/retention.py` | | Daily evaluation retention job (summaries in `evaluation_daily`) |
 | `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
 
 `koi/models/` does no I/O. The API, the worker and the camera service each
@@ -51,6 +52,7 @@ name in `.env`. Both services read the same file.
 | `KOI_SENSOR_CADENCE_MINUTES` | `15` | poller; expected minutes between sensor node uploads; a channel's newest reading is used while it is at most two of these old |
 | `KOI_SENSOR_INGEST_OVERLAP_MINUTES` | `60` | poller; how far before the newest ingested insert time each sensor scan starts, to find rows committed out of id order |
 | `KOI_SENSOR_INGEST_BATCH_ROWS` | `2000` | poller; most `SensorData` rows one pond ingests per cycle (whole uploads only); the rest wait for the next cycle |
+| `KOI_EVALUATION_RETENTION_DAYS` | `30` | worker; local days older than this have their evaluation rows summarised into `evaluation_daily` and deleted, once a day |
 | `KOI_HYPOXIA_WATCH_TEMP_C` | `30` | poller and API; water temperature (C) at which a dark pond's hypoxia flag is `watch` |
 | `KOI_HYPOXIA_HIGH_TEMP_C` | `32` | poller and API; the same for `high`; must be above the watch level |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
@@ -220,6 +222,45 @@ The assessment, dashboard and event responses include all four; the
 forecast responses include `model_version` and `input_cutoff`. Rows
 written before migration 0016 read null in each (unknown); they are not
 backfilled.
+
+### Evaluation retention (issue #22, migration 0017)
+
+Each poll adds one row per pond to each evaluation table, about 290 a day
+per pond. Once a day, at 03:30 Singapore time, the worker
+(`koi/worker/retention.py`, under its own `evaluation_retention` lease)
+calls `summarize_evaluation_days`: for every pond and domain, each local
+day older than `KOI_EVALUATION_RETENTION_DAYS` (default 30) becomes one
+`evaluation_daily` row, and the detailed rows of that day are deleted.
+
+- One row per pond, domain (`chemistry`, `evaporation`, `algae`) and local
+  day (`(evaluated_at at time zone 'Asia/Singapore')::date`, the day of
+  `daily_sensor_averages` and `koi/models/local_time.py`).
+- Each holds the row count, first and last `evaluated_at`, counts per
+  status, and for each headline value (chemistry: TAN, nitrite, nitrate,
+  pH reactivity; evaporation: water lost in litres and percent, mm and
+  litres per day, water temperature, days to top-up; algae: green ratio,
+  growth rate, days to scrub) the number of rows with a value, the first
+  and last value with their times, and the minimum and maximum.
+- A value missing all day reads `n` 0 with nulls, and a domain with no rows
+  that day has no summary: missing stays missing, never zero.
+- `model_versions` lists each backend version that wrote rows that day
+  with its row count and time range, so a model change within a day is
+  kept. Rows written before migration 0016 appear as version null.
+- The summaries are written, exactly the summarised rows are deleted, and
+  the counts are checked, in one transaction; a mismatch or failure rolls
+  all of it back and the next run starts again. A second run changes
+  nothing. A row written later for a summarised day is merged into that
+  day's summary on the next run.
+- Each pond and domain keeps its newest local day as detailed rows, so the
+  latest assessment the API serves is never removed.
+- Only evaluation rows go. The inputs a rebuild or replay reads (sensor
+  rows and their ingest ledger, interventions, camera frames, ratings,
+  weather history, snapshots) are not touched.
+
+`evaluation_daily` holds model estimates and the status outcomes the model
+reported. Observed sensor values have their own daily summary,
+`daily_sensor_averages`, which this does not change. `MemoryStorage` does
+the same through `koi/storage/evaluation_daily.py`.
 
 ## Dependencies
 

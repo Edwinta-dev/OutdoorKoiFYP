@@ -28,13 +28,16 @@ Table notes (schema in supabase/migrations/):
   backfill_intervention_event_ids (migration 0015), each for one pond.
 - Weather ingestion writes only through ingest_weather_batch, and the
   as-of weather reads are the database functions of migration 0009.
+- Evaluation retention goes through summarize_evaluation_days (migration
+  0017): the summaries and the deletes of the rows they replace are one
+  transaction in the database.
 """
 from __future__ import annotations
 
 import json
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
@@ -50,6 +53,7 @@ from koi.storage.base import (
     pond_config_from_userdata_row,
     with_provenance,
 )
+from koi.storage.evaluation_daily import EVALUATION_DAILY_COLUMNS
 
 if TYPE_CHECKING:
     from supabase import Client
@@ -346,6 +350,25 @@ class SupabaseStorage:
                 .execute()
             )
             return with_provenance(res.data[0]) if res.data else None
+
+    # --- evaluation retention (migration 0017) --------------------------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        with _operation("summarize_evaluation_days"):
+            res = self._db().rpc("summarize_evaluation_days", {
+                "p_before": before.isoformat(), "p_time_zone": time_zone, "p_max_days": max_days}).execute()
+            result = res.data
+            if not isinstance(result, dict):
+                raise StorageError("summarize_evaluation_days", f"unexpected result {result!r}")
+            return result
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        with _operation("fetch_evaluation_daily"):
+            query = (self._db().table("evaluation_daily").select(", ".join(EVALUATION_DAILY_COLUMNS))
+                     .eq("pond_id", user_id))
+            if domain is not None:
+                query = query.eq("domain", domain)
+            res = query.order("local_date").order("domain").execute()
+            return list(res.data or [])
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(

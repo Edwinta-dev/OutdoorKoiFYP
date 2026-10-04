@@ -77,6 +77,13 @@ class Settings(BaseSettings):
         default=2000, gt=0,
         validation_alias=AliasChoices("KOI_SENSOR_INGEST_BATCH_ROWS", "sensor_ingest_batch_rows"))
 
+    # Evaluation retention (koi/worker/retention.py, migration 0017): the
+    # worker's daily job folds the detailed evaluation rows of every local
+    # day older than this many days into evaluation_daily and deletes them.
+    evaluation_retention_days: int = Field(
+        default=30, gt=0,
+        validation_alias=AliasChoices("KOI_EVALUATION_RETENTION_DAYS", "evaluation_retention_days"))
+
     # Origins allowed to call either Flask app from a browser. Comma
     # separated in the environment; "*" allows any origin.
     cors_origins: Annotated[tuple[str, ...], NoDecode] = Field(

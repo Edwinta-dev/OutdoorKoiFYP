@@ -28,11 +28,12 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 from koi.models.event_ledger import derived_event_id
+from koi.models.local_time import local_date
 from koi.storage.base import (
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
@@ -47,6 +48,13 @@ from koi.storage.base import (
     parse_timestamp,
     pond_config_from_userdata_row,
     with_provenance,
+)
+from koi.storage.evaluation_daily import (
+    DOMAIN_TABLES,
+    EVALUATION_DAILY_COLUMNS,
+    merge_summary,
+    select_batch,
+    summarize_group,
 )
 from koi.weather import cache as weather_cache
 from koi.weather import history as weather_history
@@ -74,6 +82,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "action_threshold", "threshold_mode", "growth_rate_per_day", "intrinsic_rate_per_day",
         "rate_source", "confidence", "sample_count", "days_to_scrub", "advisory", "scrub_now",
         *PROVENANCE_COLUMNS),
+    # Daily summaries of the three evaluation tables (migration 0017).
+    "evaluation_daily": EVALUATION_DAILY_COLUMNS,
     "algae_severity_ratings": (
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
@@ -118,6 +128,7 @@ USER_COLUMN = {
     "pond_chemistry_evaluations": "userid",
     "pond_evaporation_evaluations": "userid",
     "pond_algae_evaluations": "userid",
+    "evaluation_daily": "pond_id",
     "algae_severity_ratings": "userid",
     "imageTable": "user_ID",
     "UserData": "userID",
@@ -473,6 +484,54 @@ class MemoryStorage:
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]:
         return self._latest("fetch_latest_algae_evaluation", "pond_algae_evaluations", user_id)
+
+    # --- evaluation retention -----------------------------------------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        """The same summaries and deletes summarize_evaluation_days
+        (migration 0017) makes, all or nothing under the lock."""
+        self._check("summarize_evaluation_days")
+        if max_days < 1:
+            raise StorageError("summarize_evaluation_days", "max_days must be at least 1")
+        with self._lock:
+            now = self._clock()
+            if before > local_date(now, time_zone):
+                raise StorageError("summarize_evaluation_days", f"{before} is after today in {time_zone}")
+            groups = select_batch({d: self._tables[t] for d, t in DOMAIN_TABLES.items()}, before, time_zone,
+                                  max_days)
+            if not groups:
+                return {"days": [], "rows": 0, "summaries": 0}
+            daily = self._tables["evaluation_daily"]
+            written: list[tuple[Optional[int], dict]] = []
+            for (pond, domain, day), rows in sorted(groups.items()):
+                new = summarize_group(domain, rows)
+                index = next((i for i, r in enumerate(daily) if _same_user(r, "pond_id", pond)
+                              and r["domain"] == domain and r["local_date"] == day.isoformat()), None)
+                if index is None:
+                    written.append((None, {"pond_id": pond, "domain": domain, "local_date": day.isoformat(),
+                                           "time_zone": time_zone, **new, "summarized_at": now.isoformat(),
+                                           "updated_at": now.isoformat()}))
+                else:
+                    written.append((index, {**merge_summary(daily[index], new), "updated_at": now.isoformat()}))
+            try:
+                written = [(i, _copy(row)) for i, row in written]
+            except (TypeError, ValueError) as exc:  # a value jsonb could not hold; nothing written yet
+                raise StorageError("summarize_evaluation_days", exc) from exc
+            for index, row in written:
+                if index is None:
+                    daily.append(row)
+                else:
+                    daily[index] = row
+            for domain, table in DOMAIN_TABLES.items():
+                ids = {int(r["id"]) for (_, d, _), rows in groups.items() if d == domain for r in rows}
+                self._tables[table][:] = [r for r in self._tables[table] if int(r["id"]) not in ids]
+            return {"days": sorted({day.isoformat() for _, _, day in groups}),
+                    "rows": sum(len(rows) for rows in groups.values()), "summaries": len(groups)}
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        self._check("fetch_evaluation_daily")
+        rows = [r for r in self._select("evaluation_daily", user_id) if domain is None or r["domain"] == domain]
+        rows.sort(key=lambda r: (r["local_date"], r["domain"]))
+        return [self._project(r, EVALUATION_DAILY_COLUMNS) for r in rows]
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(
