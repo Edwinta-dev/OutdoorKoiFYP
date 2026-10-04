@@ -2598,6 +2598,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         severity:
           title: Severity
           type: string
@@ -2645,6 +2653,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         severity:
           title: Severity
           type: string
@@ -2837,6 +2853,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         scrub_type:
           default: unspecified
           maxLength: 64
@@ -2864,6 +2888,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         scrub_type:
           default: unspecified
           maxLength: 64
@@ -3427,11 +3459,57 @@ components:
           - $ref: '#/components/schemas/AlgaeAssessment'
           - type: 'null'
           description: null until the camera has sent a usable frame.
+        event:
+          anyOf:
+          - $ref: '#/components/schemas/EventOutcome'
+          - type: 'null'
+          default: null
       required:
       - chemistry
       - evaporation
       - algae
       title: EventAssessments
+      type: object
+    EventOutcome:
+      additionalProperties: true
+      description: What the twin did with the event (koi/models/event_ledger.py).
+      properties:
+        event_id:
+          description: The event's UUID; legacy:<n> when the request had none.
+          title: Event Id
+          type: string
+        status:
+          description: 'duplicate: this event_id was already applied, nothing changed. deleted: it was
+            applied and later deleted from the log, nothing changed.'
+          enum:
+          - applied
+          - duplicate
+          - deleted
+          title: Status
+          type: string
+        replayed:
+          description: The event was in the past and the chemistry model was replayed from the checkpoint
+            before it.
+          title: Replayed
+          type: boolean
+        replayed_from:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: The replay's checkpoint time; null for the twin's start or when there was no replay.
+          title: Replayed From
+        placed_late:
+          description: The event was older than every checkpoint and was applied at the current state
+            instead of at its time.
+          title: Placed Late
+          type: boolean
+      required:
+      - event_id
+      - status
+      - replayed
+      - replayed_from
+      - placed_late
+      title: EventOutcome
       type: object
     FeedingEvent:
       properties:
@@ -3446,6 +3524,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         food_grams:
           maximum: 10000
           minimum: 0
@@ -3479,6 +3565,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         food_grams:
           maximum: 10000
           minimum: 0
@@ -4417,6 +4511,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         volume_percent:
           anyOf:
           - exclusiveMinimum: 0
@@ -4454,6 +4556,14 @@ components:
           - type: 'null'
           default: null
           title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
         volume_percent:
           anyOf:
           - exclusiveMinimum: 0

@@ -23,7 +23,7 @@ from typing import Any, Optional
 
 from koi.models.engine import EventKind, PondEvent
 from koi.models.local_time import zone
-from koi.storage.base import IMAGE_COLUMNS, parse_timestamp
+from koi.storage.base import IMAGE_COLUMNS, INTERVENTION_COLUMNS, parse_timestamp
 from koi.weather.nea import SINGAPORE
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "demo_pond" / "seed.json"
@@ -154,6 +154,15 @@ class SeedHistory:
                 scrub_type=r.get("algae_method"), food_grams=r.get("food_grams"),
                 protein_percent=r.get("protein_percentage")))
         return sorted(events, key=lambda e: e.time)
+
+    def interventions(self, pond: int, at: datetime, since: Optional[datetime] = None) -> list[dict]:
+        """pondInterventions rows timed by at (and at or after since),
+        ordered by event_timestamp, then id (fetch_interventions)."""
+        rows = [r for r in self._rows("pondInterventions", "userID", pond)
+                if parse_timestamp(r["event_timestamp"]) <= at
+                and (since is None or parse_timestamp(r["event_timestamp"]) >= since)]
+        rows.sort(key=lambda r: (parse_timestamp(r["event_timestamp"]), int(r["id"])))
+        return [{c: r.get(c) for c in INTERVENTION_COLUMNS} for r in rows]
 
     def images(self, pond: int, at: datetime, limit: int = 200) -> list[dict]:
         """imageTable rows stored by at, newest first (fetch_image_history)."""

@@ -28,6 +28,8 @@ def test_health_report_records_each_pond_result():
     assert status["last_success_at"] == status["cycle_finished_at"]
     pond = status["ponds"][str(USER)]
     sensor = pond.pop("sensor")
+    events = pond.pop("events")
+    assert events["reconciled"] is True and events["applied"] == 0 and events["replayed"] is False
     assert pond == {"result": "ok", "reason": None, "failures_total": 0,
                     "sensor_recorded_at": "2026-08-20T00:00:00+00:00"}
     assert (sensor["inputs"], sensor["late_inputs"], sensor["rows"]) == (2, 0, 7)

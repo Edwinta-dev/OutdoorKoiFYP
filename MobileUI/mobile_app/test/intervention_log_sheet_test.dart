@@ -105,6 +105,16 @@ void main() {
     expect(push['proteinPercent'], 35.0);
     expect(push['fishType'], 'Japanese Koi (Kohaku)');
     expect(push['fishCount'], 5);
+    // The row and the post carry the same event id, a v4 UUID.
+    expect(push['eventId'], insert['event_id']);
+    expect(
+      insert['event_id'],
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
 
     expect(find.text('Log Feeding Session'), findsNothing); // sheet closed
     expect(

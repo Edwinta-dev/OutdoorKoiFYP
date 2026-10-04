@@ -119,12 +119,28 @@ class HypoxiaFlag(_Open):
     advice: list[str]
 
 
+class EventOutcome(_Open):
+    """What the twin did with the event (koi/models/event_ledger.py)."""
+
+    event_id: str = Field(description="The event's UUID; legacy:<n> when the request had none.")
+    status: Literal["applied", "duplicate", "deleted"] = Field(description=(
+        "duplicate: this event_id was already applied, nothing changed. deleted: it was applied and later "
+        "deleted from the log, nothing changed."))
+    replayed: bool = Field(description="The event was in the past and the chemistry model was replayed from "
+                                       "the checkpoint before it.")
+    replayed_from: Optional[str] = Field(description="The replay's checkpoint time; null for the twin's start "
+                                                     "or when there was no replay.")
+    placed_late: bool = Field(description="The event was older than every checkpoint and was applied at the "
+                                          "current state instead of at its time.")
+
+
 class EventAssessments(_Open):
     """All three fresh assessments after an event."""
 
     chemistry: WaterChemistryAssessment
     evaporation: EvaporationAssessment
     algae: Optional[AlgaeAssessment] = Field(description="null until the camera has sent a usable frame.")
+    event: Optional[EventOutcome] = None
 
 
 class AllAssessments(_Open):

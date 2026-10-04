@@ -179,6 +179,7 @@ class FakePondDataSource extends PondDataSource {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logFeeding', {
@@ -186,6 +187,7 @@ class FakePondDataSource extends PondDataSource {
     'foodGrams': foodGrams,
     'proteinPercent': proteinPercent,
     'timestamp': timestamp,
+    'eventId': eventId,
     'fishType': fishType,
     'fishCount': fishCount,
   }, eventAssessment);
@@ -196,6 +198,7 @@ class FakePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logWaterChange', {
@@ -203,6 +206,7 @@ class FakePondDataSource extends PondDataSource {
     'volumePercent': volumePercent,
     'volumeLitres': volumeLitres,
     'timestamp': timestamp,
+    'eventId': eventId,
     'fishType': fishType,
     'fishCount': fishCount,
   }, eventAssessment);
@@ -213,6 +217,7 @@ class FakePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logTopUp', {
@@ -220,6 +225,7 @@ class FakePondDataSource extends PondDataSource {
     'volumePercent': volumePercent,
     'volumeLitres': volumeLitres,
     'timestamp': timestamp,
+    'eventId': eventId,
     'fishType': fishType,
     'fishCount': fishCount,
   }, eventAssessment);
@@ -229,12 +235,14 @@ class FakePondDataSource extends PondDataSource {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logAlgalScrub', {
     'userId': userId,
     'scrubType': scrubType,
     'timestamp': timestamp,
+    'eventId': eventId,
     'fishType': fishType,
     'fishCount': fishCount,
   }, eventAssessment);

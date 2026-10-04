@@ -32,10 +32,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+from koi.models.event_ledger import derived_event_id
 from koi.storage.base import (
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
+    INTERVENTION_COLUMNS,
     PROFILE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
@@ -80,7 +82,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
         "id", "created_at", "userID", "event_type", "event_timestamp", "volume_percentage",
-        "volume_litres", "food_grams", "protein_percentage", "algae_method"),
+        "volume_litres", "food_grams", "protein_percentage", "algae_method", "event_id"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
     # The sensor node's readings, read by fetch_dashboard_sources.
@@ -201,9 +203,22 @@ class MemoryStorage:
             stamp = _STAMPED.get(table)
             if stamp and new.get(stamp) is None:
                 new[stamp] = self._clock().isoformat()
+            if table == "pondInterventions":
+                self._event_id(new)
             self._tables[table].append(new)
             stored.append(_copy(new))
         return stored
+
+    def _event_id(self, row: dict) -> None:
+        """pondInterventions.event_id (0015): a row without the key gets
+        the UUID derived from its id, standing in for the column default
+        deterministically; an explicit None stays None until
+        backfill_intervention_event_ids. The column is unique."""
+        if "event_id" not in row:
+            row["event_id"] = derived_event_id(row["id"])
+        if row["event_id"] is not None and any(
+                r.get("event_id") == row["event_id"] for r in self._tables["pondInterventions"]):
+            raise ValueError(f"pondInterventions.event_id {row['event_id']} already exists")
 
     def rows(self, table: str) -> list[dict]:
         """A copy of every row in a table, in insertion order."""
@@ -349,6 +364,39 @@ class MemoryStorage:
                 "scan_from": scan_from.isoformat() if scan_from is not None else None,
                 "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
                           "created_at": r["created_at"]} for r in rows[:limit]]}
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        """The same rows sensor_ingest_history (migration 0015) returns."""
+        self._check("fetch_ingested_sensor_rows")
+        with self._lock:
+            times = {int(r["sensor_row_id"]): parse_timestamp(r["effective_sample_time"])
+                     for r in self._tables["sensor_ingest_ledger"] if _same_user(r, "pond_id", user_id)}
+            rows = [(times[int(r["id"])], r) for r in self._select("SensorData", user_id)
+                    if int(r["id"]) in times and r.get("sensor_type") in sensor_types
+                    and (after is None or times[int(r["id"])] > after) and times[int(r["id"])] <= until]
+        rows.sort(key=lambda item: (item[0], int(item[1]["id"])))
+        return [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                 "created_at": r["created_at"]} for _, r in rows]
+
+    # --- interventions ------------------------------------------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        """The same rows pond_interventions_since (migration 0015) returns."""
+        self._check("fetch_interventions")
+        rows = [r for r in self._select("pondInterventions", user_id)
+                if since is None or parse_timestamp(r["event_timestamp"]) >= since]
+        rows.sort(key=lambda r: (parse_timestamp(r["event_timestamp"]), int(r["id"])))
+        return [self._project(r, INTERVENTION_COLUMNS) for r in rows]
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        self._check("backfill_intervention_event_ids")
+        with self._lock:
+            filled = 0
+            for r in self._tables["pondInterventions"]:
+                if _same_user(r, "userID", user_id) and r.get("event_id") is None:
+                    r["event_id"] = derived_event_id(r["id"])
+                    filled += 1
+            return filled
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:

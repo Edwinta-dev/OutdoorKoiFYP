@@ -48,22 +48,39 @@ namespaced per engine.
 Version 3 adds "sensor_inputs": the newest reading of each sensor channel
 with its time and time basis, and the model time of the last sensor input
 applied (issue #18). A v2 or legacy snapshot loads with none.
+
+Version 4 adds "event_ledger" (koi/models/event_ledger.py, issue #19):
+the events applied, by event_id, and daily checkpoints of the chemistry
+engine for replaying an event that arrives in the past. A v3 or older
+snapshot loads with an empty ledger whose since is the snapshot's
+saved_at (rows created before it count as applied) and one checkpoint at
+its newest input.
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Callable, Optional
 
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
+from koi.models import event_ledger as el
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine
+from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
 from koi.models.sensor_inputs import SensorInput, parse_timestamp
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 3
+SNAPSHOT_VERSION = 4
+
+# Ledgered sensor inputs with a time in (after, until], oldest first
+# (EngineRegistry.sensor_history): what a replay reads back.
+SensorHistory = Callable[[Optional[datetime], datetime], list[SensorInput]]
+
+# How far before a checkpoint's time the chemistry events it keeps reach:
+# the sensor gate looks for a volume event within 6 hours of a reading.
+_CHECKPOINT_EVENT_REACH = timedelta(hours=6)
 
 
 class PondTwin:
@@ -90,6 +107,10 @@ class PondTwin:
         # last sensor input applied (ingest_sensor_inputs).
         self.sensor_channels: dict[str, dict] = {}
         self.last_input_at: Optional[datetime] = None
+        # The events applied and the chemistry checkpoints for replay
+        # (event_ledger.py). A new twin has a genesis checkpoint.
+        self.ledger = el.EventLedger()
+        self.ledger.add_checkpoint(el.Checkpoint(None, self._chemistry_checkpoint(None)))
 
     # ----------------------------------------------------------
     @classmethod
@@ -126,11 +147,26 @@ class PondTwin:
         nearby" check, so it must see even events that don't change its
         own pools). The other two engines are notified only for the
         events that physically affect them.
+
+        This is the raw step: the event is not recorded in the ledger.
+        Logged interventions go through record_event or reconcile_events.
         """
+        self._chemistry_event(event, now)
+        self._other_engines_event(event, now)
+
+    def _chemistry_event(self, event: PondEvent, now: Optional[datetime]) -> None:
+        """The chemistry half of apply_event, under the profile in force
+        at event.time, leaving every engine on the profile at now."""
         if self.profiles is not None:
             self.use_profile(self.profiles.at(event.time))
-
         self.chemistry.apply_event(event)
+        if self.profiles is not None:
+            self.use_profile(self.profiles.at(now or datetime.now(timezone.utc)))
+
+    def _other_engines_event(self, event: PondEvent, now: Optional[datetime]) -> None:
+        """The evaporation and algae half of apply_event."""
+        if self.profiles is not None:
+            self.use_profile(self.profiles.at(event.time))
 
         if event.kind == EventKind.WATER_CHANGE:
             self.evaporation.apply_water_change(
@@ -155,7 +191,8 @@ class PondTwin:
     # ==========================================================
     # Sensor inputs - every reading once, in event-time order
     # ==========================================================
-    def ingest_sensor_inputs(self, inputs: list[SensorInput]) -> tuple[list[dict], list[str]]:
+    def ingest_sensor_inputs(self, inputs: list[SensorInput], history: Optional[SensorHistory] = None,
+                             now: Optional[datetime] = None) -> tuple[list[dict], list[str]]:
         """Applies the poller's discovered inputs (oldest first) to the
         chemistry engine, each at its own time, and records each channel's
         newest reading. Returns one provenance entry per input and the
@@ -165,34 +202,291 @@ class PondTwin:
         late, found by the scan's overlap) cannot be put back in the past:
         it is applied at the last input's time, and its entry says
         late=True with both times. Placing late readings by their sample
-        time is issue #82."""
+        time is issue #82.
+
+        An input at or before the newest event already applied (an event
+        logged between the node's upload and this poll) belongs before
+        that event. With history (the ledgered inputs, for the replay)
+        the chemistry engine is rewound and replayed with these inputs in
+        their place (event_ledger.py), and their entries say
+        replayed=True; without it, or without a checkpoint before them,
+        they are applied as above."""
+        for item in inputs:
+            self._record_channels(item)
+        newest_event = self.ledger.newest_event_time()
+        if (history is not None and inputs and newest_event is not None
+                and inputs[0].time <= newest_event):
+            replay = self._replay(inputs[0].time, history, now, extra_inputs=inputs)
+            if replay is not None:
+                replayed = [{
+                    "time": item.time.isoformat(), "time_basis": item.time_basis,
+                    "model_time": item.time.isoformat(), "late": False, "replayed": True,
+                    "row_ids": dict(item.row_ids), "missing": item.missing} for item in inputs]
+                return replayed, replay["warnings"]
+
         provenance: list[dict] = []
         warnings: list[str] = []
         for item in inputs:
             late = self.last_input_at is not None and item.time < self.last_input_at
             model_time = self.last_input_at if late and self.last_input_at is not None else item.time
-            sample = RawSample(
-                time=model_time,
-                ph=item.channels.get("ph"),
-                tds=item.channels.get("tds"),
-                temp_c=item.channels.get("temp"),
-                lux=item.channels.get("lux"),
-            )
-            warnings = self.chemistry.ingest_sensor_sample(sample)
-            self.last_input_at = model_time
-            for channel, value in item.channels.items():
-                if value is None:
-                    continue
-                current = self.sensor_channels.get(channel)
-                if current is None or parse_timestamp(current["reading_at"]) <= item.time:
-                    self.sensor_channels[channel] = {
-                        "value": value, "reading_at": item.time.isoformat(),
-                        "time_basis": item.time_basis, "row_id": item.row_ids.get(channel)}
+            warnings = self._chemistry_sensor(item, model_time)
             provenance.append({
                 "time": item.time.isoformat(), "time_basis": item.time_basis,
                 "model_time": model_time.isoformat(), "late": late,
                 "row_ids": dict(item.row_ids), "missing": item.missing})
         return provenance, warnings
+
+    def _record_channels(self, item: SensorInput) -> None:
+        """Keeps each channel's newest reading (sensor_channels)."""
+        for channel, value in item.channels.items():
+            if value is None:
+                continue
+            current = self.sensor_channels.get(channel)
+            if current is None or parse_timestamp(current["reading_at"]) <= item.time:
+                self.sensor_channels[channel] = {
+                    "value": value, "reading_at": item.time.isoformat(),
+                    "time_basis": item.time_basis, "row_id": item.row_ids.get(channel)}
+
+    def _chemistry_sensor(self, item: SensorInput, model_time: datetime) -> list[str]:
+        """One sensor input into the chemistry engine at model_time,
+        checkpointing first when it starts a new local day."""
+        self._checkpoint_before(model_time)
+        warnings = self.chemistry.ingest_sensor_sample(RawSample(
+            time=model_time,
+            ph=item.channels.get("ph"),
+            tds=item.channels.get("tds"),
+            temp_c=item.channels.get("temp"),
+            lux=item.channels.get("lux"),
+        ))
+        self.last_input_at = model_time
+        self._advance_newest(model_time)
+        return warnings
+
+    # ==========================================================
+    # Event ledger - idempotent, time-ordered, replayable (#19)
+    # ==========================================================
+    def record_event(self, event_id: Optional[str], event: PondEvent, *, now: Optional[datetime] = None,
+                     history: Optional[SensorHistory] = None, source: str = "api") -> dict:
+        """Applies a logged intervention once (event_ledger.py).
+
+        event_id None is a post from an app build without one (a legacy
+        entry). An event_id already in the ledger, applied or deleted,
+        changes nothing. An event before the newest input applied is put
+        in its place by a replay when a checkpoint before it exists, and
+        otherwise applied at the current state (placed_late).
+
+        Returns {event_id, status: applied | duplicate | deleted,
+        replayed, replayed_from, placed_late}."""
+        now = now or datetime.now(timezone.utc)
+        existing = self.ledger.get(event_id) if event_id is not None else None
+        if existing is not None:
+            return {"event_id": existing.event_id,
+                    "status": "duplicate" if existing.status == el.APPLIED else "deleted",
+                    "replayed": False, "replayed_from": None, "placed_late": existing.placed_late}
+        entry = self.ledger.add(event_id, event, recorded_at=now, source=source)
+        self._other_engines_event(event, now)
+        outcome = self._place([entry], [], now, history)
+        return {"event_id": entry.event_id, "status": "applied", **outcome, "placed_late": entry.placed_late}
+
+    def reconcile_events(self, rows: list[dict], *, now: Optional[datetime] = None,
+                         history: Optional[SensorHistory] = None) -> dict:
+        """Brings the ledger in line with the pond's pondInterventions rows
+        (pond_interventions_since over the last WINDOW): applies rows not
+        in it, edits and deletes entries whose row changed or went, as
+        described in event_ledger.py, with one replay for all of them.
+        Returns what it did, by event_id."""
+        now = now or datetime.now(timezone.utc)
+        window_start = now - el.WINDOW
+        report: dict = {"applied": [], "claimed": [], "revised": [], "deleted": [], "restored": [],
+                        "not_replayable": [], "skipped": [], "replayed": False, "replayed_from": None}
+        new: list[el.LedgerEntry] = []
+        changed: list[tuple[el.LedgerEntry, dict, datetime]] = []  # entry, its old state, earliest time
+        seen: set[str] = set()
+
+        for row in rows:
+            event = el.event_from_row(row)
+            event_id = row.get("event_id")
+            if event is None or event_id is None or event.time < window_start:
+                report["skipped"].append({"row_id": row.get("id"), "reason": "unknown event_type" if event is None
+                                          else "no event_id" if event_id is None else "outside the window"})
+                continue
+            event_id = el.normalise_event_id(event_id)
+            seen.add(event_id)
+            row_fp = el.event_values(event)
+            entry = self.ledger.get(event_id)
+            if entry is None:
+                created = row.get("created_at")
+                if self.ledger.since is not None and created is not None \
+                        and parse_timestamp(created) < self.ledger.since:
+                    continue  # logged before the ledger: applied by the twin of that time
+                legacy = self.ledger.legacy_match(event)
+                if legacy is not None:
+                    self.ledger.rekey(legacy, event_id)
+                    legacy.row_id, legacy.row = row.get("id"), row_fp
+                    report["claimed"].append(event_id)
+                    continue
+                entry = self.ledger.add(event_id, event, recorded_at=now, source="reconcile",
+                                        row_id=row.get("id"), row=row_fp)
+                new.append(entry)
+                continue
+            if entry.row is None:
+                # First sight of the row of a posted event: the post's
+                # values stand (the row may hold phone-local time).
+                entry.row_id, entry.row = row.get("id"), row_fp
+                continue
+            if entry.status == el.DELETED:
+                changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
+                entry.status, entry.event, entry.model_time, entry.row = el.APPLIED, event, event.time, row_fp
+                entry.row_id = row.get("id")
+                report["restored"].append(event_id)
+            elif row_fp != entry.row:
+                changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
+                entry.event, entry.model_time, entry.row = event, event.time, row_fp
+                entry.revision += 1
+                report["revised"].append(event_id)
+
+        for entry in list(self.ledger.entries.values()):
+            if (entry.status == el.APPLIED and entry.row is not None and entry.event_id not in seen
+                    and parse_timestamp(entry.row["time"]) >= window_start):
+                changed.append((entry, entry.to_dict(), entry.model_time))
+                entry.status = el.DELETED
+                report["deleted"].append(entry.event_id)
+
+        for entry in new:
+            self._other_engines_event(entry.event, now)
+        outcome = self._place(new, changed, now, history)
+        if outcome.get("not_replayable"):
+            # Edits and deletions that could not be replayed are undone in
+            # the ledger, so the entry still describes the engine state.
+            for entry, old, _ in changed:
+                self.ledger.entries[entry.event_id] = el.LedgerEntry.from_dict(old)
+                report["not_replayable"].append(entry.event_id)
+                for key in ("revised", "deleted", "restored"):
+                    if entry.event_id in report[key]:
+                        report[key].remove(entry.event_id)
+        report["applied"] = [e.event_id for e in new]
+        report["replayed"], report["replayed_from"] = outcome["replayed"], outcome["replayed_from"]
+        return report
+
+    def _place(self, new: list[el.LedgerEntry], changed: list[tuple[el.LedgerEntry, dict, datetime]],
+               now: datetime, history: Optional[SensorHistory]) -> dict:
+        """Puts new entries (already in the ledger, not yet in chemistry)
+        and changed ones into the chemistry engine: in order when all are
+        new and none is before newest_input_at, else by one replay from
+        the earliest. Without a checkpoint for the replay, new entries
+        are placed late and {not_replayable: True} is returned when
+        changed entries could not be applied."""
+        newest = self.ledger.newest_input_at
+        earliest = min([e.event.time for e in new] + [t for _, _, t in changed], default=None)
+        if earliest is None:
+            return {"replayed": False, "replayed_from": None}
+        if not changed and (newest is None or earliest >= newest):
+            for entry in sorted(new, key=lambda e: (e.event.time, e.seq)):
+                self._checkpoint_before(entry.model_time)
+                self._chemistry_event(entry.event, now)
+                self._advance_newest(entry.model_time)
+            return {"replayed": False, "replayed_from": None}
+        replay = self._replay(earliest, history, now)
+        if replay is not None:
+            return {"replayed": True, "replayed_from": replay["replayed_from"]}
+        for entry in sorted(new, key=lambda e: (e.event.time, e.seq)):
+            if newest is not None and entry.event.time < newest:
+                entry.model_time = newest + el.LATE_STEP
+            self._chemistry_event(entry.event, now)
+            self._advance_newest(entry.model_time)
+            newest = self.ledger.newest_input_at
+        out = {"replayed": False, "replayed_from": None}
+        if changed:
+            out["not_replayable"] = True
+        return out
+
+    def _replay(self, earliest: datetime, history: Optional[SensorHistory], now: Optional[datetime],
+                extra_inputs: tuple[SensorInput, ...] | list[SensorInput] = ()) -> Optional[dict]:
+        """Rewinds chemistry to the newest checkpoint before earliest and
+        applies every input after it in model order: the ledgered sensor
+        inputs (history), extra_inputs (this cycle's, not yet ledgered)
+        and the live events. None, with nothing changed, when there is no
+        such checkpoint or sensor inputs are needed and history is None."""
+        checkpoint = self.ledger.checkpoint_before(earliest)
+        if checkpoint is None:
+            return None
+        through = checkpoint.through
+        sensor_until = self.last_input_at
+        inputs: list[SensorInput] = []
+        if sensor_until is not None and (through is None or sensor_until > through):
+            if history is None:
+                return None
+            inputs = list(history(through, sensor_until))
+        inputs += [i for i in extra_inputs if through is None or i.time > through]
+        events = [e for e in self.ledger.live() if through is None or e.model_time > through]
+
+        self.chemistry = self._restore_chemistry(checkpoint)
+        self.ledger.drop_checkpoints_after(through)
+        self.ledger.newest_input_at = through
+        self.last_input_at = through if inputs else self.last_input_at
+        now = now or datetime.now(timezone.utc)
+        ordered: list[tuple] = [(i.time, 0, n, i) for n, i in enumerate(inputs)]
+        ordered += [(e.model_time, 1, e.seq, e) for e in events]
+        warnings: list[str] = []
+        for _, rank, _, item in sorted(ordered, key=lambda o: o[:3]):
+            if rank == 0:
+                warnings = self._chemistry_sensor(item, item.time)
+            else:
+                self._checkpoint_before(item.model_time)
+                self._chemistry_event(item.event, now)
+                self._advance_newest(item.model_time)
+        log.info("event_ledger_replay", extra={"replayed_from": through.isoformat() if through else None,
+                                               "sensor_inputs": len(inputs), "events": len(events)})
+        return {"replayed_from": through.isoformat() if through else None, "warnings": warnings}
+
+    def _advance_newest(self, t: datetime) -> None:
+        if self.ledger.newest_input_at is None or t > self.ledger.newest_input_at:
+            self.ledger.newest_input_at = t
+
+    def _checkpoint_before(self, t: datetime) -> None:
+        """Before applying an input at t: takes a checkpoint at the newest
+        input when t falls on a later local day, and prunes old ones."""
+        last = self.ledger.newest_input_at
+        if last is None or t <= last:
+            return
+        tz = self.chemistry.config.time_zone
+        if local_date(t, tz) == local_date(last, tz):
+            return
+        if any(c.through == last for c in self.ledger.checkpoints):
+            return
+        self.ledger.add_checkpoint(el.Checkpoint(last, self._chemistry_checkpoint(last)))
+        self.ledger.prune()
+
+    def _chemistry_checkpoint(self, through: Optional[datetime]) -> dict:
+        """The chemistry snapshot as of through, trimmed: only the day
+        buckets from through's local day on and the events the sensor
+        gate can still look back to. The rest cannot change in a replay
+        from through, so _restore_chemistry takes it from the live
+        engine."""
+        snap = self.chemistry.to_snapshot()
+        if through is not None:
+            tz = self.chemistry.config.time_zone
+            day = local_date(through, tz)
+            snap["daily"] = {k: v.to_dict() for k, v in self.chemistry._daily.items()
+                             if v.calendar_date(tz) >= day}
+            reach = through - _CHECKPOINT_EVENT_REACH
+            snap["events"] = [e.to_dict() for e in self.chemistry._events if e.time >= reach]
+        return snap
+
+    def _restore_chemistry(self, checkpoint: el.Checkpoint) -> WaterChemistryEngine:
+        """A chemistry engine at the checkpoint, on the live engine's
+        config, with the live engine's older day buckets and events."""
+        restored = WaterChemistryEngine.from_snapshot(checkpoint.chemistry)
+        restored.config = self.chemistry.config
+        through = checkpoint.through
+        if through is not None:
+            tz = self.chemistry.config.time_zone
+            day = local_date(through, tz)
+            older = {k: v for k, v in self.chemistry._daily.items() if v.calendar_date(tz) < day}
+            restored._daily = {**older, **restored._daily}
+            reach = through - _CHECKPOINT_EVENT_REACH
+            restored._events = [e for e in self.chemistry._events if e.time < reach] + restored._events
+        return restored
 
     # ==========================================================
     # Environmental update - the poller's per-cycle entry point
@@ -344,6 +638,7 @@ class PondTwin:
                 "channels": self.sensor_channels,
                 "last_input_at": self.last_input_at.isoformat() if self.last_input_at else None,
             },
+            "event_ledger": self.ledger.to_dict(),
         }
 
     @classmethod
@@ -352,9 +647,10 @@ class PondTwin:
         snapshot: dict,
         pond_depth_m: float = ev.DEFAULT_POND_DEPTH_M,
     ) -> "PondTwin":
-        """Rehydrates a twin, tolerating three shapes:
+        """Rehydrates a twin, tolerating these shapes:
 
-          v3  - the namespaced shape to_snapshot() emits now
+          v4  - the namespaced shape to_snapshot() emits now
+          v3  - the same without "event_ledger": a new ledger (_load_ledger)
           v2  - the same without "sensor_inputs": no channel readings yet
           v1  - a BARE WaterChemistryEngine snapshot, which is what every
                 existing row in pond_chemistry_state contains. Detected by
@@ -369,7 +665,7 @@ class PondTwin:
         if "tan_mg" in snapshot and "chemistry" not in snapshot:
             # --- legacy bare chemistry snapshot ---
             chemistry = WaterChemistryEngine.from_snapshot(snapshot)
-            return cls(
+            legacy = cls(
                 chemistry=chemistry,
                 evaporation=ev.EvaporationFeedEngine(
                     ev.EvaporationConfig(
@@ -380,6 +676,8 @@ class PondTwin:
                 ),
                 algae=ae.AlgaeGrowthEngine(),
             )
+            legacy._load_ledger(snapshot)
+            return legacy
 
         chem_snap = snapshot.get("chemistry")
         if chem_snap is None:
@@ -410,7 +708,27 @@ class PondTwin:
         twin.sensor_channels = dict(inputs.get("channels") or {})
         last = inputs.get("last_input_at")
         twin.last_input_at = parse_timestamp(last) if last else None
+        twin._load_ledger(snapshot)
         return twin
+
+    def _load_ledger(self, snapshot: dict) -> None:
+        """The snapshot's event ledger (v4), or for an older snapshot a new
+        one: rows created after the snapshot was saved are not counted as
+        applied (since = saved_at; a bare v1 snapshot has none, so the
+        load time), and the one checkpoint is the state as loaded, at its
+        newest input."""
+        stored = snapshot.get("event_ledger")
+        if stored:
+            self.ledger = el.EventLedger.from_dict(stored)
+            return
+        saved_at = snapshot.get("saved_at")
+        newest = max((as_aware(t) for t in (self.last_input_at, self.chemistry._last_ingest_time,
+                                            *(e.time for e in self.chemistry._events)) if t is not None),
+                     default=None)
+        self.ledger = el.EventLedger(
+            since=parse_timestamp(saved_at) if saved_at else datetime.now(timezone.utc),
+            newest_input_at=newest)
+        self.ledger.add_checkpoint(el.Checkpoint(newest, self._chemistry_checkpoint(newest)))
 
     # ==========================================================
     @staticmethod

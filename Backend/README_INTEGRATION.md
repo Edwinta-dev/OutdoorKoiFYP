@@ -160,6 +160,39 @@ sensor type per poll:
   temperature stands in for the algae and nitrate terms and the hypoxia
   flag reports unknown.
 
+### Event ledger (issue #19, migration 0015)
+
+Each logged intervention has a UUID, `event_id`, that the app writes to
+`pondInterventions.event_id` and posts to `/v1/ponds/{pond}/events/...`
+(body field `event_id`). The twin keeps a ledger of the event_ids it has
+applied in its snapshot (`koi/models/event_ledger.py`, snapshot version 4):
+
+- Idempotent: a post whose event_id is already in the ledger changes
+  nothing and returns the current assessments with `event.status`
+  `duplicate` (or `deleted` for a deleted event). A post without one (an
+  older app build) is recorded as `legacy:<n>`, and the first table row
+  with the same kind and amounts within 14 hours takes it over instead of
+  being applied again.
+- Time-ordered: an event older than the newest input applied rewinds the
+  chemistry engine to the last daily checkpoint before it and replays
+  every ingested sensor reading (`sensor_ingest_history`) and event after
+  it, in order; a reading at or before the newest event applied is
+  replayed in the same way. Checkpoints cover 30 days, which is also how
+  far back the event endpoints accept a timestamp. An event older than
+  every checkpoint is applied at the current state (`event.placed_late`).
+  Evaporation and algae are not rewound: they receive each new event
+  once, at their current state.
+- Reconciled: each poll cycle gives any row without an event_id the UUID
+  derived from its id (`backfill_intervention_event_ids`, deterministic),
+  reads the last 30 days of rows (`pond_interventions_since`) and applies
+  rows not in the ledger, re-applies edited rows and removes deleted ones,
+  with one replay. A deleted event leaves a tombstone, so a retried post
+  cannot bring it back; the row reappearing applies it again. Rows created
+  before a pond's ledger existed (the stored v3 snapshot's `saved_at`)
+  count as applied. The cycle report has `worker_status.ponds.<pond>.events`.
+- Per pond: rows are read and ledgers kept per pond; the same event_id
+  posted to another pond is that pond's own event.
+
 ## Dependencies
 
 `pyproject.toml` lists direct dependencies with lower bounds.

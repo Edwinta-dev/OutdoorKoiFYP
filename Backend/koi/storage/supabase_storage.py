@@ -21,6 +21,9 @@ Table notes (schema in supabase/migrations/):
   in one statement. A save that also records ingested sensor rows goes
   through save_pond_snapshot_with_ingest (migration 0014), one
   transaction for the snapshot, the ledger and the cursor.
+- The event ledger's reads and the event_id backfill go through
+  pond_interventions_since, sensor_ingest_history and
+  backfill_intervention_event_ids (migration 0015), each for one pond.
 - Weather ingestion writes only through ingest_weather_batch, and the
   as-of weather reads are the database functions of migration 0009.
 """
@@ -153,6 +156,30 @@ class SupabaseStorage:
             if isinstance(data, str):
                 data = json.loads(data)
             return data or {"cursor": None, "scan_from": None, "rows": []}
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        with _operation("fetch_ingested_sensor_rows"):
+            res = self._db().rpc("sensor_ingest_history", {
+                "p_pond_id": user_id, "p_sensor_types": list(sensor_types),
+                "p_after": after.isoformat() if after is not None else None, "p_until": until.isoformat(),
+            }).execute()
+            data = res.data
+            return list((json.loads(data) if isinstance(data, str) else data) or [])
+
+    # --- interventions (migration 0015) -------------------------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        with _operation("fetch_interventions"):
+            res = self._db().rpc("pond_interventions_since", {
+                "p_pond_id": user_id, "p_since": since.isoformat() if since is not None else None,
+            }).execute()
+            data = res.data
+            return list((json.loads(data) if isinstance(data, str) else data) or [])
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        with _operation("backfill_intervention_event_ids"):
+            res = self._db().rpc("backfill_intervention_event_ids", {"p_pond_id": user_id}).execute()
+            return int(res.data or 0)
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:

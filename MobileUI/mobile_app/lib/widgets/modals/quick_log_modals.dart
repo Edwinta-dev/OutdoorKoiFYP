@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/pond_data_source.dart';
 import '../../utils/digital_twin_api.dart';
+import '../../utils/event_id.dart';
 
 /// The live write behind PondDataSource.insertIntervention. It lives next
 /// to the payload built in _InterventionLogSheetState._save so the schema
@@ -190,8 +191,12 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         _min,
       );
 
+      // One id for the row and the post, so the twin applies the event
+      // once however it arrives (the post, a retry or its poller).
+      final eventId = newEventId();
       final Map<String, dynamic> payload = {
         'userID': userId,
+        'event_id': eventId,
         'event_type': widget.eventType,
         'event_timestamp': timestamp.toIso8601String(),
       };
@@ -228,6 +233,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         source,
         userId: userId,
         timestamp: timestamp,
+        eventId: eventId,
         volumePercent: volumePercent,
         volumeLitres: volumeLitres,
         foodGrams: foodGrams,
@@ -266,6 +272,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     PondDataSource source, {
     required int userId,
     required DateTime timestamp,
+    required String eventId,
     double? volumePercent,
     double? volumeLitres,
     double? foodGrams,
@@ -280,6 +287,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           foodGrams: foodGrams ?? 0.0,
           proteinPercent: proteinPercent ?? 40.0,
           timestamp: timestamp,
+          eventId: eventId,
           fishType: fishType,
           fishCount: fishCount,
         );
@@ -289,6 +297,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           volumePercent: volumePercent,
           volumeLitres: volumeLitres,
           timestamp: timestamp,
+          eventId: eventId,
           fishType: fishType,
           fishCount: fishCount,
         );
@@ -298,6 +307,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           volumePercent: volumePercent,
           volumeLitres: volumeLitres,
           timestamp: timestamp,
+          eventId: eventId,
           fishType: fishType,
           fishCount: fishCount,
         );
@@ -306,6 +316,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           userId: userId,
           scrubType: _selectedOption,
           timestamp: timestamp,
+          eventId: eventId,
           fishType: fishType,
           fishCount: fishCount,
         );

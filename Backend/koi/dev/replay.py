@@ -2,14 +2,15 @@
 stack answers its first request with assessments already made.
 
 For each pond, at each time its node reported (oldest first), the
-interventions logged up to then are applied to the twin, then the
 poller's own pond step (koi.worker.poller._poll_user) runs at that time.
-The step reads the sensor rows, bundled payload, camera frames and feeds
-through ReplayStorage, which answers them from the seed as they stood at
-that time, so the engines never see a reading or a frame from their
-future.
+The step reads the sensor rows, bundled payload, camera frames, feeds and
+interventions through ReplayStorage, which answers them from the seed as
+they stood at that time, so the engines never see a reading, a frame or
+an event from their future. The interventions logged up to then are
+applied by the step's own reconciliation (issue #19), as the worker
+applies events whose post never reached the twin.
 
-ReplayStorage keeps the twin's snapshot, the sensor ingest ledger and
+ReplayStorage keeps the twin's snapshot (with its event ledger), the sensor ingest ledger and
 the evaluation rows to itself during the run and writes them to the real
 storage once at the end: the snapshot (against the version found at the
 start) with every sensor row ingested, and the last evaluation of each
@@ -28,8 +29,7 @@ from typing import Any, Optional
 
 from koi.dev.seed import SeedHistory
 from koi.logs import log_event
-from koi.models.engine import PondEvent
-from koi.models.pond_twin import PondTwin
+from koi.models.event_ledger import derived_event_id
 from koi.registry import EngineRegistry
 from koi.settings import Settings
 from koi.storage import Storage
@@ -89,6 +89,27 @@ class ReplayStorage:
         return {"cursor": watermark, "scan_from": scan_from.isoformat() if scan_from else None,
                 "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
                           "created_at": r["created_at"]} for r in rows[:limit]]}
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        """sensor_ingest_history over the seed, with this run's ledger."""
+        times = {int(e["sensor_row_id"]): parse_timestamp(e["effective_sample_time"])
+                 for e in self._ledger.get(user_id, [])}
+        rows = [r for r in self._history.sensor_rows(user_id)
+                if int(r["id"]) in times and r.get("sensor_type") in sensor_types
+                and (after is None or times[int(r["id"])] > after) and times[int(r["id"])] <= until]
+        rows.sort(key=lambda r: (times[int(r["id"])], int(r["id"])))
+        return [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                 "created_at": r["created_at"]} for r in rows]
+
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        """pond_interventions_since over the seed: the rows logged by now,
+        each with its event_id (the derived one when the seed has none)."""
+        return [{**r, "event_id": r.get("event_id") or derived_event_id(r["id"])}
+                for r in self._history.interventions(user_id, self._now(), since)]
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        return 0  # fetch_interventions already gives every seed row its event_id
 
     # --- snapshot, kept here until flush -------------------------------
     def _version(self, user_id: int) -> int:
@@ -159,14 +180,6 @@ class PondReplay:
     skip_reasons: list[str] = field(default_factory=list)
 
 
-def _apply(registry: EngineRegistry, pond: int, event: PondEvent, at: datetime) -> None:
-    """Applies one logged intervention, as the event endpoints do."""
-    def apply(twin: PondTwin) -> None:
-        twin.apply_event(event, now=at)
-
-    registry.with_twin(pond, apply, profiles=registry.profile_history(pond))
-
-
 def fast_forward(storage: Storage, tables: dict[str, list[dict]], settings: Settings,
                  ponds: Optional[list[int]] = None) -> list[PondReplay]:
     """Replays the seed's history (already shifted, koi.dev.seed.shift)
@@ -181,15 +194,12 @@ def fast_forward(storage: Storage, tables: dict[str, list[dict]], settings: Sett
         if ponds is not None and pond not in ponds:
             continue
         result = PondReplay(pond)
-        events = history.events(pond)
         applied = 0
         for at in history.poll_times(pond):
-            while applied < len(events) and events[applied].time <= at:
-                _apply(registry, pond, events[applied], at)
-                applied += 1
             replay.at = at
             try:
-                poller._poll_user(registry, pond, config, now=at)
+                polled = poller._poll_user(registry, pond, config, now=at)
+                applied += (polled.events or {}).get("applied", 0)
                 result.polls_ok += 1
             except poller.PondSkipped as exc:
                 result.polls_skipped += 1

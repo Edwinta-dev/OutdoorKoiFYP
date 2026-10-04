@@ -46,9 +46,9 @@ from koi.logs import log_event
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.hypoxia import HypoxiaThresholds
-from koi.models.pond_twin import PondTwin
+from koi.models.pond_twin import PondTwin, SensorHistory
 from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
-from koi.models.sensor_inputs import IngestConfig
+from koi.models.sensor_inputs import SENSOR_TYPES, IngestConfig, group_rows
 from koi.storage import StaleSnapshotError, Storage
 
 log = logging.getLogger(__name__)
@@ -91,6 +91,15 @@ class EngineRegistry:
             return ProfileHistory([profile_from_row(r) for r in rows])
         config = self.storage.fetch_pond_config(user_id)
         return ProfileHistory([profile_from_userdata_config(config)]) if config is not None else None
+
+    def sensor_history(self, user_id: int) -> SensorHistory:
+        """What the twin reads back to replay (PondTwin._replay): the
+        pond's ledgered sensor rows with an effective sample time in
+        (after, until], grouped into inputs as the poller groups them."""
+        def history(after: Optional[datetime], until: datetime) -> list:
+            rows = self.storage.fetch_ingested_sensor_rows(user_id, SENSOR_TYPES, after, until)
+            return group_rows(rows).inputs
+        return history
 
     def _load_or_create(
         self,

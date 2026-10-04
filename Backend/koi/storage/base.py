@@ -111,6 +111,27 @@ class Storage(Protocol):
         at start when the pond has no cursor (None: every row)."""
         ...
 
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        """The pond's SensorData rows already in the ingest ledger with an
+        effective sample time in (after, until] (after None: no lower
+        bound), as [{id, sensor_type, value, created_at}] in that order
+        (sensor_ingest_history, migration 0015). What a replay reads back."""
+        ...
+
+    # --- interventions (pondInterventions, migration 0015) -------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        """The pond's rows with event_timestamp at or after since (None:
+        all), INTERVENTION_COLUMNS, ordered by event_timestamp, id
+        (pond_interventions_since). Only this pond's rows."""
+        ...
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        """Gives the pond's rows with a null event_id the UUID derived from
+        their id (backfill_intervention_event_ids); returns how many.
+        Deterministic, so a retry gives the same UUIDs."""
+        ...
+
     # --- worker lease (worker_lease) ----------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
         """Takes the named lease if it is free or expired, or renews it if
@@ -298,6 +319,10 @@ IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL",
 # camera_config and camera_mask_version columns (migration 0010).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
+
+# pondInterventions columns the ledger reads (event_id: migration 0015).
+INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
+                        "food_grams", "protein_percentage", "algae_method", "created_at")
 
 # pond_profile's columns (migration 0008).
 PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",

@@ -277,17 +277,24 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
 
 
 def _handle_event(event: PondEvent, body: schemas.EventBody):
-    """Shared path for every /events/* endpoint: apply across all engines
-    under the lock, re-assess, push, return."""
+    """Shared path for every /events/* endpoint: record the event in the
+    pond's ledger under the lock (applied once per event_id, replayed into
+    its place when it is in the past; koi/models/event_ledger.py),
+    re-assess, push, return. A repeated event_id changes nothing and
+    returns the current assessments."""
     user_id = body.user_id
     _require_pond(user_id)
     _, ctx = _environment_for(user_id)
+    registry = _registry()
+    history = registry.sensor_history(user_id)
 
     def mutate(twin):
-        twin.apply_event(event)
-        return _recompute_and_push(user_id, twin, ctx)
+        outcome = twin.record_event(body.event_id, event, now=datetime.now(timezone.utc), history=history)
+        log_event(log, "event_recorded", pond_id=user_id, event_id=outcome["event_id"], status=outcome["status"],
+                  replayed=outcome["replayed"], placed_late=outcome["placed_late"])
+        return {**_recompute_and_push(user_id, twin, ctx), "event": outcome}
 
-    return _registry().with_twin(user_id, mutate, profiles=_profiles_for(user_id))
+    return registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
 
 # ===================================================================

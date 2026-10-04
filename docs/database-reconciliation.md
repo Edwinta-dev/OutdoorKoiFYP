@@ -162,7 +162,8 @@ No code reads it. Every other column matches.
 |---|---|---|---|---|
 | Numeric columns | `numeric` | `double precision` | E | #5 |
 | PK and sequence names | `pondinterventions_pkey`, `pondinterventions_id_seq` (lower case) | defaults | E | #5 |
-| Index on `("userID", event_type, event_timestamp desc)` | absent | present | R. Wanted for the graph RPC; re-add as N. | #19 |
+| Index on `("userID", event_type, event_timestamp desc)` | absent | present | R. Wanted for the graph RPC; re-added as N by `0015` (`idx_pondinterventions_user_type_time`). | #19 |
+| `event_id uuid` | absent | absent | N (`0015`): nullable, unique, default `gen_random_uuid()`; existing rows backfilled with `intervention_event_id(id)`. | #19 |
 
 ### 5.7 `imageTable`
 

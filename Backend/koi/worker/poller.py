@@ -49,6 +49,25 @@ older than two of the node's expected upload intervals
 (Settings.sensor_cadence_minutes), measured from the reading's own time.
 
 --------------------------------------------------------------------
+EVERY LOGGED EVENT ONCE (issue #19)
+--------------------------------------------------------------------
+The app writes each intervention to pondInterventions and then posts it
+to the twin; if the post failed, the model never saw it. Each cycle now
+gives any of the pond's rows without an event_id the UUID derived from
+its id (Storage.backfill_intervention_event_ids), reads the rows of the
+last 30 days (Storage.fetch_interventions) and, inside the pond's lock
+and before the sensor inputs, hands them to PondTwin.reconcile_events:
+a row whose event_id is not in the twin's ledger is applied, an edited
+row is re-applied and a deleted one removed, with a replay of the
+chemistry engine when that is in the past (koi/models/event_ledger.py).
+The ledger is part of the snapshot, so a cycle that fails before the
+save leaves the ledger as it was and the next cycle does the same work;
+the backfill is deterministic, so repeating it changes nothing. If the
+rows cannot be read, the cycle goes on without reconciling and says so
+in its report. Sensor inputs at or before an event already applied are
+replayed into their place in the same way.
+
+--------------------------------------------------------------------
 THE CYCLE REPORT
 --------------------------------------------------------------------
 After each cycle the active worker writes one worker_status row
@@ -57,7 +76,9 @@ long it took, each pond's result ("ok", "skipped" when the pond has no
 sensor reading at all, "failed" when polling raised), each pond's
 failure count since the worker started, the time of its newest sensor
 reading and "sensor": what the cycle ingested (inputs, late inputs, time
-basis) and each channel's reading time, age and freshness. The API's /ready and /metrics read that row,
+basis) and each channel's reading time, age and freshness, and "events": what
+reconciliation did (counts of applied, revised, deleted and skipped
+rows, and whether it replayed). The API's /ready and /metrics read that row,
 because the worker usually runs in another process. last_success_at
 moves forward when a cycle completes and either no pond failed or at
 least one pond was advanced, so one broken pond does not mark the whole
@@ -103,6 +124,7 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import forecast_utils
 from koi.models.engine import WaterChemistryEngine
+from koi.models.event_ledger import WINDOW
 from koi.models.hypoxia import assess_hypoxia
 from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
@@ -144,13 +166,15 @@ class PondSkipped(Exception):
 class PollResult(str):
     """What _poll_user returns: the time of the pond's newest sensor
     reading (a str, as before), with the cycle's ingestion report in
-    .sensor."""
+    .sensor and its event reconciliation report in .events."""
 
     sensor: dict
+    events: Optional[dict]
 
-    def __new__(cls, recorded_at: str, sensor: dict) -> "PollResult":
+    def __new__(cls, recorded_at: str, sensor: dict, events: Optional[dict] = None) -> "PollResult":
         result = super().__new__(cls, recorded_at)
         result.sensor = sensor
+        result.events = events
         return result
 
 
@@ -256,6 +280,8 @@ def _poll_user_safely(registry: EngineRegistry, row: dict) -> tuple[str, dict]:
                               "sensor_recorded_at": str(polled) if isinstance(polled, str) and polled else None}
     if isinstance(polled, PollResult):
         result["sensor"] = polled.sensor
+        if polled.events is not None:
+            result["events"] = polled.events
     return str(user_id), result
 
 
@@ -343,6 +369,10 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         log_event(log, "feeding_history_unavailable", level=logging.WARNING, error=str(exc))
     avg_tan = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
 
+    # --- logged interventions of the window, for reconciliation ----
+    intervention_rows = _intervention_rows(registry, user_id, now)
+    history = registry.sensor_history(user_id)
+
     commit: dict[str, Optional[dict]] = {}
 
     def cycle(twin):
@@ -353,7 +383,11 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         # has an ingest time) even with no channel readings recorded.
         if not discovery.inputs and not twin.sensor_channels and twin.chemistry._last_ingest_time is None:
             raise PondSkipped("no sensor reading for this pond yet")
-        provenance, sensor_warnings = twin.ingest_sensor_inputs(discovery.inputs)
+        # Events first: one logged since the last cycle usually falls
+        # before this cycle's readings, so both go in in order.
+        events = (_events_report(twin.reconcile_events(intervention_rows, now=now, history=history))
+                  if intervention_rows is not None else {"reconciled": False})
+        provenance, sensor_warnings = twin.ingest_sensor_inputs(discovery.inputs, history=history, now=now)
 
         # The newest reading of each channel, used while it is fresh. A
         # stale or missing water temperature is not measured: the air
@@ -394,6 +428,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         outcome["sensor"] = {
             "inputs": len(provenance),
             "late_inputs": sum(1 for p in provenance if p["late"]),
+            "replayed_inputs": sum(1 for p in provenance if p.get("replayed")),
             "rows": len(discovery.ledger),
             "time_basis": sorted({p["time_basis"] for p in provenance}) or [TIME_BASIS_INGESTION],
             "newest_input_at": provenance[-1]["time"] if provenance else None,
@@ -450,6 +485,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
             thresholds=registry.hypoxia_thresholds,
         )
 
+        outcome["events"] = events
         return outcome["chemistry"], evap_assessment, algae_assessment, outcome
 
     chem, evap, algae, outcome = registry.with_twin(user_id, cycle, profiles=profiles,
@@ -471,9 +507,32 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
               evaporation=evap.status if evap else None, algae=algae.status if algae else None,
               hypoxia=hypoxia.level, hypoxia_raised_by=hypoxia.raised_by,
               new_camera_frames=outcome.get("assimilated_camera_frames", 0),
-              sensor_inputs=sensor["inputs"], late_sensor_inputs=sensor["late_inputs"])
+              sensor_inputs=sensor["inputs"], late_sensor_inputs=sensor["late_inputs"],
+              events_applied=outcome["events"].get("applied", 0), events_replayed=outcome["events"].get("replayed"))
     times = [c["reading_at"] for c in sensor["channels"].values() if c["reading_at"]]
-    return PollResult(max(times, key=parse_timestamp) if times else "", sensor)
+    return PollResult(max(times, key=parse_timestamp) if times else "", sensor, outcome["events"])
+
+
+def _intervention_rows(registry: EngineRegistry, user_id: int, now: datetime) -> Optional[list[dict]]:
+    """The pond's pondInterventions rows of the last WINDOW, after giving
+    any without an event_id its derived one; None when they cannot be
+    read (the cycle then does not reconcile)."""
+    storage = registry.storage
+    fail_soft(lambda: storage.backfill_intervention_event_ids(user_id), 0)
+    return fail_soft(lambda: storage.fetch_interventions(user_id, since=now - WINDOW), None)
+
+
+def _events_report(report: dict) -> dict:
+    """The cycle report's "events": counts, and the event_ids that were
+    changed or could not be replayed."""
+    out: dict[str, Any] = {"reconciled": True, "replayed": report["replayed"],
+                           "replayed_from": report["replayed_from"], "skipped": len(report["skipped"])}
+    for key in ("applied", "claimed", "revised", "deleted", "restored", "not_replayable"):
+        out[key] = len(report[key])
+    for key in ("revised", "deleted", "not_replayable"):
+        if report[key]:
+            out[f"{key}_ids"] = list(report[key])
+    return out
 
 
 # ---------------------------------------------------------------
