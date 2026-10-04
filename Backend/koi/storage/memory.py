@@ -39,12 +39,14 @@ from koi.storage.base import (
     IMAGE_COLUMNS,
     INTERVENTION_COLUMNS,
     PROFILE_COLUMNS,
+    PROVENANCE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
     StorageError,
     daily_stats,
     parse_timestamp,
     pond_config_from_userdata_row,
+    with_provenance,
 )
 from koi.weather import cache as weather_cache
 from koi.weather import history as weather_history
@@ -62,15 +64,16 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_chemistry_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "tan_ppm", "no2_ppm", "no3_ppm",
         "ph_reactivity", "reactivity_trend", "tds_trend", "sensor_warnings", "advisory",
-        "add_hardener_now"),
+        "add_hardener_now", *PROVENANCE_COLUMNS),
     "pond_evaporation_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "loss_litres", "loss_pct",
         "evaporation_mm_per_day", "loss_litres_per_day", "water_temp_c", "feed_cap_grams",
-        "feed_note", "days_to_topup", "advisory", "topup_now"),
+        "feed_note", "days_to_topup", "advisory", "topup_now", *PROVENANCE_COLUMNS),
     "pond_algae_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "green_ratio", "watch_threshold",
         "action_threshold", "threshold_mode", "growth_rate_per_day", "intrinsic_rate_per_day",
-        "rate_source", "confidence", "sample_count", "days_to_scrub", "advisory", "scrub_now"),
+        "rate_source", "confidence", "sample_count", "days_to_scrub", "advisory", "scrub_now",
+        *PROVENANCE_COLUMNS),
     "algae_severity_ratings": (
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
@@ -260,7 +263,7 @@ class MemoryStorage:
     def _latest(self, operation: str, table: str, user_id: int) -> Optional[dict]:
         self._check(operation)
         rows = self._select(table, user_id, newest_first_by="evaluated_at", limit=1)
-        return rows[0] if rows else None
+        return with_provenance(rows[0]) if rows else None
 
     def _append(self, operation: str, table: str, user_id: int, assessment: dict) -> None:
         self._check(operation)

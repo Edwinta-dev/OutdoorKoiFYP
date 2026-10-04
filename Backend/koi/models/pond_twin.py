@@ -624,6 +624,15 @@ class PondTwin:
             log.warning("no3_projection_unavailable", extra={"error": str(exc)})
             return []
 
+    def input_cutoff(self) -> Optional[datetime]:
+        """The newest input time this twin has consumed: the latest of its
+        sensor sample times, logged event times (both in model time, the
+        ledger's newest_input_at) and camera frame times. None before any
+        input. Recorded on evaluation rows (koi/provenance.py)."""
+        times = (self.ledger.newest_input_at, self.last_input_at, self.chemistry._last_ingest_time,
+                 self.algae._last_camera_time)
+        return max((as_aware(t) for t in times if t is not None), default=None)
+
     # ==========================================================
     # Snapshot
     # ==========================================================

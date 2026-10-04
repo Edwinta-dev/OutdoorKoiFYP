@@ -2220,6 +2220,40 @@ components:
           - type: 'null'
           default: null
           title: Userid
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that made the assessment: the package version, plus +g<commit>
+            when known. null on a row stored before provenance was recorded (unknown).'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC),
+            as distinct from evaluated_at, when it was computed. null when unknown or before any input.
+          title: Input Cutoff
+        forecast_issued_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Weather provider's issue time of the forecast used, when every forecast record
+            used shares it; null when unknown or mixed (see inputs.forecasts).
+          title: Forecast Issued At
+        inputs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          description: 'What the run applied: run, sensor_groups, events, camera_frames, ratings, and
+            per forecast product its cache records with their issue times. null on a row stored before
+            provenance was recorded.'
+          title: Inputs
         green_ratio:
           anyOf:
           - type: number
@@ -2392,6 +2426,22 @@ components:
     AlgaeForecast:
       additionalProperties: true
       properties:
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that computed the forecast: the package version, plus +g<commit>
+            when known.'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC);
+            null before any input.
+          title: Input Cutoff
         trajectory:
           items:
             $ref: '#/components/schemas/AlgaeDay'
@@ -3258,6 +3308,40 @@ components:
           - type: 'null'
           default: null
           title: Userid
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that made the assessment: the package version, plus +g<commit>
+            when known. null on a row stored before provenance was recorded (unknown).'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC),
+            as distinct from evaluated_at, when it was computed. null when unknown or before any input.
+          title: Input Cutoff
+        forecast_issued_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Weather provider's issue time of the forecast used, when every forecast record
+            used shares it; null when unknown or mixed (see inputs.forecasts).
+          title: Forecast Issued At
+        inputs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          description: 'What the run applied: run, sensor_groups, events, camera_frames, ratings, and
+            per forecast product its cache records with their issue times. null on a row stored before
+            provenance was recorded.'
+          title: Inputs
         loss_litres:
           anyOf:
           - type: number
@@ -3372,6 +3456,22 @@ components:
     EvaporationForecast:
       additionalProperties: true
       properties:
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that computed the forecast: the package version, plus +g<commit>
+            when known.'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC);
+            null before any input.
+          title: Input Cutoff
         trajectory:
           items:
             $ref: '#/components/schemas/EvaporationDay'
@@ -4617,6 +4717,40 @@ components:
           - type: 'null'
           default: null
           title: Userid
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that made the assessment: the package version, plus +g<commit>
+            when known. null on a row stored before provenance was recorded (unknown).'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC),
+            as distinct from evaluated_at, when it was computed. null when unknown or before any input.
+          title: Input Cutoff
+        forecast_issued_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Weather provider's issue time of the forecast used, when every forecast record
+            used shares it; null when unknown or mixed (see inputs.forecasts).
+          title: Forecast Issued At
+        inputs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          description: 'What the run applied: run, sensor_groups, events, camera_frames, ratings, and
+            per forecast product its cache records with their issue times. null on a row stored before
+            provenance was recorded.'
+          title: Inputs
         tan_ppm:
           anyOf:
           - type: number
@@ -4681,6 +4815,22 @@ components:
     WaterChemistryForecast:
       additionalProperties: true
       properties:
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'Backend version that computed the forecast: the package version, plus +g<commit>
+            when known.'
+          title: Model Version
+        input_cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Newest sensor sample, event or camera frame time the model had taken in (UTC);
+            null before any input.
+          title: Input Cutoff
         trajectory:
           items:
             $ref: '#/components/schemas/ForecastDay'

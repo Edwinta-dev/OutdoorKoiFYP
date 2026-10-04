@@ -79,6 +79,7 @@ from koi.models import forecast_utils
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
+from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
 
@@ -147,7 +148,8 @@ def _profiles_for(user_id: int) -> Optional[ProfileHistory]:
 def _environment_for(user_id: int):
     """Fetches the bundled payload once and derives everything the
     engines need from it. Returns (payload, context) where context holds
-    the live conditions, forecast days and rain flags."""
+    the live conditions, forecast days, rain flags and the payload itself
+    (for the forecast provenance of evaluation rows)."""
     payload = _storage().fetch_dashboard_payload(user_id) or {}
     now_conditions = forecast_utils.current_conditions(payload)
     rain_incoming, rain_intensity = forecast_utils.today_rain_context(payload)
@@ -158,6 +160,7 @@ def _environment_for(user_id: int):
         "rain_incoming": rain_incoming,
         "rain_intensity": rain_intensity,
         "forecast_days": forecast_days,
+        "payload": payload,
     }
 
 
@@ -213,10 +216,13 @@ def _algae_env(ctx, baseline_lux, baseline_temp, no3_series, no3_now) -> list:
     return env
 
 
-def _recompute_and_push(user_id: int, twin, ctx) -> dict:
+def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, ratings: int = 0) -> dict:
     """Re-assesses all three domains after a mutation and pushes a fresh
     evaluation row for each, so the UI reflects a just-logged event
-    without waiting for the next poll cycle.
+    without waiting for the next poll cycle. Each row, and each assessment
+    returned, carries the run's provenance (koi/provenance.py): run names
+    the endpoint ("event", "rating", "rating_undo") and events and ratings
+    count what it applied.
 
     Called INSIDE the twin lock. The storage writes happen here rather
     than after the lock releases because the caller needs the resulting
@@ -230,13 +236,18 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
     now = ctx["now"]
     water_temp = _first(now.get("water_temp_c"), 28.0)
     lux_now = _first(now.get("lux"), 10000.0)
+    provenance = RunProvenance(
+        run=run, input_cutoff=twin.input_cutoff(),
+        forecasts=forecast_provenance(ctx.get("payload"),
+                                      fail_soft(lambda: _storage().fetch_dashboard_sources(user_id), None)),
+        events=events, ratings=ratings)
 
     # --- chemistry ---
-    chem = twin.chemistry.assess(
+    chem = provenance.stamp(CHEMISTRY, twin.chemistry.assess(
         rain_incoming=ctx["rain_incoming"],
         rain_intensity=ctx["rain_intensity"],
-    )
-    _storage().push_evaluation(user_id, chem.to_dict())
+    ).to_dict())
+    _storage().push_evaluation(user_id, chem)
 
     # --- evaporation ---
     evap_days = None
@@ -246,10 +257,10 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
         ).get("predicted_topup_days_from_now")
     except Exception as exc:  # noqa: BLE001
         log_event(log, "evaporation_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
-    evap = twin.evaporation.assess(
+    evap = provenance.stamp(EVAPORATION, twin.evaporation.assess(
         current_water_temp_c=float(water_temp), days_to_topup=evap_days
-    )
-    fail_soft(lambda: _storage().push_evaporation_evaluation(user_id, evap.to_dict()), None)
+    ).to_dict())
+    fail_soft(lambda: _storage().push_evaporation_evaluation(user_id, evap), None)
 
     # --- algae ---
     algae_dict = None
@@ -266,12 +277,12 @@ def _recompute_and_push(user_id: int, twin, ctx) -> dict:
             log_event(log, "algae_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
         algae = twin.algae.assess(days_to_scrub=algae_days)
         if algae is not None:
-            algae_dict = algae.to_dict()
+            algae_dict = provenance.stamp(ALGAE, algae.to_dict())
             fail_soft(lambda: _storage().push_algae_evaluation(user_id, algae_dict), None)
 
     return {
-        "chemistry": chem.to_dict(),
-        "evaporation": evap.to_dict(),
+        "chemistry": chem,
+        "evaporation": evap,
         "algae": algae_dict,
     }
 
@@ -292,7 +303,8 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         outcome = twin.record_event(body.event_id, event, now=datetime.now(timezone.utc), history=history)
         log_event(log, "event_recorded", pond_id=user_id, event_id=outcome["event_id"], status=outcome["status"],
                   replayed=outcome["replayed"], placed_late=outcome["placed_late"])
-        return {**_recompute_and_push(user_id, twin, ctx), "event": outcome}
+        applied = 1 if outcome["status"] == "applied" else 0
+        return {**_recompute_and_push(user_id, twin, ctx, "event", events=applied), "event": outcome}
 
     return registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id))
 
@@ -434,7 +446,7 @@ def log_algae_rating(user_id: Optional[int] = None):
             image_id=image_row.get("id") if image_row else None,
             rating_id=rating_id,
         )
-        assessments = _recompute_and_push(user_id, twin, ctx)
+        assessments = _recompute_and_push(user_id, twin, ctx, "rating", ratings=1)
         summary["assessments"] = assessments
         return summary
 
@@ -475,7 +487,7 @@ def undo_algae_rating(user_id: Optional[int] = None):
         ok = twin.undo_severity_rating(rating_id)
         if not ok:
             return {"undone": False}
-        assessments = _recompute_and_push(user_id, twin, ctx)
+        assessments = _recompute_and_push(user_id, twin, ctx, "rating_undo")
         return {
             "undone": True,
             "green_ratio": twin.algae.green_ratio,
@@ -628,6 +640,12 @@ def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
 # Forecast reads (detail graph screens) - live, read-only
 # ===================================================================
 
+def _provenance(cutoff: Optional[datetime]) -> dict:
+    """model_version and input_cutoff of a live forecast, as on the
+    evaluation rows (koi/provenance.py)."""
+    return {"model_version": model_version(), "input_cutoff": cutoff.isoformat() if cutoff else None}
+
+
 @route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", legacy="/forecast/<int:user_id>",
        summary="Water chemistry lookahead", tag="forecasts", query=schemas.ForecastQuery,
        response=res.WaterChemistryForecast, errors=(400, 422, *POND_ERRORS))
@@ -674,11 +692,12 @@ def get_forecast(user_id):
             fallback_temp_c=temp_stats["avg"],
             fallback_lux=fallback_lux,
             horizon_days=horizon_days,
-        )
+        ), twin.input_cutoff()
 
-    result = _registry().with_twin(
+    result, cutoff = _registry().with_twin(
         user_id, run, profiles=_profiles_for(user_id), persist=False
     )
+    result.update(_provenance(cutoff))
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
     result["temp_baseline"] = temp_stats
     result["lux_baseline"] = lux_stats
@@ -708,16 +727,17 @@ def get_evaporation_forecast(user_id):
         try:
             return twin.evaporation.project_forward(
                 daily_environment=env, horizon_days=query.horizon_days
-            )
+            ), twin.input_cutoff()
         finally:
             twin.evaporation.config = stored
 
-    result = _registry().with_twin(
+    result, cutoff = _registry().with_twin(
         user_id,
         run,
         profiles=_profiles_for(user_id),
         persist=False,
     )
+    result.update(_provenance(cutoff))
 
     # Grounding cross-check against the measured TDS trend - two
     # independent sources, so agreement is real corroboration.
@@ -793,17 +813,18 @@ def get_algae_forecast(user_id):
             projection["scrub_benefit"] = twin.algae.project_scrub_benefit(
                 daily_environment=env, horizon_days=horizon_days
             )
-        return projection, assimilated
+        return projection, assimilated, twin.input_cutoff()
 
     # persist=True here: unlike the other forecast endpoints this one can
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
-    result, assimilated = _registry().with_twin(
+    result, assimilated, cutoff = _registry().with_twin(
         user_id, run, profiles=_profiles_for(user_id), persist=True
     )
 
     if "error" in result:
         raise ApiError(result.get("detail") or result["error"], status=422, code=result["error"])
+    result.update(_provenance(cutoff))
 
     result["assimilated_camera_frames"] = assimilated
     image_rows = _storage().fetch_image_history(user_id, limit=1)

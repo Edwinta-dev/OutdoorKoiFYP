@@ -58,6 +58,18 @@ class _Assessment(_Open):
     evaluated_at: Optional[str] = Field(default=None, description="Set on a stored evaluation row.")
     id: Optional[int] = None
     userid: Optional[int] = None
+    model_version: Optional[str] = Field(default=None, description=(
+        "Backend version that made the assessment: the package version, plus +g<commit> when known. null on a "
+        "row stored before provenance was recorded (unknown)."))
+    input_cutoff: Optional[str] = Field(default=None, description=(
+        "Newest sensor sample, event or camera frame time the model had taken in (UTC), as distinct from "
+        "evaluated_at, when it was computed. null when unknown or before any input."))
+    forecast_issued_at: Optional[str] = Field(default=None, description=(
+        "Weather provider's issue time of the forecast used, when every forecast record used shares it; null "
+        "when unknown or mixed (see inputs.forecasts)."))
+    inputs: Optional[dict[str, Any]] = Field(default=None, description=(
+        "What the run applied: run, sensor_groups, events, camera_frames, ratings, and per forecast product its "
+        "cache records with their issue times. null on a row stored before provenance was recorded."))
 
 
 class WaterChemistryAssessment(_Assessment):
@@ -171,7 +183,14 @@ class ForecastDay(_Open):
     lux_assumed: Optional[float] = None
 
 
-class WaterChemistryForecast(_Open):
+class _ForecastProvenance(_Open):
+    model_version: Optional[str] = Field(default=None, description=(
+        "Backend version that computed the forecast: the package version, plus +g<commit> when known."))
+    input_cutoff: Optional[str] = Field(default=None, description=(
+        "Newest sensor sample, event or camera frame time the model had taken in (UTC); null before any input."))
+
+
+class WaterChemistryForecast(_ForecastProvenance):
     trajectory: list[ForecastDay]
     first_watch_days_from_now: Optional[int] = None
     first_high_risk_days_from_now: Optional[int] = None
@@ -202,7 +221,7 @@ class TdsCrossCheck(_Open):
     predicted_tds_slope_ppm_per_day: Optional[float] = None
 
 
-class EvaporationForecast(_Open):
+class EvaporationForecast(_ForecastProvenance):
     trajectory: list[EvaporationDay]
     predicted_topup_days_from_now: Optional[int] = None
     first_watch_days_from_now: Optional[int] = None
@@ -246,7 +265,7 @@ class CameraDriftVerdict(_Open):
     samples: Optional[int] = None
 
 
-class AlgaeForecast(_Open):
+class AlgaeForecast(_ForecastProvenance):
     trajectory: list[AlgaeDay]
     current_green_ratio: Optional[float] = None
     predicted_scrub_days_from_now: Optional[int] = None

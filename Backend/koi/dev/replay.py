@@ -56,6 +56,10 @@ class ReplayStorage:
         # Sensor rows ingested during the run, and each pond's watermark.
         self._ledger: dict[int, list[dict]] = {}
         self._watermarks: dict[int, str] = {}
+        # Each pond's dashboard sources, read once: the evaluation
+        # provenance takes forecast issue times from them, and only where
+        # a cache row's data is the data a step read (koi/provenance.py).
+        self._sources: dict[int, Optional[dict]] = {}
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._storage, name)
@@ -143,6 +147,11 @@ class ReplayStorage:
             if mark and (old is None or parse_timestamp(mark) > parse_timestamp(old)):
                 self._watermarks[user_id] = mark
         return version
+
+    def fetch_dashboard_sources(self, user_id: int) -> dict:
+        if user_id not in self._sources:
+            self._sources[user_id] = self._storage.fetch_dashboard_sources(user_id)
+        return self._sources[user_id] or {}
 
     # --- evaluations, last of each kind kept until flush ---------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:

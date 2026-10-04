@@ -324,6 +324,18 @@ CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
                         "food_grams", "protein_percentage", "algae_method", "created_at")
 
+# Provenance columns of the three evaluation tables (migration 0016).
+# Every evaluation push carries all four (koi/provenance.py); rows written
+# before 0016 read them as null.
+PROVENANCE_COLUMNS = ("model_version", "input_cutoff", "forecast_issued_at", "inputs")
+
+
+def with_provenance(row: Optional[dict]) -> Optional[dict]:
+    """A stored evaluation row with every provenance column present: a row
+    written before migration 0016 (or read before it is applied) has
+    null, meaning unknown, in each."""
+    return None if row is None else {**{c: None for c in PROVENANCE_COLUMNS}, **row}
+
 # pond_profile's columns (migration 0008).
 PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",
                    "fish_count", "tap_tds_ppm", "tap_nitrate_ppm", "aeration", "source", "created_at")

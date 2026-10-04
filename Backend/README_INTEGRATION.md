@@ -193,6 +193,34 @@ applied in its snapshot (`koi/models/event_ledger.py`, snapshot version 4):
 - Per pond: rows are read and ledgers kept per pond; the same event_id
   posted to another pond is that pond's own event.
 
+### Evaluation provenance (issue #21, migration 0016)
+
+Every row the poller and the event endpoints write to the three evaluation
+tables carries four values (`koi/provenance.py`):
+
+- `model_version`: `koi.__version__` plus `+g<commit>` when the backend
+  runs from a git checkout (`.dirty` when tracked files have uncommitted
+  changes); the package version alone otherwise.
+- `input_cutoff`: the newest sensor sample, event or camera frame time the
+  twin had consumed. `evaluated_at` stays the time the row was computed.
+- `forecast_issued_at`: NEA's issue time of the forecast used
+  (`weather_forecasts.source_issued_at`), only when every forecast record
+  the assessment used has that same time. Chemistry uses the 2-hour
+  nowcast and the 4-day outlook, evaporation the 24-hour general forecast
+  and the 4-day outlook, algae the 4-day outlook, so chemistry and
+  evaporation rows usually have null here and the per-record times in
+  `inputs.forecasts`.
+- `inputs`: the run (`poll`, `event`, `rating`, `rating_undo`), the sensor
+  groups, events, camera frames and ratings it applied, and per forecast
+  product the cache records read with their issue times. A record whose
+  cache row no longer holds the data the run read has an unknown issue
+  time.
+
+The assessment, dashboard and event responses include all four; the
+forecast responses include `model_version` and `input_cutoff`. Rows
+written before migration 0016 read null in each (unknown); they are not
+backfilled.
+
 ## Dependencies
 
 `pyproject.toml` lists direct dependencies with lower bounds.

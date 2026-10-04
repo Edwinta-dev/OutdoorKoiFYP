@@ -102,8 +102,10 @@ user actions:
     line" at all.
 
 So a poll cycle is a genuine state advancement for every engine, and
-each pushes a fresh evaluation row. The UI then reads cached assessments
-instead of triggering recomputes.
+each pushes a fresh evaluation row, stamped with the model version, the
+input cutoff, the forecast issue times and the inputs the cycle applied
+(koi/provenance.py). The UI then reads cached assessments instead of
+triggering recomputes.
 
 One APScheduler job per tick runs the cycle; within it, ponds are polled
 on a small thread pool (Settings.worker_threads, default 4). Each pond
@@ -139,6 +141,7 @@ from koi.models.sensor_inputs import (
     group_rows,
     parse_timestamp,
 )
+from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import StorageError, fail_soft
@@ -486,6 +489,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         )
 
         outcome["events"] = events
+        outcome["input_cutoff"] = twin.input_cutoff()
         return outcome["chemistry"], evap_assessment, algae_assessment, outcome
 
     chem, evap, algae, outcome = registry.with_twin(user_id, cycle, profiles=profiles,
@@ -496,12 +500,20 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     # --- push evaluations (outside the lock: storage I/O is slow and
     #     the twin is already durably snapshotted by with_twin). The
     #     evaporation and algae logs are optional: a failed write loses
-    #     one cached row, and the forecasts compute from the snapshot. ---
-    storage.push_evaluation(user_id, chem.to_dict())
+    #     one cached row, and the forecasts compute from the snapshot.
+    #     Each row carries the run's provenance (koi/provenance.py); the
+    #     forecast issue times come from the cache rows, unknown when
+    #     they cannot be read. ---
+    run = RunProvenance(
+        run="poll", input_cutoff=outcome["input_cutoff"],
+        forecasts=forecast_provenance(payload, fail_soft(lambda: storage.fetch_dashboard_sources(user_id), None)),
+        sensor_groups=sensor["inputs"], events=outcome["events"].get("applied", 0),
+        camera_frames=outcome.get("assimilated_camera_frames", 0))
+    storage.push_evaluation(user_id, run.stamp(CHEMISTRY, chem.to_dict()))
     if evap is not None:
-        fail_soft(lambda: storage.push_evaporation_evaluation(user_id, evap.to_dict()), None)
+        fail_soft(lambda: storage.push_evaporation_evaluation(user_id, run.stamp(EVAPORATION, evap.to_dict())), None)
     if algae is not None:
-        fail_soft(lambda: storage.push_algae_evaluation(user_id, algae.to_dict()), None)
+        fail_soft(lambda: storage.push_algae_evaluation(user_id, run.stamp(ALGAE, algae.to_dict())), None)
 
     log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
               evaporation=evap.status if evap else None, algae=algae.status if algae else None,

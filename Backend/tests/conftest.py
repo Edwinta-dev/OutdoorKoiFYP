@@ -74,6 +74,13 @@ ALGAE_ASSESSMENT = {
     "label_count": 3,  # in the API response, but no column in pond_algae_evaluations
 }
 
+# The provenance every evaluation push carries besides the assessment
+# (migration 0016, koi/provenance.py).
+PROVENANCE = {
+    "model_version": "0.1.0+g0123456789ab", "input_cutoff": "2026-08-20T00:00:00+00:00", "forecast_issued_at": None,
+    "inputs": {"run": "poll", "sensor_groups": 1, "events": 0, "camera_frames": 0, "ratings": 0, "forecasts": {}},
+}
+
 
 def ticking_clock(start=datetime(2026, 8, 20, tzinfo=timezone.utc)):
     """A clock that moves one second per reading, so every stored

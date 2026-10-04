@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from conftest import ALGAE_ASSESSMENT, POND_FIXTURE, USER, make_storage, ticking_clock
+from conftest import ALGAE_ASSESSMENT, POND_FIXTURE, PROVENANCE, USER, make_storage, ticking_clock
 from koi.storage import MemoryStorage, Storage, StorageError, fail_soft
 
 
@@ -43,7 +43,7 @@ def test_daily_series_is_oldest_first_and_limited_to_the_newest_days(storage):
 
 
 def test_evaluation_rows_keep_only_table_columns(storage):
-    storage.push_algae_evaluation(USER, ALGAE_ASSESSMENT)
+    storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, **PROVENANCE})
     row = storage.fetch_latest_algae_evaluation(USER)
     assert row["id"] == 1 and row["userid"] == USER and row["evaluated_at"]
     assert row["green_ratio"] == 0.03
@@ -146,7 +146,7 @@ def test_seed_rejects_unknown_tables_and_columns():
 def test_same_calls_give_the_same_state():
     def run():
         s = MemoryStorage.from_json(POND_FIXTURE, clock=ticking_clock())
-        s.push_algae_evaluation(USER, ALGAE_ASSESSMENT)
+        s.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, **PROVENANCE})
         s.insert_algae_rating(USER, "none", False, None, None, 0.01)
         s.insert_image(USER, 0.1, ["base", 0.1], "memory://x")
         return {t: s.rows(t) for t in ("pond_algae_evaluations", "algae_severity_ratings", "imageTable")}

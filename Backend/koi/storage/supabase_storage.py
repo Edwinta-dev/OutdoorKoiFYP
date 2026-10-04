@@ -15,7 +15,9 @@ Table notes (schema in supabase/migrations/):
 - The evaluation inserts copy only the columns the tables have: for
   example the chemistry assessment's risk_score and the algae
   assessment's label_count are not stored. Add a migration first to keep
-  them in the log.
+  them in the log. Each insert also carries the four provenance columns
+  of migration 0016 (koi/provenance.py), and the latest-row reads give a
+  row from before 0016 those keys as null.
 - Snapshot saves and the worker lease go through the save_pond_snapshot
   and take_worker_lease functions (migration 0002), which compare and set
   in one statement. A save that also records ingested sensor rows goes
@@ -46,6 +48,7 @@ from koi.storage.base import (
     StorageError,
     daily_stats,
     pond_config_from_userdata_row,
+    with_provenance,
 )
 
 if TYPE_CHECKING:
@@ -251,6 +254,10 @@ class SupabaseStorage:
                     "sensor_warnings": assessment["sensor_warnings"],
                     "advisory": assessment["advisory"],
                     "add_hardener_now": assessment["add_hardener_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -271,6 +278,10 @@ class SupabaseStorage:
                     "days_to_topup": assessment["days_to_topup"],
                     "advisory": assessment["advisory"],
                     "topup_now": assessment["topup_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -293,6 +304,10 @@ class SupabaseStorage:
                     "days_to_scrub": assessment["days_to_scrub"],
                     "advisory": assessment["advisory"],
                     "scrub_now": assessment["scrub_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -306,7 +321,7 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
 
     def fetch_latest_evaporation_evaluation(self, user_id: int) -> Optional[dict]:
         with _operation("fetch_latest_evaporation_evaluation"):
@@ -318,7 +333,7 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]:
         with _operation("fetch_latest_algae_evaluation"):
@@ -330,7 +345,7 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(

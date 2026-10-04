@@ -9,7 +9,16 @@ import itertools
 import pytest
 from pydantic import ValidationError
 
-from conftest import ALGAE_ASSESSMENT, DASHBOARD_PAYLOAD, USER, add_upload, api_client, make_settings, make_storage
+from conftest import (
+    ALGAE_ASSESSMENT,
+    DASHBOARD_PAYLOAD,
+    PROVENANCE,
+    USER,
+    add_upload,
+    api_client,
+    make_settings,
+    make_storage,
+)
 from koi.api import create_app
 from koi.models.engine import NIGHT_LUX_THRESHOLD
 from koi.models.hypoxia import (
@@ -212,7 +221,7 @@ def test_hypoxia_dashboard_reads_profile_and_cached_algae():
     app, storage = _app(_night_reading(30.5))
     client = api_client(app)
     client.put(f"/v1/ponds/{USER}/profile", json={"volume_l": 4000.0, "biomass_g": 12000.0, "aeration": True})
-    storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, "status": "Red", "scrub_now": True})
+    storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, **PROVENANCE, "status": "Red", "scrub_now": True})
     hypoxia = client.get(f"/assessment/all/{USER}").get_json()["hypoxia"]
     assert hypoxia["aeration"] is True and hypoxia["algae_high"] is True
     assert hypoxia["level"] == "high" and hypoxia["raised_by"] == ["high_algae"]
