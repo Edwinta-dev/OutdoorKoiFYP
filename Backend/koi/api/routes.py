@@ -74,8 +74,8 @@ from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
+from koi.models import device_health, forecast_utils
 from koi.models import evaporation_engine as ev
-from koi.models import forecast_utils
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
@@ -280,11 +280,13 @@ def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, rati
             algae_dict = provenance.stamp(ALGAE, algae.to_dict())
             fail_soft(lambda: _storage().push_algae_evaluation(user_id, algae_dict), None)
 
-    return {
+    result = {
         "chemistry": chem,
         "evaporation": evap,
         "algae": algae_dict,
     }
+    _with_confidence(user_id, result, twin=twin)
+    return result
 
 
 def _handle_event(event: PondEvent, body: schemas.EventBody):
@@ -543,6 +545,55 @@ def get_algae_ratings(user_id):
 
 
 # ===================================================================
+# Device health and data confidence (devices, migration 0018)
+# ===================================================================
+# last_seen_at is when the backend last received anything from a device;
+# each channel's last sample time comes from the engine snapshot. The
+# confidence added to every assessment returned is worked out at request
+# time from the same two, so it drops while a node is silent even though
+# the stored assessment does not change (koi/models/device_health.py).
+
+def _with_confidence(user_id: int, assessments: dict[str, Optional[dict]], twin=None,
+                     now: Optional[datetime] = None) -> None:
+    """Adds data_confidence to each assessment present, from the twin's
+    channels when given, else from the stored snapshot. Storage failures
+    leave the confidence worked out from what could be read."""
+    now = now or schemas.utc_now()
+    snapshot: Optional[dict]
+    if twin is not None:
+        snapshot = {"sensor_inputs": {"channels": twin.sensor_channels},
+                    "chemistry": twin.chemistry.to_snapshot()}
+    else:
+        snapshot = fail_soft(lambda: _storage().load_engine_snapshot(user_id), None)
+    activity = fail_soft(lambda: _storage().fetch_device_activity(user_id, now), None) or {}
+    interval = device_health.sensor_interval(activity, _registry().sensor_ingest.cadence)
+    channels = device_health.snapshot_channels(snapshot)
+    stale = device_health.snapshot_stale_flags(snapshot)
+    for domain, assessment in assessments.items():
+        if isinstance(assessment, dict):
+            assessment["data_confidence"] = device_health.assess_confidence(domain, channels, stale, interval, now)
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/devices", summary="Sensor node and camera health", tag="pond",
+       response=res.DevicesResponse, errors=POND_ERRORS)
+def get_devices(user_id):
+    """For the sensor node and the camera: when each was last seen
+    (receipt time), its expected interval, contacts received and missed
+    in the last 24 hours, and its status. For the sensor node also the
+    battery trend from battery_mv readings, the last reset reason, each
+    channel's last usable sample time and how far those times can be
+    trusted. Reads only."""
+    _require_pond(user_id)
+    now = schemas.utc_now()
+    activity = _storage().fetch_device_activity(user_id, now - device_health.WINDOW)
+    snapshot = fail_soft(lambda: _storage().load_engine_snapshot(user_id), None)
+    devices = device_health.summarize_devices(
+        activity, device_health.snapshot_channels(snapshot), device_health.snapshot_stale_flags(snapshot),
+        _registry().sensor_ingest.cadence, now)
+    return jsonify({"pond_id": user_id, "generated_at": now.isoformat(), "devices": devices}), 200
+
+
+# ===================================================================
 # Cached assessment reads (dashboard cards + alert badges)
 # ===================================================================
 
@@ -565,6 +616,7 @@ def get_latest_assessment(user_id):
     if assessment is None:
         _no_assessment(user_id, "No water chemistry assessment yet. This appears after the first poll cycle "
                                 "or the first logged event.")
+    _with_confidence(user_id, {"chemistry": assessment})
     return jsonify(assessment), 200
 
 
@@ -578,6 +630,7 @@ def get_latest_evaporation_assessment(user_id):
         _no_assessment(user_id, "No evaporation assessment yet. This appears after the first "
                                 "poll cycle, or once pond_evaporation_evaluations exists "
                                 "(apply supabase/migrations/0001_baseline.sql).")
+    _with_confidence(user_id, {"evaporation": assessment})
     return jsonify(assessment), 200
 
 
@@ -590,6 +643,7 @@ def get_latest_algae_assessment(user_id):
         _no_assessment(user_id, "No algae assessment yet. Needs at least one clean ESP32-CAM "
                                 "frame in imageTable, and pond_algae_evaluations to exist "
                                 "(apply supabase/migrations/0001_baseline.sql).")
+    _with_confidence(user_id, {"algae": assessment})
     return jsonify(assessment), 200
 
 
@@ -607,6 +661,7 @@ def get_all_assessments(user_id):
     }
     if all(a is None for a in assessments.values()):
         _require_pond(user_id)
+    _with_confidence(user_id, assessments)
     assessments["hypoxia"] = _hypoxia_now(user_id, assessments["algae"])
     return jsonify(assessments), 200
 
@@ -849,12 +904,16 @@ def get_dashboard(user_id):
         _require_pond(user_id)
     profiles = _profiles_for(user_id)
     now = schemas.utc_now()
+    assessments = {
+        "chemistry": _storage().fetch_latest_evaluation(user_id),
+        "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
+        "algae": fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
+    }
+    _with_confidence(user_id, assessments, now=now)
     dashboard = build_dashboard(
         pond_id=user_id,
         sources=sources,
-        chemistry=_storage().fetch_latest_evaluation(user_id),
-        evaporation=fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
-        algae=fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
+        **assessments,
         aeration=profiles.at(now).aeration if profiles is not None else None,
         hypoxia_thresholds=_registry().hypoxia_thresholds,
         now=now,

@@ -3,6 +3,26 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Device health and data confidence (issue #23)
+
+File: `Backend/koi/models/device_health.py`. New constants; no existing
+constant changed. Chosen by judgement, not fitted: no recorded node
+history with known outages exists yet.
+
+| Constant | Value | Rule |
+|---|---|---|
+| `WINDOW` | 24 h | Window for contacts received, missed cycles and the battery trend. |
+| `SILENT_AFTER_INTERVALS` | 3 expected intervals | Newest reading older than this: assessment confidence `low`; one channel the assessment uses this old: `reduced`. A device with nothing for this long after its last contact is `silent`. |
+| `GRACE_FRACTION` | 0.5 of the interval | A report counts as on time up to half an interval after it was due (wake-up, Wi-Fi and upload take time). |
+| `BATTERY_TREND_MV_PER_DAY` | 50 mV/day | Least-squares slope beyond this either way: `falling` or `rising`, else `steady`. |
+| `BATTERY_MIN_SAMPLES`, `BATTERY_MIN_SPAN` | 3 readings, 2 h | Fewer, or a shorter span: trend `unknown`. |
+
+The expected interval is the one configured on the `devices` row
+(`expected_interval_seconds`), else `KOI_SENSOR_CADENCE_MINUTES` for the
+sensor node and the last wake the camera was given. A channel flagged by
+the sensor gate's existing stale-run rule (`_STALE_RUN_LENGTH`, 4 equal
+values) also reduces confidence.
+
 ## Camera obstruction off-ramp (issue #80)
 
 Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/camera.py`.

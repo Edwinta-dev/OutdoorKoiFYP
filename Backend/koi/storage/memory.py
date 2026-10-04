@@ -66,6 +66,10 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
     "sensor_ingest_ledger": ("pond_id", "sensor_row_id", "sensor_type", "effective_sample_time", "time_basis",
                              "disposition", "snapshot_version", "ingested_at"),
+    # Device health (migration 0018).
+    "devices": ("pond_id", "kind", "expected_interval_seconds", "last_seen_at", "next_expected_at", "created_at",
+                "updated_at"),
+    "device_contact": ("pond_id", "kind", "received_at", "expected_next_at"),
     "worker_lease": ("name", "holder", "expires_at"),
     "worker_status": ("name", "holder", "cycle_started_at", "cycle_finished_at", "cycle_duration_sec",
                       "last_success_at", "ponds"),
@@ -125,6 +129,8 @@ USER_COLUMN = {
     "pond_chemistry_state": "user_id",
     "sensor_ingest_cursor": "pond_id",
     "sensor_ingest_ledger": "pond_id",
+    "devices": "pond_id",
+    "device_contact": "pond_id",
     "pond_chemistry_evaluations": "userid",
     "pond_evaporation_evaluations": "userid",
     "pond_algae_evaluations": "userid",
@@ -619,6 +625,69 @@ class MemoryStorage:
             return self._insert("save_camera_mask", "camera_config", [{
                 "pond_id": user_id, "mask": mask, "mask_version": version,
                 "updated_at": self._clock().isoformat()}])[0]
+
+    # --- device health --------------------------------------------------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        """The same as record_device_contacts (migration 0018)."""
+        self._check("record_device_contacts")
+        if kind not in ("sensor", "camera"):
+            raise StorageError("record_device_contacts", f"unknown device kind {kind!r}")
+        with self._lock:
+            now = self._clock()
+            keep_from = now - timedelta(days=30)
+            table = self._tables["device_contact"]
+            mine = {parse_timestamp(r["received_at"]): r for r in table
+                    if _same_user(r, "pond_id", user_id) and r["kind"] == kind}
+            newest = None
+            for c in contacts:
+                received = parse_timestamp(c["received_at"])
+                newest = received if newest is None or received > newest else newest
+                if received < keep_from or received in mine:
+                    continue
+                expected = c.get("expected_next_at")
+                expected = expected if expected is not None and parse_timestamp(expected) > received else None
+                row = {"pond_id": user_id, "kind": kind, "received_at": received.isoformat(),
+                       "expected_next_at": parse_timestamp(expected).isoformat() if expected else None}
+                table.append(row)
+                mine[received] = row
+            if newest is not None:
+                next_at = (mine.get(newest) or {}).get("expected_next_at")
+                devices = self._tables["devices"]
+                device = next((d for d in devices if _same_user(d, "pond_id", user_id) and d["kind"] == kind), None)
+                if device is None:
+                    devices.append({"pond_id": user_id, "kind": kind, "expected_interval_seconds": None,
+                                    "last_seen_at": newest.isoformat(), "next_expected_at": next_at,
+                                    "created_at": now.isoformat(), "updated_at": now.isoformat()})
+                else:
+                    old = device.get("last_seen_at")
+                    if old is None or newest >= parse_timestamp(old):
+                        device["last_seen_at"] = newest.isoformat()
+                        device["next_expected_at"] = next_at
+                    device["updated_at"] = now.isoformat()
+            table[:] = [r for r in table if not (_same_user(r, "pond_id", user_id) and r["kind"] == kind
+                                                 and parse_timestamp(r["received_at"]) < keep_from)]
+            rows = self._select("devices", user_id, kind=kind)
+            return rows[0] if rows else None
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        """The same as pond_device_activity (migration 0018)."""
+        self._check("fetch_device_activity")
+        with self._lock:
+            devices = sorted(self._select("devices", user_id), key=lambda d: d["kind"])
+            contacts = []
+            for kind in ("camera", "sensor"):
+                mine = sorted((r for r in self._select("device_contact", user_id) if r["kind"] == kind),
+                              key=lambda r: parse_timestamp(r["received_at"]))
+                before = [r for r in mine if parse_timestamp(r["received_at"]) < since]
+                contacts += before[-1:] + [r for r in mine if parse_timestamp(r["received_at"]) >= since]
+            sensor = sorted(self._select("SensorData", user_id), key=self._reading_key)
+            battery = [{"at": r["created_at"], "mv": r.get("data1")} for r in sensor
+                       if r.get("sensor_type") == "battery_mv" and parse_timestamp(r["created_at"]) >= since]
+            resets = [r for r in sensor if r.get("sensor_type") == "reset_reason"]
+        return {"devices": devices,
+                "contacts": [self._project(c, ("kind", "received_at", "expected_next_at")) for c in contacts],
+                "battery": battery,
+                "reset": {"at": resets[-1]["created_at"], "code": resets[-1].get("data1")} if resets else None}
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

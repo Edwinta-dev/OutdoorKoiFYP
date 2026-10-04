@@ -304,6 +304,7 @@ header. GET responses carry an `ETag` and answer `If-None-Match` with 304.
 | `GET` | `/v1/ponds/{pond}/forecasts/algae` | Next scrub, and what scrubbing today buys you |
 | `GET`, `PUT` | `/v1/ponds/{pond}/profile` | Pond profile (volume, depth, fish, tap water, aeration); PUT adds a row effective now or at `effective_from`, earlier rows are kept |
 | `GET`, `PUT` | `/v1/ponds/{pond}/camera/mask` | Water mask for the camera's green ratio: a polygon of `[x, y]` points as fractions of the frame (3 to 64 points, at least 1% of the frame). Each PUT is a new mask version; the camera restarts its smoothed baseline on the first frame with a new version |
+| `GET` | `/v1/ponds/{pond}/devices` | Sensor node and camera health: last seen (receipt time), expected interval, contacts received and missed in 24 hours, battery trend from `battery_mv`, last reset reason, and each channel's last usable sample time. Every assessment also carries `data_confidence` (high, reduced, low) with its reasons |
 | `GET` | `/health`, `/ready` (also under `/v1`), `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating

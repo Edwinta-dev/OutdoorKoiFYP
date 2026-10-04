@@ -51,6 +51,27 @@ class ErrorEnvelope(_Open):
 # ---------------------------------------------------------------------
 # Assessments (engine to_dict() or the latest evaluation row)
 # ---------------------------------------------------------------------
+class ConfidenceReason(_Closed):
+    code: Literal["no_reading", "node_silent", "channel_old", "channel_stale_flagged"]
+    channel: Optional[Literal["ph", "tds", "temp", "lux"]] = Field(description="null for the whole node.")
+    message: str
+
+
+class DataConfidence(_Closed):
+    """How current the sensor data behind an assessment is
+    (koi/models/device_health.py), worked out when the response is sent."""
+
+    level: Literal["high", "reduced", "low"] = Field(description=(
+        "low: no reading yet, or the newest reading is older than 3 of the node's expected intervals; reduced: a "
+        "channel this assessment uses is that old, or the sensor gate has flagged it stale; high otherwise."))
+    reasons: list[ConfidenceReason] = Field(description="Why the level is not high; empty when it is.")
+    newest_reading_at: Optional[datetime] = Field(description="Newest sample time of any channel; null when none.")
+    expected_interval_seconds: int = Field(description="The sensor node's expected interval used here.")
+    never_seen: list[str] = Field(description=(
+        "Channels this assessment can use that have never reported (for example no TDS probe). They do not lower "
+        "the level."))
+
+
 class _Assessment(_Open):
     status: str = Field(description="Green, Amber or Red.")
     category: str
@@ -70,6 +91,9 @@ class _Assessment(_Open):
     inputs: Optional[dict[str, Any]] = Field(default=None, description=(
         "What the run applied: run, sensor_groups, events, camera_frames, ratings, and per forecast product its "
         "cache records with their issue times. null on a row stored before provenance was recorded."))
+    data_confidence: Optional[DataConfidence] = Field(default=None, description=(
+        "How current the sensor data behind it is. Not stored: added to every assessment the API returns. Named "
+        "apart from the algae assessment's own confidence, which is about its growth-rate fit."))
 
 
 class WaterChemistryAssessment(_Assessment):
@@ -566,3 +590,69 @@ class Dashboard(_Closed):
 __all__ = [name for name, value in list(globals().items())
            if isinstance(value, type) and issubclass(value, BaseModel) and value.__module__ == __name__
            and not name.startswith("_")]
+
+
+# ---------------------------------------------------------------------
+# GET /v1/ponds/{pond}/devices (koi/models/device_health.py)
+# ---------------------------------------------------------------------
+class BatteryTrend(_Closed):
+    latest_mv: Optional[float] = Field(description="Newest battery_mv reading in the window, millivolts.")
+    latest_at: Optional[datetime]
+    samples: int = Field(description="battery_mv readings in the window.")
+    slope_mv_per_day: Optional[float] = Field(description="Least-squares slope, millivolts per day.")
+    trend: Literal["falling", "steady", "rising", "unknown"] = Field(description=(
+        "falling or rising beyond 50 mV/day; unknown with fewer than 3 readings over 2 hours, or when the device "
+        "does not report its battery."))
+
+
+class ResetReason(_Closed):
+    reason: str = Field(description="power_on, software, panic, brownout, task_watchdog, deep_sleep_wake, ...")
+    code: int = Field(description="ESP32 esp_reset_reason_t value as sent.")
+    at: Optional[datetime] = Field(description="When the row was received.")
+
+
+class ChannelHealth(_Closed):
+    last_sample_at: Optional[datetime] = Field(description=(
+        "Time of the newest usable reading the model applied: the last usable sample, not when the node was last "
+        "seen."))
+    time_basis: Optional[Literal["ingestion", "sample"]] = Field(description=(
+        "ingestion: timed when the database stored it (no node sample time yet, issue #17)."))
+    age_seconds: Optional[int]
+    status: Literal["fresh", "late", "old", "never_seen"] = Field(description=(
+        "fresh: within 2 expected intervals; late: within 3; old: beyond 3; never_seen: no reading ever."))
+    stale_flagged: bool = Field(description="The sensor gate flags the channel: the same value repeated.")
+
+
+class ClockNote(_Closed):
+    sample_time_basis: Literal["ingestion", "sample", "mixed", "unknown"]
+    uncertain: bool = Field(description="Sample times may not be when the probe sampled.")
+    note: Optional[str]
+
+
+class DeviceHealth(_Closed):
+    kind: Literal["sensor", "camera"]
+    status: Literal["ok", "late", "silent", "never_seen"] = Field(description=(
+        "late: past its expected time; silent: nothing for 3 expected intervals; never_seen: no contact yet."))
+    last_seen_at: Optional[datetime] = Field(description=(
+        "Receipt time of the newest contact (devices.last_seen_at). A node sending old buffered readings is seen "
+        "now while its channels stay old."))
+    next_expected_at: Optional[datetime] = Field(description="When the newest contact said it would report next.")
+    expected_interval_seconds: Optional[int]
+    interval_source: Literal["device", "default", "schedule", "unknown"] = Field(description=(
+        "device: configured on the devices row; default: the backend's sensor cadence; schedule: the camera's last "
+        "wake; unknown: no contact yet."))
+    window_hours: int
+    received_24h: int = Field(description="Contacts received in the window.")
+    missed_24h: Optional[int] = Field(description=(
+        "Expected reports in the window that did not arrive, counted against the interval in force at each "
+        "contact; null before the first contact."))
+    battery: BatteryTrend
+    last_reset: Optional[ResetReason] = Field(description="Newest reset reason the node sent; null when none.")
+    channels: Optional[dict[str, ChannelHealth]] = Field(description="Sensor node only: ph, tds, temp, lux.")
+    clock: Optional[ClockNote] = Field(description="Sensor node only.")
+
+
+class DevicesResponse(_Closed):
+    pond_id: int
+    generated_at: datetime
+    devices: list[DeviceHealth] = Field(description="The sensor node, then the camera.")

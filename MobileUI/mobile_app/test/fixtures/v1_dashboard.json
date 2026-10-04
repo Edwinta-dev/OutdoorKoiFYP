@@ -240,6 +240,7 @@
         "camera_drift": null,
         "category": "clear",
         "confidence": "medium",
+        "data_confidence": null,
         "days_to_scrub": 9,
         "evaluated_at": null,
         "forecast_issued_at": null,
@@ -263,6 +264,7 @@
         "add_hardener_now": false,
         "advisory": "Ammonia is rising. Feed lightly for two days.",
         "category": "Watch",
+        "data_confidence": null,
         "evaluated_at": null,
         "forecast_issued_at": null,
         "id": null,
@@ -283,6 +285,7 @@
       "evaporation": {
         "advisory": "No top-up needed this week.",
         "category": "Normal",
+        "data_confidence": null,
         "days_to_topup": 6,
         "evaluated_at": null,
         "evaporation_mm_per_day": 4.2,

@@ -511,6 +511,25 @@ class SupabaseStorage:
             res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
             return res.data[0]
 
+    # --- device health (migration 0018) ----------------------------------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        with _operation("record_device_contacts"):
+            res = self._db().rpc("record_device_contacts", {
+                "p_pond_id": user_id, "p_kind": kind, "p_contacts": contacts}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or None
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        with _operation("fetch_device_activity"):
+            res = self._db().rpc("pond_device_activity", {
+                "p_pond_id": user_id, "p_since": since.isoformat()}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or {"devices": [], "contacts": [], "battery": [], "reset": None}
+
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:
         """Every pond that has finished onboarding (volume and biomass

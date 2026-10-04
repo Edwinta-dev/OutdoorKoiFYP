@@ -240,6 +240,22 @@ class Storage(Protocol):
         step (save_camera_mask). Returns the new camera_config row."""
         ...
 
+    # --- device health (devices, device_contact, migration 0018) -------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        """Records contacts ([{received_at, expected_next_at}], ISO 8601)
+        from the pond's sensor node or camera (kind), ignoring any already
+        recorded, moves devices.last_seen_at forward and returns the
+        devices row (record_device_contacts)."""
+        ...
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        """{devices, contacts, battery, reset} for the pond
+        (pond_device_activity): its devices rows, its contacts since
+        since plus each kind's newest one before it, its battery_mv rows
+        since since ([{at, mv}]) and its newest reset_reason row ({at,
+        code} or None)."""
+        ...
+
     # --- pond config (UserData) ---------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]: ...
 

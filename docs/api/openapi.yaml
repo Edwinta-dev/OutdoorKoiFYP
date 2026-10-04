@@ -323,7 +323,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id032
+              schema: &id033
                 $ref: '#/components/schemas/AlgaeRatingResult'
           headers:
             Deprecation:
@@ -375,7 +375,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id034
+              schema: &id035
                 $ref: '#/components/schemas/AlgaeRatingUndoResult'
           headers:
             Deprecation:
@@ -639,7 +639,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id041
+              schema: &id042
                 $ref: '#/components/schemas/AlgaeForecast'
           headers:
             ETag:
@@ -731,7 +731,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id045
+              schema: &id046
                 $ref: '#/components/schemas/EvaporationForecast'
           headers:
             ETag:
@@ -808,7 +808,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id043
+              schema: &id044
                 $ref: '#/components/schemas/WaterChemistryForecast'
           headers:
             ETag:
@@ -931,7 +931,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id050
+              schema: &id051
                 $ref: '#/components/schemas/AlgaeRatingContext'
           headers:
             ETag:
@@ -987,7 +987,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id052
+              schema: &id053
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -1439,6 +1439,67 @@ paths:
           content: *id031
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/devices:
+    get:
+      operationId: get_devices
+      summary: Sensor node and camera health
+      tags:
+      - pond
+      description: 'For the sensor node and the camera: when each was last seen (receipt time), its expected
+        interval, contacts received and missed in the last 24 hours, and its status. For the sensor node
+        also the battery trend from battery_mv readings, the last reset reason, each channel''s last usable
+        sample time and how far those times can be trusted. Reads only.'
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicesResponse'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id032
+            application/json:
+              schema: *id002
+        '403':
+          description: Another account's pond
+          content: *id032
+        '404':
+          description: Pond or assessment not found
+          content: *id032
+        '500':
+          description: Unexpected server error
+          content: *id032
+        '503':
+          description: Storage or service not available
+          content: *id032
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating:
     post:
       operationId: log_algae_rating
@@ -1469,27 +1530,27 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id032
+              schema: *id033
         '400':
           description: Invalid request
-          content: &id033
+          content: &id034
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id033
+          content: *id034
         '403':
           description: Another account's pond
-          content: *id033
+          content: *id034
         '404':
           description: Pond or assessment not found
-          content: *id033
+          content: *id034
         '500':
           description: Unexpected server error
-          content: *id033
+          content: *id034
         '503':
           description: Storage or service not available
-          content: *id033
+          content: *id034
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating/undo:
@@ -1521,30 +1582,30 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id034
+              schema: *id035
         '400':
           description: Invalid request
-          content: &id035
+          content: &id036
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id035
+          content: *id036
         '403':
           description: Another account's pond
-          content: *id035
+          content: *id036
         '404':
           description: Pond or assessment not found
-          content: *id035
+          content: *id036
         '409':
           description: Conflict
-          content: *id035
+          content: *id036
         '500':
           description: Unexpected server error
-          content: *id035
+          content: *id036
         '503':
           description: Storage or service not available
-          content: *id035
+          content: *id036
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algal-scrub:
@@ -1576,24 +1637,24 @@ paths:
               schema: *id009
         '400':
           description: Invalid request
-          content: &id036
+          content: &id037
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id036
+          content: *id037
         '403':
           description: Another account's pond
-          content: *id036
+          content: *id037
         '404':
           description: Pond or assessment not found
-          content: *id036
+          content: *id037
         '500':
           description: Unexpected server error
-          content: *id036
+          content: *id037
         '503':
           description: Storage or service not available
-          content: *id036
+          content: *id037
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/feeding:
@@ -1625,24 +1686,24 @@ paths:
               schema: *id009
         '400':
           description: Invalid request
-          content: &id037
+          content: &id038
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id037
+          content: *id038
         '403':
           description: Another account's pond
-          content: *id037
+          content: *id038
         '404':
           description: Pond or assessment not found
-          content: *id037
+          content: *id038
         '500':
           description: Unexpected server error
-          content: *id037
+          content: *id038
         '503':
           description: Storage or service not available
-          content: *id037
+          content: *id038
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/top-up:
@@ -1664,7 +1725,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: &id039
+            schema: &id040
               $ref: '#/components/schemas/VolumeEventOnPond'
       responses:
         '200':
@@ -1674,24 +1735,24 @@ paths:
               schema: *id009
         '400':
           description: Invalid request
-          content: &id038
+          content: &id039
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id038
+          content: *id039
         '403':
           description: Another account's pond
-          content: *id038
+          content: *id039
         '404':
           description: Pond or assessment not found
-          content: *id038
+          content: *id039
         '500':
           description: Unexpected server error
-          content: *id038
+          content: *id039
         '503':
           description: Storage or service not available
-          content: *id038
+          content: *id039
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/water-change:
@@ -1714,7 +1775,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id039
+            schema: *id040
       responses:
         '200':
           description: OK
@@ -1723,24 +1784,24 @@ paths:
               schema: *id009
         '400':
           description: Invalid request
-          content: &id040
+          content: &id041
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id040
+          content: *id041
         '403':
           description: Another account's pond
-          content: *id040
+          content: *id041
         '404':
           description: Pond or assessment not found
-          content: *id040
+          content: *id041
         '500':
           description: Unexpected server error
-          content: *id040
+          content: *id041
         '503':
           description: Storage or service not available
-          content: *id040
+          content: *id041
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/algae:
@@ -1781,7 +1842,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id041
+              schema: *id042
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1795,27 +1856,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id042
+          content: &id043
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id042
+          content: *id043
         '403':
           description: Another account's pond
-          content: *id042
+          content: *id043
         '404':
           description: Pond or assessment not found
-          content: *id042
+          content: *id043
         '422':
           description: Not enough history to project
-          content: *id042
+          content: *id043
         '500':
           description: Unexpected server error
-          content: *id042
+          content: *id043
         '503':
           description: Storage or service not available
-          content: *id042
+          content: *id043
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/chemistry:
@@ -1854,7 +1915,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id043
+              schema: *id044
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1868,27 +1929,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id044
+          content: &id045
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id044
+          content: *id045
         '403':
           description: Another account's pond
-          content: *id044
+          content: *id045
         '404':
           description: Pond or assessment not found
-          content: *id044
+          content: *id045
         '422':
           description: Not enough history to project
-          content: *id044
+          content: *id045
         '500':
           description: Unexpected server error
-          content: *id044
+          content: *id045
         '503':
           description: Storage or service not available
-          content: *id044
+          content: *id045
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/evaporation:
@@ -1939,7 +2000,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id045
+              schema: *id046
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1953,24 +2014,24 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id046
+          content: &id047
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id046
+          content: *id047
         '403':
           description: Another account's pond
-          content: *id046
+          content: *id047
         '404':
           description: Pond or assessment not found
-          content: *id046
+          content: *id047
         '500':
           description: Unexpected server error
-          content: *id046
+          content: *id047
         '503':
           description: Storage or service not available
-          content: *id046
+          content: *id047
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/profile:
@@ -2000,7 +2061,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id048
+              schema: &id049
                 $ref: '#/components/schemas/PondProfileResponse'
           headers:
             ETag:
@@ -2015,21 +2076,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id047
+          content: &id048
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id047
+          content: *id048
         '404':
           description: Pond or assessment not found
-          content: *id047
+          content: *id048
         '500':
           description: Unexpected server error
-          content: *id047
+          content: *id048
         '503':
           description: Storage or service not available
-          content: *id047
+          content: *id048
       security:
       - bearerAuth: []
     put:
@@ -2058,30 +2119,30 @@ paths:
           description: Created
           content:
             application/json:
-              schema: *id048
+              schema: *id049
         '400':
           description: Invalid request
-          content: &id049
+          content: &id050
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id049
+          content: *id050
         '403':
           description: Another account's pond
-          content: *id049
+          content: *id050
         '404':
           description: Pond or assessment not found
-          content: *id049
+          content: *id050
         '409':
           description: Conflict
-          content: *id049
+          content: *id050
         '500':
           description: Unexpected server error
-          content: *id049
+          content: *id050
         '503':
           description: Storage or service not available
-          content: *id049
+          content: *id050
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/ratings/algae:
@@ -2111,7 +2172,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id050
+              schema: *id051
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2125,21 +2186,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id051
+          content: &id052
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id051
+          content: *id052
         '404':
           description: Pond or assessment not found
-          content: *id051
+          content: *id052
         '500':
           description: Unexpected server error
-          content: *id051
+          content: *id052
         '503':
           description: Storage or service not available
-          content: *id051
+          content: *id052
       security:
       - bearerAuth: []
   /v1/ready:
@@ -2162,7 +2223,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id052
+              schema: *id053
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2176,12 +2237,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id053
+          content: &id054
             application/json:
               schema: *id002
         '503':
           description: Storage or service not available
-          content: *id053
+          content: *id054
       security: []
 components:
   schemas:
@@ -2254,6 +2315,14 @@ components:
             per forecast product its cache records with their issue times. null on a row stored before
             provenance was recorded.'
           title: Inputs
+        data_confidence:
+          anyOf:
+          - $ref: '#/components/schemas/DataConfidence'
+          - type: 'null'
+          default: null
+          description: 'How current the sensor data behind it is. Not stored: added to every assessment
+            the API returns. Named apart from the algae assessment''s own confidence, which is about its
+            growth-rate fit.'
         green_ratio:
           anyOf:
           - type: number
@@ -2978,6 +3047,49 @@ components:
       - hypoxia
       title: AllAssessments
       type: object
+    BatteryTrend:
+      additionalProperties: false
+      properties:
+        latest_mv:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Newest battery_mv reading in the window, millivolts.
+          title: Latest Mv
+        latest_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Latest At
+        samples:
+          description: battery_mv readings in the window.
+          title: Samples
+          type: integer
+        slope_mv_per_day:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Least-squares slope, millivolts per day.
+          title: Slope Mv Per Day
+        trend:
+          description: falling or rising beyond 50 mV/day; unknown with fewer than 3 readings over 2 hours,
+            or when the device does not report its battery.
+          enum:
+          - falling
+          - steady
+          - rising
+          - unknown
+          title: Trend
+          type: string
+      required:
+      - latest_mv
+      - latest_at
+      - samples
+      - slope_mv_per_day
+      - trend
+      title: BatteryTrend
+      type: object
     CameraDriftVerdict:
       additionalProperties: true
       properties:
@@ -3089,6 +3201,110 @@ components:
       - mask_version
       - mask
       title: CameraMaskVersion
+      type: object
+    ChannelHealth:
+      additionalProperties: false
+      properties:
+        last_sample_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: 'Time of the newest usable reading the model applied: the last usable sample, not
+            when the node was last seen.'
+          title: Last Sample At
+        time_basis:
+          anyOf:
+          - enum:
+            - ingestion
+            - sample
+            type: string
+          - type: 'null'
+          description: 'ingestion: timed when the database stored it (no node sample time yet, issue #17).'
+          title: Time Basis
+        age_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Age Seconds
+        status:
+          description: 'fresh: within 2 expected intervals; late: within 3; old: beyond 3; never_seen:
+            no reading ever.'
+          enum:
+          - fresh
+          - late
+          - old
+          - never_seen
+          title: Status
+          type: string
+        stale_flagged:
+          description: 'The sensor gate flags the channel: the same value repeated.'
+          title: Stale Flagged
+          type: boolean
+      required:
+      - last_sample_at
+      - time_basis
+      - age_seconds
+      - status
+      - stale_flagged
+      title: ChannelHealth
+      type: object
+    ClockNote:
+      additionalProperties: false
+      properties:
+        sample_time_basis:
+          enum:
+          - ingestion
+          - sample
+          - mixed
+          - unknown
+          title: Sample Time Basis
+          type: string
+        uncertain:
+          description: Sample times may not be when the probe sampled.
+          title: Uncertain
+          type: boolean
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+      required:
+      - sample_time_basis
+      - uncertain
+      - note
+      title: ClockNote
+      type: object
+    ConfidenceReason:
+      additionalProperties: false
+      properties:
+        code:
+          enum:
+          - no_reading
+          - node_silent
+          - channel_old
+          - channel_stale_flagged
+          title: Code
+          type: string
+        channel:
+          anyOf:
+          - enum:
+            - ph
+            - tds
+            - temp
+            - lux
+            type: string
+          - type: 'null'
+          description: null for the whole node.
+          title: Channel
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - channel
+      - message
+      title: ConfidenceReason
       type: object
     DailyStats:
       additionalProperties: true
@@ -3241,6 +3457,175 @@ components:
       - lux
       title: DashboardReadings
       type: object
+    DataConfidence:
+      additionalProperties: false
+      description: 'How current the sensor data behind an assessment is
+
+        (koi/models/device_health.py), worked out when the response is sent.'
+      properties:
+        level:
+          description: 'low: no reading yet, or the newest reading is older than 3 of the node''s expected
+            intervals; reduced: a channel this assessment uses is that old, or the sensor gate has flagged
+            it stale; high otherwise.'
+          enum:
+          - high
+          - reduced
+          - low
+          title: Level
+          type: string
+        reasons:
+          description: Why the level is not high; empty when it is.
+          items:
+            $ref: '#/components/schemas/ConfidenceReason'
+          title: Reasons
+          type: array
+        newest_reading_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: Newest sample time of any channel; null when none.
+          title: Newest Reading At
+        expected_interval_seconds:
+          description: The sensor node's expected interval used here.
+          title: Expected Interval Seconds
+          type: integer
+        never_seen:
+          description: Channels this assessment can use that have never reported (for example no TDS probe).
+            They do not lower the level.
+          items:
+            type: string
+          title: Never Seen
+          type: array
+      required:
+      - level
+      - reasons
+      - newest_reading_at
+      - expected_interval_seconds
+      - never_seen
+      title: DataConfidence
+      type: object
+    DeviceHealth:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - sensor
+          - camera
+          title: Kind
+          type: string
+        status:
+          description: 'late: past its expected time; silent: nothing for 3 expected intervals; never_seen:
+            no contact yet.'
+          enum:
+          - ok
+          - late
+          - silent
+          - never_seen
+          title: Status
+          type: string
+        last_seen_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: Receipt time of the newest contact (devices.last_seen_at). A node sending old buffered
+            readings is seen now while its channels stay old.
+          title: Last Seen At
+        next_expected_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: When the newest contact said it would report next.
+          title: Next Expected At
+        expected_interval_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Expected Interval Seconds
+        interval_source:
+          description: 'device: configured on the devices row; default: the backend''s sensor cadence;
+            schedule: the camera''s last wake; unknown: no contact yet.'
+          enum:
+          - device
+          - default
+          - schedule
+          - unknown
+          title: Interval Source
+          type: string
+        window_hours:
+          title: Window Hours
+          type: integer
+        received_24h:
+          description: Contacts received in the window.
+          title: Received 24H
+          type: integer
+        missed_24h:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Expected reports in the window that did not arrive, counted against the interval
+            in force at each contact; null before the first contact.
+          title: Missed 24H
+        battery:
+          $ref: '#/components/schemas/BatteryTrend'
+        last_reset:
+          anyOf:
+          - $ref: '#/components/schemas/ResetReason'
+          - type: 'null'
+          description: Newest reset reason the node sent; null when none.
+        channels:
+          anyOf:
+          - additionalProperties:
+              $ref: '#/components/schemas/ChannelHealth'
+            type: object
+          - type: 'null'
+          description: 'Sensor node only: ph, tds, temp, lux.'
+          title: Channels
+        clock:
+          anyOf:
+          - $ref: '#/components/schemas/ClockNote'
+          - type: 'null'
+          description: Sensor node only.
+      required:
+      - kind
+      - status
+      - last_seen_at
+      - next_expected_at
+      - expected_interval_seconds
+      - interval_source
+      - window_hours
+      - received_24h
+      - missed_24h
+      - battery
+      - last_reset
+      - channels
+      - clock
+      title: DeviceHealth
+      type: object
+    DevicesResponse:
+      additionalProperties: false
+      properties:
+        pond_id:
+          title: Pond Id
+          type: integer
+        generated_at:
+          format: date-time
+          title: Generated At
+          type: string
+        devices:
+          description: The sensor node, then the camera.
+          items:
+            $ref: '#/components/schemas/DeviceHealth'
+          title: Devices
+          type: array
+      required:
+      - pond_id
+      - generated_at
+      - devices
+      title: DevicesResponse
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -3342,6 +3727,14 @@ components:
             per forecast product its cache records with their issue times. null on a row stored before
             provenance was recorded.'
           title: Inputs
+        data_confidence:
+          anyOf:
+          - $ref: '#/components/schemas/DataConfidence'
+          - type: 'null'
+          default: null
+          description: 'How current the sensor data behind it is. Not stored: added to every assessment
+            the API returns. Named apart from the algae assessment''s own confidence, which is about its
+            growth-rate fit.'
         loss_litres:
           anyOf:
           - type: number
@@ -4366,6 +4759,30 @@ components:
       - reasons
       title: Ready
       type: object
+    ResetReason:
+      additionalProperties: false
+      properties:
+        reason:
+          description: power_on, software, panic, brownout, task_watchdog, deep_sleep_wake, ...
+          title: Reason
+          type: string
+        code:
+          description: ESP32 esp_reset_reason_t value as sent.
+          title: Code
+          type: integer
+        at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: When the row was received.
+          title: At
+      required:
+      - reason
+      - code
+      - at
+      title: ResetReason
+      type: object
     ScrubBenefit:
       additionalProperties: true
       properties:
@@ -4751,6 +5168,14 @@ components:
             per forecast product its cache records with their issue times. null on a row stored before
             provenance was recorded.'
           title: Inputs
+        data_confidence:
+          anyOf:
+          - $ref: '#/components/schemas/DataConfidence'
+          - type: 'null'
+          default: null
+          description: 'How current the sensor data behind it is. Not stored: added to every assessment
+            the API returns. Named apart from the algae assessment''s own confidence, which is about its
+            growth-rate fit.'
         tan_ppm:
           anyOf:
           - type: number

@@ -49,6 +49,18 @@ older than two of the node's expected upload intervals
 (Settings.sensor_cadence_minutes), measured from the reading's own time.
 
 --------------------------------------------------------------------
+DEVICE CONTACTS (issue #23)
+--------------------------------------------------------------------
+After the save, each distinct insert time the cycle ingested is recorded
+as a contact of the pond's sensor node (Storage.record_device_contacts,
+migration 0018), which moves devices.last_seen_at forward to the newest
+receipt time. Each contact is expected to be followed one configured
+interval later (devices.expected_interval_seconds, else
+Settings.sensor_cadence_minutes). GET /v1/ponds/{pond}/devices and the
+confidence on each assessment read them (koi/models/device_health.py).
+A failure here is logged and skipped.
+
+--------------------------------------------------------------------
 EVERY LOGGED EVENT ONCE (issue #19)
 --------------------------------------------------------------------
 The app writes each intervention to pondInterventions and then posts it
@@ -127,8 +139,8 @@ from typing import Any, Optional
 
 from koi.logs import log_event, pond_context
 from koi.models import algae_engine as ae
+from koi.models import device_health, forecast_utils
 from koi.models import evaporation_engine as ev
-from koi.models import forecast_utils
 from koi.models.engine import WaterChemistryEngine
 from koi.models.event_ledger import WINDOW
 from koi.models.hypoxia import assess_hypoxia
@@ -381,12 +393,13 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     intervention_rows = _intervention_rows(registry, user_id, now)
     history = registry.sensor_history(user_id)
 
-    commit: dict[str, Optional[dict]] = {}
+    commit: dict[str, Any] = {}
 
     def cycle(twin):
         # --- every sensor reading since the last cycle, in order ---
         discovery = _discover(registry, user_id, twin, now)
         commit["ingest"] = discovery.commit()
+        commit["received"] = discovery.received
         # A twin from before the ledger has read sensors (its chemistry
         # has an ingest time) even with no channel readings recorded.
         if not discovery.inputs and not twin.sensor_channels and twin.chemistry._last_ingest_time is None:
@@ -501,6 +514,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
                                                     ingest=lambda: commit.get("ingest"))
     hypoxia = outcome["hypoxia"]
     sensor = outcome["sensor"]
+    _record_sensor_contacts(registry, user_id, commit.get("received") or [], now)
 
     # --- push evaluations (outside the lock: storage I/O is slow and
     #     the twin is already durably snapshotted by with_twin). The
@@ -528,6 +542,21 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
               events_applied=outcome["events"].get("applied", 0), events_replayed=outcome["events"].get("replayed"))
     times = [c["reading_at"] for c in sensor["channels"].values() if c["reading_at"]]
     return PollResult(max(times, key=parse_timestamp) if times else "", sensor, outcome["events"])
+
+
+def _record_sensor_contacts(registry: EngineRegistry, user_id: int, received: list, now: datetime) -> None:
+    """Records each upload the cycle ingested as a contact of the pond's
+    sensor node (devices.last_seen_at is its receipt time), expected next
+    one configured interval later (koi/models/device_health.py). Skipped,
+    with a warning, when storage cannot do it: health tracking never
+    holds up ingestion."""
+    if not received:
+        return
+    storage = registry.storage
+    activity = fail_soft(lambda: storage.fetch_device_activity(user_id, now), None)
+    interval = device_health.sensor_interval(activity or {}, registry.sensor_ingest.cadence)
+    contacts = device_health.sensor_contacts([{"created_at": t} for t in received], interval)
+    fail_soft(lambda: storage.record_device_contacts(user_id, device_health.SENSOR, contacts), None)
 
 
 def _intervention_rows(registry: EngineRegistry, user_id: int, now: datetime) -> Optional[list[dict]]:

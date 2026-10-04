@@ -122,10 +122,13 @@ class SensorInput:
 class Discovery:
     """The inputs found in one scan, in event-time order, and what to
     record for every row read: ledger rows (sensor_ingest_ledger) and the
-    newest created_at among them (the watermark)."""
+    newest created_at among them (the watermark). received holds each
+    distinct created_at read, oldest first: one per upload of the node,
+    recorded as its contacts (koi/models/device_health.py)."""
     inputs: list[SensorInput] = field(default_factory=list)
     ledger: list[dict] = field(default_factory=list)
     watermark: Optional[datetime] = None
+    received: list[datetime] = field(default_factory=list)
 
     def commit(self) -> Optional[dict]:
         """The p_ingest argument of save_pond_snapshot_with_ingest, or
@@ -146,6 +149,7 @@ def group_rows(rows: list[dict]) -> Discovery:
         created = parse_timestamp(r["created_at"])
         if discovery.watermark is None or created > discovery.watermark:
             discovery.watermark = created
+    discovery.received = sorted({parse_timestamp(r["created_at"]) for r in known})
 
     groups: dict[datetime, list[dict]] = {}
     for r in known:
