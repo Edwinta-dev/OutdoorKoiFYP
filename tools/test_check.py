@@ -81,6 +81,50 @@ def test_main_exit_code_non_zero_on_any_fail(monkeypatch):
     assert check.main(["mobile"]) == 1
 
 
+def test_database_suite_runs_only_when_named(monkeypatch):
+    def failing_suite(r):
+        r.run("bad", [PY, "-c", "import sys; sys.exit(1)"], Path.cwd())
+
+    for name in check.SUITES:
+        monkeypatch.setitem(check.SUITES, name, lambda r: None)
+    monkeypatch.setitem(check.SEPARATE_SUITES, "database", failing_suite)
+    assert check.main(["all"]) == 0
+    assert check.main(["database"]) == 1
+
+
+def test_database_without_docker_skips_every_step(monkeypatch):
+    monkeypatch.setattr(check.shutil, "which", lambda name: None)
+    r = check.Runner(strict=False)
+    check.check_database(r)
+    assert [x.status for x in r.results] == ["SKIP"] * 3
+    assert all(x.detail == "docker not found" for x in r.results)
+
+
+def test_database_without_local_stack_skips_and_fails_under_strict(monkeypatch):
+    monkeypatch.setattr(check.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(check, "python_tool", lambda module: ["pytest"])
+    monkeypatch.setattr(check, "local_stack_running", lambda: False)
+    r = check.Runner(strict=False)
+    check.check_database(r)
+    assert [x.status for x in r.results] == ["SKIP"] * 3
+    assert r.results[0].detail == "local Supabase stack (run `supabase start`) not found"
+    strict = check.Runner(strict=True)
+    check.check_database(strict)
+    assert strict.failed
+
+
+def test_database_with_local_stack_runs_rehearsal_sql_tests_and_dev_profile(monkeypatch):
+    monkeypatch.setattr(check.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(check, "python_tool", lambda module: ["pytest"])
+    monkeypatch.setattr(check, "local_stack_running", lambda: True)
+    commands = []
+    monkeypatch.setattr(check.Runner, "run", lambda self, name, cmd, cwd, summarise=None: commands.append(cmd))
+    check.check_database(check.Runner(strict=True))
+    assert commands[0][-1].endswith("db_rehearsal.py")
+    assert commands[1] == ["pytest", "-q", "tests/sql"]
+    assert commands[2][1:] == ["-m", "koi.dev", "--profile", "supabase", "--check"]
+
+
 # Credential-shaped strings are assembled from pieces so this file does not
 # trip the scan it tests.
 LEAKS = {

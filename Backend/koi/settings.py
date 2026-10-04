@@ -154,6 +154,17 @@ class Settings(BaseSettings):
     sentry_release: str = Field(
         default="", validation_alias=AliasChoices("SENTRY_RELEASE", "sentry_release"))
 
+    # Local development stack, local database profile (python -m koi.dev
+    # --profile supabase, docs/dev.md): the local Supabase stack's API URL,
+    # service-role key and database URL. Empty: taken from `supabase status
+    # -o env`. Anything not on this machine is refused.
+    dev_supabase_url: str = Field(
+        default="", validation_alias=AliasChoices("KOI_DEV_SUPABASE_URL", "dev_supabase_url"))
+    dev_supabase_service_role_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("KOI_DEV_SUPABASE_SERVICE_ROLE_KEY", "dev_supabase_service_role_key"))
+    dev_db_url: str = Field(default="", validation_alias=AliasChoices("KOI_DEV_DB_URL", "dev_db_url"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))

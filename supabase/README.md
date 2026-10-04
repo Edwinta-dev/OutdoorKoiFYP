@@ -45,7 +45,17 @@ supabase db reset                # rebuild the local database from migrations/
 python tools/db_rehearsal.py     # fresh path and dump-upgrade path must converge
 cd Backend && python -m pytest -q tests/sql      # SQL behaviour tests
 cd Backend && python -m pytest -q -k schema      # text-based reference check
+python tools/check.py database   # rehearsal, SQL tests and the dev stack's local database profile
 ```
+
+`python -m koi.dev --profile supabase --check` (docs/dev.md) writes the
+demo seed into the local database (two ponds, a sensor row with no pond,
+a pond with pH but no TDS, two readings at the same instant, the camera's
+old plain-text state, the weather cache slots, station metadata and an
+engine snapshot from before `snapshot_version`), checks every migration is
+applied, serves the API over the local REST API, validates its responses
+against the OpenAPI document and compares them with the in-memory profile,
+then removes the seeded rows.
 
 `tools/db_rehearsal.py` restores `schema.sql` into a clean local database,
 loads synthetic legacy rows, applies every later migration, and compares

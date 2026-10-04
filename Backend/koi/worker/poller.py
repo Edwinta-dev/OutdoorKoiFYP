@@ -200,15 +200,18 @@ def _poll_user_safely(registry: EngineRegistry, row: dict) -> tuple[str, dict]:
                           "sensor_recorded_at": sensor_recorded_at if isinstance(sensor_recorded_at, str) else None}
 
 
-def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict) -> Optional[str]:
-    """Advances one pond. Returns the recorded_at of the sensor reading it
-    used; raises PondSkipped when there is no usable reading."""
+def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
+               now: Optional[datetime] = None) -> Optional[str]:
+    """Advances one pond to now (default: the current time; koi.dev
+    replays a recorded history by passing past times in order). Returns
+    the recorded_at of the sensor reading it used; raises PondSkipped
+    when there is no usable reading."""
     storage = registry.storage
     payload = storage.fetch_dashboard_payload(user_id)
     if not payload or "raw_sensor" not in payload:
         raise PondSkipped("no sensor reading in the dashboard payload")
 
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     raw = payload["raw_sensor"]
     recorded_at = raw.get("recorded_at") if isinstance(raw, dict) else None
     sensor_recorded_at = str(recorded_at) if recorded_at is not None else None

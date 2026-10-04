@@ -155,6 +155,8 @@ Backend/koi/api/                    Digital twin Flask API
 Backend/koi/worker/                 Environmental poller
 Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
 Backend/koi/weather/                NEA ingestion job and weather history reads (docs/weather-ingestion.md)
+Backend/koi/dev/                    Local development stack on seeded demo data (docs/dev.md)
+Backend/fixtures/demo_pond/         The demo seed and the script that builds it
 Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
 Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
@@ -184,7 +186,23 @@ Runs ruff, mypy and pytest for the backend; the firmware host tests (g++)
 and, if `arduino-cli` is installed, ESP32 compiles of `sensor_bench`,
 `sensor_node` and `camera_node`; and `flutter analyze` and `flutter test`.
 A missing tool prints `SKIP`; `--strict` (used by CI in
-`.github/workflows/ci.yml`) makes it a failure.
+`.github/workflows/ci.yml`) makes it a failure. `python tools/check.py
+database` runs the migration rehearsal, the SQL tests and the dev stack
+against a local Supabase stack; it is separate from `all` because it
+rebuilds the local database (docs/dev.md).
+
+**Offline, on demo data**
+
+```bash
+cd Backend
+python -m koi.dev            # API :8080, camera :5000 and the worker on a seeded demo pond
+python -m koi.dev --check    # start, validate the API against the OpenAPI document, exit
+docker compose up --build    # the same, in a container (from the repository root)
+```
+
+No live service, phone or hardware is needed. How to point the app at
+it, the local Supabase profile and the Compose profiles:
+[docs/dev.md](docs/dev.md).
 
 **Backend**
 

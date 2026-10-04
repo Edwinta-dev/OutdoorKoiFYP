@@ -1,7 +1,8 @@
 # Every job runs the same command a developer runs locally:
 #   python tools/check.py <suite> --strict
-# --strict turns a missing tool into a failure. No job contacts Supabase,
-# PythonAnywhere or the NEA API.
+# --strict turns a missing tool into a failure. No job contacts the live
+# Supabase project, PythonAnywhere or the NEA API; the database job starts
+# a disposable local Supabase stack on the runner (docs/dev.md).
 name: CI
 
 on:
@@ -50,6 +51,25 @@ jobs:
           cache-dependency-path: Backend/pyproject.toml
       - run: pip install -e "Backend[dev]"
       - run: python tools/check.py backend --strict
+
+  database:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: Backend/pyproject.toml
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+      - run: pip install -e "Backend[dev]"
+      # The database, REST API, auth and storage; the rest is not used.
+      - run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+      - run: python tools/check.py database --strict
 
   firmware:
     needs: changes

@@ -1,0 +1,172 @@
+"""Fast-forward: runs the worker over the seed's recorded history, so the
+stack answers its first request with assessments already made.
+
+For each pond, at each time its node reported (oldest first), the
+interventions logged up to then are applied to the twin, then the
+poller's own pond step (koi.worker.poller._poll_user) runs at that time.
+The step reads the bundled payload, camera frames and feeds through
+ReplayStorage, which answers them from the seed as they stood at that
+time, so the engines never see a reading or a frame from their future.
+
+ReplayStorage keeps the twin's snapshot and the evaluation rows to
+itself during the run and writes them to the real storage once at the
+end: the snapshot (against the version found at the start) and the last
+evaluation of each kind. A replay of 14 days of hourly readings then
+costs a handful of writes, which keeps the local database profile fast.
+Everything else (the pond list, profiles, rating history) is read from
+the real storage.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Optional
+
+from koi.dev.seed import SeedHistory
+from koi.logs import log_event
+from koi.models.engine import PondEvent
+from koi.models.pond_twin import PondTwin
+from koi.registry import EngineRegistry
+from koi.settings import Settings
+from koi.storage import Storage
+from koi.worker import poller
+
+log = logging.getLogger("koi.dev")
+
+# Flushed in this order, one row per kind and pond.
+_EVALUATIONS = ("push_evaluation", "push_evaporation_evaluation", "push_algae_evaluation")
+
+
+class ReplayStorage:
+    """The storage the worker sees during the fast-forward (see the module
+    docstring). Methods not defined here go to the real storage."""
+
+    def __init__(self, storage: Storage, history: SeedHistory):
+        self._storage = storage
+        self._history = history
+        self.at: Optional[datetime] = None
+        self._snapshots: dict[int, tuple[dict, int]] = {}
+        self._base_versions: dict[int, int] = {}
+        self._evaluations: dict[tuple[str, int], dict] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._storage, name)
+
+    def _now(self) -> datetime:
+        if self.at is None:
+            raise RuntimeError("ReplayStorage.at is not set")
+        return self.at
+
+    # --- history as of `at` -------------------------------------------
+    def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:
+        return self._history.payload(user_id, self._now())
+
+    def fetch_image_history(self, user_id: int | str, limit: int = 200) -> list[dict]:
+        return self._history.images(int(user_id), self._now(), limit)
+
+    def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]:
+        return self._history.feeds(user_id, self._now(), limit)
+
+    # --- snapshot, kept here until flush -------------------------------
+    def _version(self, user_id: int) -> int:
+        if user_id not in self._base_versions:
+            self._base_versions[user_id] = self._storage.fetch_snapshot_version(user_id)
+        return self._snapshots[user_id][1] if user_id in self._snapshots else self._base_versions[user_id]
+
+    def load_engine_state(self, user_id: int) -> Optional[tuple[dict, int]]:
+        if user_id in self._snapshots:
+            snapshot, version = self._snapshots[user_id]
+            return json.loads(json.dumps(snapshot)), version
+        state = self._storage.load_engine_state(user_id)
+        self._base_versions[user_id] = state[1] if state is not None else 0
+        return state
+
+    def load_engine_snapshot(self, user_id: int) -> Optional[dict]:
+        state = self.load_engine_state(user_id)
+        return state[0] if state is not None else None
+
+    def fetch_snapshot_version(self, user_id: int) -> int:
+        return self._version(user_id)
+
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+        version = self._version(user_id) + 1
+        self._snapshots[user_id] = (json.loads(json.dumps(snapshot)), version)
+        return version
+
+    # --- evaluations, last of each kind kept until flush ---------------
+    def push_evaluation(self, user_id: int, assessment: dict) -> None:
+        self._evaluations[("push_evaluation", user_id)] = assessment
+
+    def push_evaporation_evaluation(self, user_id: int, assessment: dict) -> None:
+        self._evaluations[("push_evaporation_evaluation", user_id)] = assessment
+
+    def push_algae_evaluation(self, user_id: int, assessment: dict) -> None:
+        self._evaluations[("push_algae_evaluation", user_id)] = assessment
+
+    def flush(self) -> None:
+        """Writes the final snapshots and evaluations to the real storage."""
+        for user_id, (snapshot, _) in sorted(self._snapshots.items()):
+            self._storage.save_engine_snapshot(user_id, snapshot, base_version=self._base_versions.get(user_id, 0))
+        for name in _EVALUATIONS:
+            for (kind, user_id), assessment in sorted(self._evaluations.items(), key=lambda item: item[0][1]):
+                if kind == name:
+                    getattr(self._storage, name)(user_id, assessment)
+
+
+@dataclass
+class PondReplay:
+    pond_id: int
+    polls_ok: int = 0
+    polls_skipped: int = 0
+    events_applied: int = 0
+    first: Optional[str] = None
+    last: Optional[str] = None
+    skip_reasons: list[str] = field(default_factory=list)
+
+
+def _apply(registry: EngineRegistry, pond: int, event: PondEvent, at: datetime) -> None:
+    """Applies one logged intervention, as the event endpoints do."""
+    def apply(twin: PondTwin) -> None:
+        twin.apply_event(event, now=at)
+
+    registry.with_twin(pond, apply, profiles=registry.profile_history(pond))
+
+
+def fast_forward(storage: Storage, tables: dict[str, list[dict]], settings: Settings,
+                 ponds: Optional[list[int]] = None) -> list[PondReplay]:
+    """Replays the seed's history (already shifted, koi.dev.seed.shift)
+    for every pond with a configuration, or only those in ponds, and
+    writes the result to storage. Returns what happened per pond."""
+    history = SeedHistory(tables)
+    replay = ReplayStorage(storage, history)
+    registry = EngineRegistry(replay, settings.hypoxia_thresholds)  # type: ignore[arg-type]
+    results = []
+    for config in storage.fetch_active_pond_configs():
+        pond = int(config["user_id"])
+        if ponds is not None and pond not in ponds:
+            continue
+        result = PondReplay(pond)
+        events = history.events(pond)
+        applied = 0
+        for at in history.poll_times(pond):
+            while applied < len(events) and events[applied].time <= at:
+                _apply(registry, pond, events[applied], at)
+                applied += 1
+            replay.at = at
+            try:
+                poller._poll_user(registry, pond, config, now=at)
+                result.polls_ok += 1
+            except poller.PondSkipped as exc:
+                result.polls_skipped += 1
+                if exc.reason not in result.skip_reasons:
+                    result.skip_reasons.append(exc.reason)
+            result.first = result.first or at.isoformat()
+            result.last = at.isoformat()
+        result.events_applied = applied
+        log_event(log, "dev_replay_finished", pond_id=pond, polls_ok=result.polls_ok,
+                  polls_skipped=result.polls_skipped, events_applied=applied, first=result.first, last=result.last)
+        results.append(result)
+    replay.flush()
+    return results
