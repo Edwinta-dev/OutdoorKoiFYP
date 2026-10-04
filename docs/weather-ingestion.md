@@ -140,11 +140,12 @@ cadence that is roughly 300 rows a day per station and metric. Consumers:
 | #26 advisory rules | `fetch_forecast_as_of` for 24-hour periods and the 4-day outlook as issued before the rule's time; observed temperature per regime |
 | #27 rainfall | `fetch_rainfall_total` (value plus coverage) per local day or trailing 24 hours |
 | #32 calibration | `fetch_weather_observations` per station, with the regime rule above |
-| #20 state rebuild | as-of observations and forecasts at each replayed time |
+| #20 state rebuild | as-of observations and forecasts at each replayed time (`koi.tools.rebuild`: newest air temperature, rainfall and wind speed observed in the hour before each poll; 2-hour, 24-hour and 4-day forecasts usable then; a missing part is reported as an incomplete interval) |
 | #33 backtests | as-of forecasts only (`available_at <= prediction time`) |
 
-The models still read the latest caches through the dashboard payload;
-switching each consumer to these as-of reads is part of its own issue.
+The live poller still reads the latest caches through the dashboard
+payload; switching each consumer to these as-of reads is part of its own
+issue. The state rebuild (#20) already reads only history.
 
 ## Endpoint and auth assumptions (owner to verify)
 

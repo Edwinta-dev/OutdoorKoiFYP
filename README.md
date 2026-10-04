@@ -156,6 +156,7 @@ Backend/koi/worker/                 Environmental poller
 Backend/koi/camera/                 Camera service, HSV analysis, adaptive capture scheduling
 Backend/koi/weather/                NEA ingestion job and weather history reads (docs/weather-ingestion.md)
 Backend/koi/dev/                    Local development stack on seeded demo data (docs/dev.md)
+Backend/koi/tools/                  Owner maintenance commands (rebuild a pond's twin from its history)
 Backend/fixtures/demo_pond/         The demo seed and the script that builds it
 Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
 Backend/tests/                      Backend tests, mirroring the package
@@ -215,7 +216,18 @@ python -m koi.api         # digital twin API on :8080 (runs the poller too when 
 python -m koi.worker      # the poller on its own, for any other KOI_ENV
 python -m koi.camera      # camera service on :5000
 python -m koi.weather live   # one NEA fetch into the weather caches and history
+python -m koi.tools.rebuild --pond N --dry-run   # rebuild a pond's twin from its history and compare
 ```
+
+`koi.tools.rebuild` builds a fresh twin from the pond profile, the logged
+interventions, the ingested sensor rows, camera frames, algae ratings and
+the weather history as of each poll, and prints it beside the stored
+snapshot (pool values, loss, algae level, last assessments) with the
+model, profile and camera-mask versions, the input cutoff and any interval
+without weather history. `--since YYYY-MM-DD` starts it at that local
+date. Without `--dry-run` it saves the result as the pond's next snapshot
+version; that replaces the live state, so run it as a deliberate
+maintenance step (details in `Backend/koi/tools/rebuild.py`).
 
 Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;
 `Backend/requirements.txt` installs those pins plus the package (used by
