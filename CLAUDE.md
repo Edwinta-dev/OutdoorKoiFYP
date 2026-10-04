@@ -17,7 +17,7 @@ the working rules for agents.
 ## Choosing issues
 - Pick open `block:NEXT` issues, lowest number first; leave `stretch` for last.
 - Skip `owner-action` and `hardware` issues, plus #74; they need the owner.
-- Skip issues labelled `deferred` (currently #12, #17) until the owner
+- Skip issues labelled `deferred` (currently #86, camera) until the owner
   removes the label.
 - The sensor-sketch freeze was lifted on 2026-10-04 (the live node was
   retrieved). Changes to the `SensorData` insert path (columns, grants,
