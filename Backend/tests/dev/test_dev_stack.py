@@ -173,6 +173,15 @@ def test_differences_name_the_path():
     assert differences({"a": 1}, {"a": 1}) == []
 
 
+def test_differences_treat_one_instant_in_two_spellings_as_equal():
+    # PostgREST trims the fraction's trailing zero; isoformat keeps six digits.
+    assert differences({"t": "2026-10-04T14:35:08.54603+00:00"},
+                       {"t": "2026-10-04T14:35:08.546030+00:00"}) == []
+    assert differences({"t": "2026-10-04T14:35:08.54603+00:00"},
+                       {"t": "2026-10-04T14:35:08.546031+00:00"}) != []
+    assert differences({"t": "not a Time"}, {"t": "not a Tame"}) != []
+
+
 def test_python_m_koi_dev_help_runs():
     import sys
 

@@ -217,4 +217,17 @@ def differences(a: Any, b: Any, path: str = "") -> list[str]:
         return out
     if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
         return [d for i, (x, y) in enumerate(zip(a, b, strict=True)) for d in differences(x, y, f"{path}/{i}")]
-    return [] if a == b else [f"{path or '(body)'}: {a!r} != {b!r}"]
+    return [] if a == b or _same_instant(a, b) else [f"{path or '(body)'}: {a!r} != {b!r}"]
+
+
+def _same_instant(a: Any, b: Any) -> bool:
+    """Two timestamp strings naming the same instant. PostgREST trims
+    trailing zeros from the fraction ('.54603') where Python's isoformat
+    keeps six digits ('.546030'), so a stored timestamp read back from the
+    local database and the same one held in memory can differ as text."""
+    if not (isinstance(a, str) and isinstance(b, str) and "T" in a and "T" in b):
+        return False
+    try:
+        return datetime.fromisoformat(a) == datetime.fromisoformat(b)
+    except ValueError:
+        return False
