@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -109,34 +110,36 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
     final bool isTemperatureDomain = !isWaterQualityDomain && !isAlgaeDomain;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E17),
+      backgroundColor: AppColors.of(context).surfaceInset,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         elevation: 0,
         title: Text(
           widget.title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: AppType.style(
+            color: AppColors.of(context).text,
             fontWeight: FontWeight.bold,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: AppColors.of(context).text),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
+            icon: Icon(Icons.refresh, color: AppColors.of(context).info),
             onPressed: _loadUserPreferencesAndPayload,
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.cyanAccent),
+          ? Center(
+              child: CircularProgressIndicator(
+                color: AppColors.of(context).info,
+              ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(AppSpace.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -149,7 +152,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                       _loadUserPreferencesAndPayload();
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpace.lg),
 
                   // --- 3. HISTORICAL GRAPH WITH INTERVENTIONS ---
                   filteredPoints.isEmpty
@@ -160,11 +163,11 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                           primarySensorType: primaryType,
                           primaryDomainEvent: primaryEvent,
                         ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpace.xl),
 
                   // --- 4. INTERVENTION LEGEND ---
                   InterventionLegend(primaryEventType: primaryEvent),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpace.lg),
 
                   // --- 3b. WATER BUFFER / NITROGEN CYCLE (pH domain only) ---
                   // Server-computed by the DigitalTwin Flask engine - sits
@@ -174,7 +177,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                       key: ValueKey('chemistry-$_chemistryRefreshTick'),
                       userId: _userId,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpace.xl),
                   ],
 
                   // --- 3c. EVAPORATION & FEED LOOKAHEAD (temp domain) ---
@@ -186,7 +189,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                       key: ValueKey('evaporation-$_chemistryRefreshTick'),
                       userId: _userId,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpace.xl),
                   ],
 
                   // --- 3d. ALGAE DOMAIN ---
@@ -203,7 +206,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                       ),
                       userId: _userId,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpace.xl),
                     AlgaeSeverityRatingCard(
                       key: ValueKey('algae-rating-$_algaeRefreshTick'),
                       userId: _userId,
@@ -217,7 +220,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                         }
                       },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpace.xl),
                   ],
                 ],
               ),

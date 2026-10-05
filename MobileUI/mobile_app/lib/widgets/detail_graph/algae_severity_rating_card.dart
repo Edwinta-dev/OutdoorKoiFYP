@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/detail_graph/algae_severity_rating_card.dart
 //
 // The grounding control for the Algal & Solar detail screen: shows the
@@ -62,8 +64,7 @@ class AlgaeSeverityRatingCard extends ConsumerStatefulWidget {
 
 class _AlgaeSeverityRatingCardState
     extends ConsumerState<AlgaeSeverityRatingCard> {
-  static const Color _surface = Color(0xFF131B2A);
-  static const Color _accent = Colors.tealAccent;
+  Color get _accent => AppColors.of(context).water;
 
   AlgaeSeverity? _selected;
   bool _submitting = false;
@@ -136,8 +137,8 @@ class _AlgaeSeverityRatingCardState
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 28),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28),
               child: Center(
                 child: SizedBox(
                   width: 22,
@@ -163,33 +164,13 @@ class _AlgaeSeverityRatingCardState
     );
   }
 
-  Widget _unavailable() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 18),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _header(),
-        const SizedBox(height: 10),
-        const Text(
-          'Could not load the pond camera or your device profile. This is '
-          'not the "analysis service is down" case - that one still shows '
-          'the photo - so it usually means local storage is unavailable.',
-          style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
-        ),
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: () => _reload(),
-          style: TextButton.styleFrom(
-            foregroundColor: _accent,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(0, 32),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Retry', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    ),
+  Widget _unavailable() => PondErrorState(
+    title: 'Rate What You See',
+    message:
+        'Could not load the pond camera or your device profile. This is '
+        'not the "analysis service is down" case - that one still shows '
+        'the photo - so it usually means local storage is unavailable.',
+    onRetry: () => _reload(),
   );
 
   Widget _card(RatingCardData data) {
@@ -198,96 +179,83 @@ class _AlgaeSeverityRatingCardState
     final frame = data.frame;
     final canRate = ctx != null; // rating requires the Flask service
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _accent.withValues(alpha: 0.25)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return OutcomeCardShell(
+      accent: _accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _header(),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.lg),
 
           // --- the frame being rated ---
           _framePanel(data),
 
           // --- camera drift warning, if the labels imply one ---
           if (cal != null && cal.drift.isConcerning) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             _driftBanner(cal.drift),
           ],
 
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpace.lg),
           Text(
             frame?.imageUrl == null
                 ? 'How does the pond look right now?'
                 : 'How does the pond look in this photo?',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12.5,
+            style: AppType.style(
+              color: AppColors.of(context).text,
+              fontSize: AppType.label,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpace.xs),
           Text(
             frame?.imageUrl == null
                 ? 'No camera frame available, so this rating will correct the '
                       'model but will not join the calibration set.'
                 : 'Your answer corrects the model directly - it counts for more '
                       'than the camera reading does.',
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 10.5,
+            style: AppType.style(
+              color: AppColors.of(context).textMuted,
+              fontSize: AppType.caption,
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.md),
 
           // --- the rating options ---
           ..._severityOptions(cal),
 
           // --- previous rating, for anchoring ---
           if (ctx?.latestRating != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             _previousRating(ctx!.latestRating!),
           ],
 
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.lg),
           if (canRate) _submitRow(data) else _ratingOfflineNotice(),
 
           // --- what the last rating actually did ---
           if (_lastResult != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             _resultBanner(_lastResult!),
           ],
 
           if (_error != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpace.md),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline,
-                  color: Colors.redAccent,
+                  color: AppColors.of(context).danger,
                   size: 14,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: AppSpace.sm),
                 Expanded(
                   child: Text(
                     _error!,
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 10.5,
+                    style: AppType.style(
+                      color: AppColors.of(context).danger,
+                      fontSize: AppType.caption,
                     ),
                   ),
                 ),
@@ -297,9 +265,9 @@ class _AlgaeSeverityRatingCardState
 
           // --- calibration progress ---
           if (cal != null) ...[
-            const SizedBox(height: 14),
-            const Divider(color: Colors.white10, height: 1),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.lg),
+            Divider(color: AppColors.of(context).outline, height: 1),
+            const SizedBox(height: AppSpace.md),
             _calibrationPanel(cal),
           ],
         ],
@@ -309,17 +277,17 @@ class _AlgaeSeverityRatingCardState
 
   // ------------------------------------------------------------------
 
-  Widget _header() => const Row(
+  Widget _header() => Row(
     children: [
       Icon(Icons.rate_review_outlined, color: _accent, size: 18),
-      SizedBox(width: 8),
+      const SizedBox(width: AppSpace.sm),
       Expanded(
         child: Text(
           'Rate What You See',
-          style: TextStyle(
-            color: Colors.white,
+          style: AppType.style(
+            color: AppColors.of(context).text,
             fontWeight: FontWeight.bold,
-            fontSize: 13,
+            fontSize: AppType.body,
           ),
         ),
       ),
@@ -337,27 +305,29 @@ class _AlgaeSeverityRatingCardState
             aspectRatio: 4 / 3,
             child: url == null
                 ? Container(
-                    color: Colors.white.withValues(alpha: 0.04),
+                    color: AppColors.of(context).text.withValues(alpha: 0.04),
                     child: Center(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.xl,
+                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.photo_camera_outlined,
-                              color: Colors.white24,
+                              color: AppColors.of(context).outline,
                               size: 30,
                             ),
-                            const SizedBox(height: 8),
-                            const Text(
+                            const SizedBox(height: AppSpace.sm),
+                            Text(
                               'No camera frame yet',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 11.5,
+                              style: AppType.style(
+                                color: AppColors.of(context).textMuted,
+                                fontSize: AppType.label,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: AppSpace.xs),
                             Text(
                               // Say WHY. "No frames for user 455" is
                               // actionable; a bare placeholder is not,
@@ -366,9 +336,9 @@ class _AlgaeSeverityRatingCardState
                               data.frameError ??
                                   'Waiting for the pond camera to report.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white24,
-                                fontSize: 10,
+                              style: AppType.style(
+                                color: AppColors.of(context).textMuted,
+                                fontSize: AppType.micro,
                                 height: 1.35,
                               ),
                             ),
@@ -384,22 +354,22 @@ class _AlgaeSeverityRatingCardState
                     // still fail - degrade to a labelled placeholder
                     // rather than a broken-image glyph.
                     errorBuilder: (_, _, _) => Container(
-                      color: Colors.white.withValues(alpha: 0.04),
-                      child: const Center(
+                      color: AppColors.of(context).text.withValues(alpha: 0.04),
+                      child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.broken_image_outlined,
-                              color: Colors.white24,
+                              color: AppColors.of(context).outline,
                               size: 28,
                             ),
-                            SizedBox(height: 6),
+                            const SizedBox(height: AppSpace.sm),
                             Text(
                               'Photo could not be loaded',
-                              style: TextStyle(
-                                color: Colors.white38,
-                                fontSize: 10.5,
+                              style: AppType.style(
+                                color: AppColors.of(context).textMuted,
+                                fontSize: AppType.caption,
                               ),
                             ),
                           ],
@@ -409,8 +379,10 @@ class _AlgaeSeverityRatingCardState
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return Container(
-                        color: Colors.white.withValues(alpha: 0.04),
-                        child: const Center(
+                        color: AppColors.of(
+                          context,
+                        ).text.withValues(alpha: 0.04),
+                        child: Center(
                           child: SizedBox(
                             width: 20,
                             height: 20,
@@ -434,29 +406,35 @@ class _AlgaeSeverityRatingCardState
               bottom: 0,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
+                  horizontal: AppSpace.md,
+                  vertical: AppSpace.sm,
                 ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.75),
+                      AppColors.transparent,
+                      AppColors.of(
+                        context,
+                      ).imageOverlay.withValues(alpha: 0.75),
                     ],
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.schedule, color: Colors.white70, size: 12),
-                    const SizedBox(width: 5),
+                    Icon(
+                      Icons.schedule,
+                      color: AppColors.of(context).onImage,
+                      size: 12,
+                    ),
+                    const SizedBox(width: AppSpace.xs),
                     Expanded(
                       child: Text(
                         _relativeTime(frame?.capturedAt),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10.5,
+                        style: AppType.style(
+                          color: AppColors.of(context).onImage,
+                          fontSize: AppType.caption,
                         ),
                       ),
                     ),
@@ -464,9 +442,9 @@ class _AlgaeSeverityRatingCardState
                       Text(
                         'camera reads '
                         '${(frame!.greenRatio! * 100).toStringAsFixed(2)}%',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
+                        style: AppType.style(
+                          color: AppColors.of(context).onImage,
+                          fontSize: AppType.micro,
                         ),
                       ),
                   ],
@@ -481,28 +459,35 @@ class _AlgaeSeverityRatingCardState
               top: 8,
               left: 8,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.sm,
+                  vertical: AppSpace.xs,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(6),
+                  color: AppColors.of(
+                    context,
+                  ).imageOverlay.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   border: Border.all(
-                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                    color: AppColors.of(
+                      context,
+                    ).warningOnImage.withValues(alpha: 0.5),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.visibility_off_outlined,
-                      color: Colors.orangeAccent,
+                      color: AppColors.of(context).warningOnImage,
                       size: 11,
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: AppSpace.xs),
                     Text(
                       'view may be blocked',
-                      style: TextStyle(
-                        color: Colors.orangeAccent,
-                        fontSize: 9.5,
+                      style: AppType.style(
+                        color: AppColors.of(context).warningOnImage,
+                        fontSize: AppType.micro,
                       ),
                     ),
                   ],
@@ -516,23 +501,32 @@ class _AlgaeSeverityRatingCardState
 
   Widget _ratingOfflineNotice() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: 11,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppColors.of(context).text.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.08),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.cloud_off_outlined, color: Colors.white38, size: 15),
-          const SizedBox(width: 9),
-          const Expanded(
+          Icon(
+            Icons.cloud_off_outlined,
+            color: AppColors.of(context).textMuted,
+            size: 15,
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
             child: Text(
               'Analysis service unreachable - ratings cannot be saved right '
               'now. The photo above is live from storage.',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 10.5,
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.caption,
                 height: 1.35,
               ),
             ),
@@ -541,11 +535,14 @@ class _AlgaeSeverityRatingCardState
             onPressed: () => _reload(),
             style: TextButton.styleFrom(
               foregroundColor: _accent,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
               minimumSize: const Size(0, 28),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Retry', style: TextStyle(fontSize: 11)),
+            child: Text(
+              'Retry',
+              style: AppType.style(fontSize: AppType.caption),
+            ),
           ),
         ],
       ),
@@ -554,19 +551,24 @@ class _AlgaeSeverityRatingCardState
 
   Widget _driftBanner(CameraDriftVerdict drift) {
     final severe = drift.verdict == 'drift_suspected';
-    final color = severe ? Colors.orangeAccent : Colors.amberAccent;
+    final color = severe
+        ? AppColors.of(context).feeding
+        : AppColors.of(context).warning;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.cleaning_services_outlined, color: color, size: 15),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpace.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -575,18 +577,18 @@ class _AlgaeSeverityRatingCardState
                   severe
                       ? 'Camera lens may need cleaning'
                       : 'Camera baseline shifting',
-                  style: TextStyle(
+                  style: AppType.style(
                     color: color,
-                    fontSize: 11,
+                    fontSize: AppType.caption,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: AppSpace.xs),
                 Text(
                   drift.detail,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
+                  style: AppType.style(
+                    color: AppColors.of(context).textMuted,
+                    fontSize: AppType.micro,
                     height: 1.35,
                   ),
                 ),
@@ -618,29 +620,36 @@ class _AlgaeSeverityRatingCardState
           wanted: (needed[s.wire] ?? 0) > 0,
         ),
       );
-      widgets.add(const SizedBox(height: 6));
+      widgets.add(const SizedBox(height: AppSpace.sm));
     }
 
     // Obstruction is visually separated: it is a data-quality flag, not a
     // fifth severity level, and it is handled completely differently by
     // the engine (it removes a reading rather than describing one).
-    widgets.add(const SizedBox(height: 4));
+    widgets.add(const SizedBox(height: AppSpace.xs));
     widgets.add(
       Row(
         children: [
-          Expanded(child: Container(height: 1, color: Colors.white10)),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
+          Expanded(
+            child: Container(height: 1, color: AppColors.of(context).outline),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
             child: Text(
               'or flag the reading',
-              style: TextStyle(color: Colors.white24, fontSize: 9.5),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.micro,
+              ),
             ),
           ),
-          Expanded(child: Container(height: 1, color: Colors.white10)),
+          Expanded(
+            child: Container(height: 1, color: AppColors.of(context).outline),
+          ),
         ],
       ),
     );
-    widgets.add(const SizedBox(height: 8));
+    widgets.add(const SizedBox(height: AppSpace.sm));
     widgets.add(_optionTile(AlgaeSeverity.obstruction, wanted: false));
 
     return widgets;
@@ -649,22 +658,27 @@ class _AlgaeSeverityRatingCardState
   Widget _optionTile(AlgaeSeverity s, {required bool wanted}) {
     final selected = _selected == s;
     final isObstruction = s == AlgaeSeverity.obstruction;
-    final color = isObstruction ? Colors.white54 : _severityColor(s);
+    final color = isObstruction
+        ? AppColors.of(context).textMuted
+        : _severityColor(s);
 
     return InkWell(
       onTap: _submitting ? null : () => setState(() => _selected = s),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.control),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.md,
+        ),
         decoration: BoxDecoration(
           color: selected
               ? color.withValues(alpha: 0.14)
-              : Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(12),
+              : AppColors.of(context).text.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(AppRadius.control),
           border: Border.all(
             color: selected
                 ? color.withValues(alpha: 0.6)
-                : Colors.white.withValues(alpha: 0.06),
+                : AppColors.of(context).text.withValues(alpha: 0.06),
             width: selected ? 1.4 : 1,
           ),
         ),
@@ -674,20 +688,20 @@ class _AlgaeSeverityRatingCardState
               selected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              color: selected ? color : Colors.white24,
+              color: selected ? color : AppColors.of(context).outline,
               size: 17,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: AppSpace.md),
             if (!isObstruction) ...[
               _severityDot(s),
-              const SizedBox(width: 9),
+              const SizedBox(width: AppSpace.sm),
             ] else ...[
-              const Icon(
+              Icon(
                 Icons.visibility_off_outlined,
-                color: Colors.white38,
+                color: AppColors.of(context).textMuted,
                 size: 14,
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: AppSpace.sm),
             ],
             Expanded(
               child: Column(
@@ -698,9 +712,11 @@ class _AlgaeSeverityRatingCardState
                       Flexible(
                         child: Text(
                           s.label,
-                          style: TextStyle(
-                            color: selected ? Colors.white : Colors.white70,
-                            fontSize: 12,
+                          style: AppType.style(
+                            color: selected
+                                ? AppColors.of(context).text
+                                : AppColors.of(context).textSecondary,
+                            fontSize: AppType.label,
                             fontWeight: selected
                                 ? FontWeight.bold
                                 : FontWeight.w500,
@@ -708,21 +724,23 @@ class _AlgaeSeverityRatingCardState
                         ),
                       ),
                       if (wanted) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppSpace.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
+                            horizontal: AppSpace.xs,
                             vertical: 1.5,
                           ),
                           decoration: BoxDecoration(
                             color: _accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.small,
+                            ),
                           ),
-                          child: const Text(
+                          child: Text(
                             'needed',
-                            style: TextStyle(
+                            style: AppType.style(
                               color: _accent,
-                              fontSize: 8.5,
+                              fontSize: AppType.micro,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -730,12 +748,12 @@ class _AlgaeSeverityRatingCardState
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpace.xxs),
                   Text(
                     s.hint,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
+                    style: AppType.style(
+                      color: AppColors.of(context).textMuted,
+                      fontSize: AppType.micro,
                       height: 1.25,
                     ),
                   ),
@@ -770,16 +788,21 @@ class _AlgaeSeverityRatingCardState
   Widget _previousRating(AlgaeRating prev) {
     final label = prev.severity?.label ?? 'Blocked view';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: AppColors.of(context).text.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.06),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.history, color: Colors.white38, size: 13),
-          const SizedBox(width: 8),
+          Icon(Icons.history, color: AppColors.of(context).textMuted, size: 13),
+          const SizedBox(width: AppSpace.sm),
           Expanded(
             child: Text(
               // Anchoring against the previous judgement is the cheapest
@@ -787,13 +810,19 @@ class _AlgaeSeverityRatingCardState
               // weeks - "minor" in August should mean what it meant in June.
               'Last time you rated this "$label"'
               '${prev.ratedAt != null ? ' ${_relativeTime(prev.ratedAt)}' : ''}',
-              style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.caption,
+              ),
             ),
           ),
           if (prev.greenRatioAtRating != null)
             Text(
               '${(prev.greenRatioAtRating! * 100).toStringAsFixed(2)}%',
-              style: const TextStyle(color: Colors.white38, fontSize: 10),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.micro,
+              ),
             ),
         ],
       ),
@@ -809,20 +838,22 @@ class _AlgaeSeverityRatingCardState
         style: FilledButton.styleFrom(
           backgroundColor: _accent.withValues(alpha: 0.18),
           foregroundColor: _accent,
-          disabledBackgroundColor: Colors.white.withValues(alpha: 0.04),
-          disabledForegroundColor: Colors.white24,
+          disabledBackgroundColor: AppColors.of(
+            context,
+          ).text.withValues(alpha: 0.04),
+          disabledForegroundColor: AppColors.of(context).outline,
           padding: const EdgeInsets.symmetric(vertical: 13),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.control),
             side: BorderSide(
               color: canSubmit
                   ? _accent.withValues(alpha: 0.4)
-                  : Colors.white10,
+                  : AppColors.of(context).outline,
             ),
           ),
         ),
         icon: _submitting
-            ? const SizedBox(
+            ? SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
@@ -833,7 +864,10 @@ class _AlgaeSeverityRatingCardState
             : const Icon(Icons.check_circle_outline, size: 16),
         label: Text(
           _submitting ? 'Saving...' : 'Submit rating',
-          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+          style: AppType.style(
+            fontSize: AppType.label,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
@@ -858,11 +892,16 @@ class _AlgaeSeverityRatingCardState
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
-        color: Colors.greenAccent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+        color: AppColors.of(context).healthy.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: AppColors.of(context).healthy.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -870,18 +909,18 @@ class _AlgaeSeverityRatingCardState
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.check_circle_outline,
-                color: Colors.greenAccent,
+                color: AppColors.of(context).healthy,
                 size: 14,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(
                   message,
-                  style: const TextStyle(
-                    color: Colors.greenAccent,
-                    fontSize: 10.5,
+                  style: AppType.style(
+                    color: AppColors.of(context).healthy,
+                    fontSize: AppType.caption,
                     height: 1.35,
                   ),
                 ),
@@ -893,20 +932,26 @@ class _AlgaeSeverityRatingCardState
               TextButton(
                 onPressed: _submitting ? null : _undo,
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  foregroundColor: AppColors.of(context).textSecondary,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
                   minimumSize: const Size(0, 28),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text('Undo', style: TextStyle(fontSize: 11)),
+                child: Text(
+                  'Undo',
+                  style: AppType.style(fontSize: AppType.caption),
+                ),
               ),
             ],
           ),
           if (r.warning != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpace.sm),
             Text(
               r.warning!,
-              style: const TextStyle(color: Colors.orangeAccent, fontSize: 9.5),
+              style: AppType.style(
+                color: AppColors.of(context).feeding,
+                fontSize: AppType.micro,
+              ),
             ),
           ],
         ],
@@ -928,10 +973,12 @@ class _AlgaeSeverityRatingCardState
           children: [
             Icon(
               cal.isCalibrated ? Icons.verified_outlined : Icons.tune,
-              color: cal.isCalibrated ? Colors.greenAccent : Colors.white38,
+              color: cal.isCalibrated
+                  ? AppColors.of(context).healthy
+                  : AppColors.of(context).textMuted,
               size: 14,
             ),
-            const SizedBox(width: 7),
+            const SizedBox(width: AppSpace.sm),
             Expanded(
               child: Text(
                 cal.isCalibrated
@@ -939,52 +986,59 @@ class _AlgaeSeverityRatingCardState
                     : cal.isPartiallyCalibrated
                     ? 'Alert levels partly calibrated'
                     : 'Alert levels still estimated',
-                style: TextStyle(
-                  color: cal.isCalibrated ? Colors.greenAccent : Colors.white54,
-                  fontSize: 10.5,
+                style: AppType.style(
+                  color: cal.isCalibrated
+                      ? AppColors.of(context).healthy
+                      : AppColors.of(context).textMuted,
+                  fontSize: AppType.caption,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             Text(
               '$total rating${total == 1 ? '' : 's'}',
-              style: const TextStyle(color: Colors.white38, fontSize: 10),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.micro,
+              ),
             ),
           ],
         ),
         if (!cal.isCalibrated) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpace.sm),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(AppRadius.small),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 5,
-              backgroundColor: Colors.white.withValues(alpha: 0.06),
-              valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+              backgroundColor: AppColors.of(
+                context,
+              ).text.withValues(alpha: 0.06),
+              valueColor: AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: AppSpace.sm),
           Text(
             remaining > 0
                 ? _neededSummary(cal)
                 : 'Enough ratings collected - thresholds will calibrate on the '
                       'next update.',
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 9.5,
+            style: AppType.style(
+              color: AppColors.of(context).textMuted,
+              fontSize: AppType.micro,
               height: 1.35,
             ),
           ),
         ],
         if (cal.isCalibrated) ...[
-          const SizedBox(height: 7),
+          const SizedBox(height: AppSpace.sm),
           Text(
             'Watch at ${(cal.watchThreshold * 100).toStringAsFixed(2)}% coverage, '
             'action at ${(cal.actionThreshold * 100).toStringAsFixed(2)}% - both '
             'measured from where your own ratings changed.',
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 9.5,
+            style: AppType.style(
+              color: AppColors.of(context).textMuted,
+              fontSize: AppType.micro,
               height: 1.35,
             ),
           ),
@@ -1009,23 +1063,14 @@ class _AlgaeSeverityRatingCardState
 
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-    ),
-    child: child,
-  );
+  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
 
   Color _severityColor(AlgaeSeverity s) => switch (s) {
-    AlgaeSeverity.none => Colors.greenAccent,
-    AlgaeSeverity.minor => const Color(0xFFB2E06A),
-    AlgaeSeverity.moderate => Colors.amberAccent,
-    AlgaeSeverity.severe => Colors.redAccent,
-    AlgaeSeverity.obstruction => Colors.white54,
+    AlgaeSeverity.none => AppColors.of(context).healthy,
+    AlgaeSeverity.minor => AppColors.of(context).healthy,
+    AlgaeSeverity.moderate => AppColors.of(context).warning,
+    AlgaeSeverity.severe => AppColors.of(context).danger,
+    AlgaeSeverity.obstruction => AppColors.of(context).textMuted,
   };
 
   String _relativeTime(DateTime? t) {

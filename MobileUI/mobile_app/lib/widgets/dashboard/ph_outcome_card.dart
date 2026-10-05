@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import '../../utils/pond_heuristics.dart';
 import '../../utils/digital_twin_api.dart';
@@ -32,7 +34,7 @@ class PhCardData {
   final AdvisorySeverity severity;
   final bool fromBackend;
 
-  const PhCardData({
+  PhCardData({
     required this.status,
     required this.category,
     required this.riskScore,
@@ -118,14 +120,18 @@ class PhOutcomeCard extends StatelessWidget {
     this.targetMaxPh = 8.2,
   });
 
-  Color _getStatusColor(AdvisorySeverity severity, String status) {
+  Color _getStatusColor(
+    BuildContext context,
+    AdvisorySeverity severity,
+    String status,
+  ) {
     if (severity == AdvisorySeverity.red || status == 'Red') {
-      return const Color(0xFFFF4D4D);
+      return AppColors.of(context).danger;
     }
     if (severity == AdvisorySeverity.amber || status == 'Amber') {
-      return Colors.amberAccent;
+      return AppColors.of(context).warning;
     }
-    return const Color(0xFF50C878); // Optimal Green
+    return AppColors.of(context).healthy; // Optimal Green
   }
 
   @override
@@ -152,126 +158,134 @@ class PhOutcomeCard extends StatelessWidget {
       telemetryHistory: telemetryHistory,
     );
 
-    final statusColor = _getStatusColor(cardData.severity, cardData.status);
+    final statusColor = _getStatusColor(
+      context,
+      cardData.severity,
+      cardData.status,
+    );
 
-    return InkWell(
+    return OutcomeCardShell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        // 1. REMOVE color: const Color(0xFF131B2A)
-        // 2. REMOVE border: Border.all(...)
-        // 3. REMOVE boxShadow: [...]
-        decoration: const BoxDecoration(
-          color:
-              Colors.transparent, // Lets the HUD parent container show through!
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
+      transparent: true,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StatusChip(status: PondStatus.fromWire(cardData.status)),
+          const SizedBox(height: AppSpace.md),
 
-            // --- MAIN TWO-COLUMN BODY ---
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // LEFT COLUMN: pH Display + Vertical Scale
-                Expanded(
-                  flex: 5,
-                  child: Row(
-                    children: [
-                      // Numeric pH
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            currentPh.toStringAsFixed(2),
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 34,
-                              fontWeight: FontWeight.bold,
-                              height: 1.0,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Current pH',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 16),
-
-                      // Vertical pH Scale Bar (5.5 to 9.5 range)
-                      _buildVerticalPhScale(currentPh, statusColor),
-                    ],
-                  ),
-                ),
-
-                // DIVIDER
-                Container(
-                  width: 1,
-                  height: 64,
-                  color: Colors.white12,
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                ),
-
-                // RIGHT COLUMN: Rain Vulnerability Score Panel
-                Expanded(
-                  flex: 6,
-                  child: _buildRainVulnerabilityPanel(cardData, statusColor),
-                ),
-              ],
-            ),
-
-            // --- BOTTOM ADVISORY BANNER (If Amber / Red) ---
-            if (cardData.severity != AdvisorySeverity.none ||
-                cardData.addHardenerNow) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
+          // --- MAIN TWO-COLUMN BODY ---
+          AdaptiveRow(
+            minWidth: 300,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // LEFT COLUMN: pH Display + Vertical Scale
+              Expanded(
+                flex: 5,
+                child: AdaptiveRow(
                   children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: statusColor,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        cardData.message,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                    // Numeric pH
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          currentPh.toStringAsFixed(2),
+                          style: AppType.style(
+                            color: statusColor,
+                            fontSize: AppType.display,
+                            fontWeight: FontWeight.bold,
+                            height: 1.0,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: AppSpace.xs),
+                        Text(
+                          'Current pH',
+                          style: AppType.style(
+                            color: AppColors.of(context).textMuted,
+                            fontSize: AppType.label,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(width: AppSpace.lg),
+
+                    // Vertical pH Scale Bar (5.5 to 9.5 range)
+                    _buildVerticalPhScale(context, currentPh, statusColor),
                   ],
                 ),
               ),
+
+              // DIVIDER
+              Container(
+                width: 1,
+                height: 64,
+                color: AppColors.of(context).outline,
+                margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+              ),
+
+              // RIGHT COLUMN: Rain Vulnerability Score Panel
+              Expanded(
+                flex: 6,
+                child: _buildRainVulnerabilityPanel(
+                  context,
+                  cardData,
+                  statusColor,
+                ),
+              ),
             ],
+          ),
+
+          // --- BOTTOM ADVISORY BANNER (If Amber / Red) ---
+          if (cardData.severity != AdvisorySeverity.none ||
+              cardData.addHardenerNow) ...[
+            const SizedBox(height: AppSpace.lg),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.md,
+                vertical: AppSpace.md,
+              ),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: AdaptiveRow(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: statusColor,
+                    size: 18,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text(
+                      cardData.message,
+                      style: AppType.style(
+                        color: statusColor,
+                        fontSize: AppType.label,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
   /// Builds the Vertical pH Target Scale (Range: 5.5 to 9.5)
-  Widget _buildVerticalPhScale(double ph, Color activeColor) {
-    const double minPhScale = 5.5;
-    const double maxPhScale = 9.5;
+  Widget _buildVerticalPhScale(
+    BuildContext context,
+    double ph,
+    Color activeColor,
+  ) {
+    final double minPhScale = 5.5;
+    final double maxPhScale = 9.5;
     final double clampedPh = ph.clamp(minPhScale, maxPhScale);
 
     // Convert pH value to a normalized 0.0 - 1.0 height factor
@@ -288,8 +302,8 @@ class PhOutcomeCard extends StatelessWidget {
           Container(
             width: 6,
             decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(4),
+              color: AppColors.of(context).outline,
+              borderRadius: BorderRadius.circular(AppRadius.small),
             ),
           ),
           // Green Safe Zone Band (6.8 to 8.2)
@@ -302,8 +316,8 @@ class PhOutcomeCard extends StatelessWidget {
                   64 *
                   ((targetMaxPh - targetMinPh) / (maxPhScale - minPhScale)),
               decoration: BoxDecoration(
-                color: const Color(0xFF50C878).withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(4),
+                color: AppColors.of(context).healthy.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(AppRadius.small),
               ),
             ),
           ),
@@ -315,9 +329,12 @@ class PhOutcomeCard extends StatelessWidget {
               height: 6,
               decoration: BoxDecoration(
                 color: activeColor,
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(AppRadius.small),
                 boxShadow: [
-                  BoxShadow(color: activeColor.withValues(alpha: 0.6), blurRadius: 4),
+                  BoxShadow(
+                    color: activeColor.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  ),
                 ],
               ),
             ),
@@ -329,75 +346,88 @@ class PhOutcomeCard extends StatelessWidget {
 
   /// Right-side panel detailing the Rain Vulnerability Score
   Widget _buildRainVulnerabilityPanel(
+    BuildContext context,
     PhCardData cardData,
     Color statusColor,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        AdaptiveRow(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Rain Vulnerability',
-              style: TextStyle(color: Colors.white54, fontSize: 11),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.caption,
+              ),
             ),
             if (cardData.addHardenerNow)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF4D4D).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.sm,
+                  vertical: AppSpace.xxs,
                 ),
-                child: const Text(
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).danger.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: Text(
                   'BUFFER NOW',
-                  style: TextStyle(
-                    color: Color(0xFFFF4D4D),
-                    fontSize: 9,
+                  style: AppType.style(
+                    color: AppColors.of(context).danger,
+                    fontSize: AppType.micro,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpace.xs),
 
         // Risk Score Display
-        Row(
+        AdaptiveRow(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
               '${cardData.riskScore}',
-              style: TextStyle(
+              style: AppType.style(
                 color: statusColor,
-                fontSize: 26,
+                fontSize: AppType.metric,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const Text(
+            Text(
               ' / 10',
-              style: TextStyle(color: Colors.white38, fontSize: 13),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.body,
+              ),
             ),
             const Spacer(),
             Text(
               cardData.category,
-              style: TextStyle(
+              style: AppType.style(
                 color: statusColor,
-                fontSize: 11,
+                fontSize: AppType.caption,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpace.sm),
 
         // Proxy Info Caption
         Text(
           cardData.fromBackend
               ? 'Server-computed risk score (WaterChemistryEngine)'
               : 'Reactivity: ${cardData.phReactivity.toStringAsFixed(2)} pH/kLUX',
-          style: const TextStyle(color: Colors.white38, fontSize: 10),
+          style: AppType.style(
+            color: AppColors.of(context).textMuted,
+            fontSize: AppType.micro,
+          ),
         ),
       ],
     );

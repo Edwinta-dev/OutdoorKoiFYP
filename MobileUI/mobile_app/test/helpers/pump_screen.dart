@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 // Builds any screen or widget with a fake data source and seeded
 // SharedPreferences, so widget tests never reach Supabase or the
 // DigitalTwin service.
@@ -29,6 +30,8 @@ Widget wrapWithSource(
   Widget child,
   PondDataSource source, {
   Map<String, Object> prefs = onboardedPrefs,
+  Brightness brightness = Brightness.dark,
+  double textScale = 1,
 }) => ProviderScope(
   retry: (_, _) => null,
   overrides: [
@@ -39,7 +42,13 @@ Widget wrapWithSource(
   ],
   child: MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
+    theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: child,
   ),
 );
@@ -54,12 +63,22 @@ Future<FakePondDataSource> pumpScreen(
   FakePondDataSource? source,
   Map<String, Object> prefs = onboardedPrefs,
   Size size = phoneSize,
+  Brightness brightness = Brightness.dark,
+  double textScale = 1,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   final fake = source ?? FakePondDataSource();
-  await tester.pumpWidget(wrapWithSource(screen, fake, prefs: prefs));
+  await tester.pumpWidget(
+    wrapWithSource(
+      screen,
+      fake,
+      prefs: prefs,
+      brightness: brightness,
+      textScale: textScale,
+    ),
+  );
   return fake;
 }
 

@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,8 +51,8 @@ void main() {
     final lines = data.extraLinesData.verticalLines;
     expect(lines[0].label.labelResolver(lines[0]), 'Salt 1 g');
     expect(lines[1].label.labelResolver(lines[1]), 'Filter cleaning: Rinsed');
-    expect(lines[0].color, Colors.purpleAccent);
-    expect(lines[1].color, Colors.amberAccent);
+    expect(lines[0].color, const AppColors(Brightness.light).intervention);
+    expect(lines[1].color, const AppColors(Brightness.light).warning);
     final bar = data.lineBarsData.single;
     final tooltip = data.lineTouchData.touchTooltipData.getTooltipItems([
       LineBarSpot(bar, 0, bar.spots[0]),

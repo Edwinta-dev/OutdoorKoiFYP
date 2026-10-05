@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/utils/fish_image_helper.dart
 
 import 'package:flutter/material.dart';
@@ -20,8 +21,8 @@ class FishImageHelper {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+      builder: (_) => Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).info),
       ),
     );
   }
@@ -32,6 +33,7 @@ class FishImageHelper {
     required String speciesTitle,
     required VoidCallback onDataRefresh,
   }) async {
+    final colors = AppColors.of(context);
     try {
       final picker = ImagePicker();
       final XFile? pickedFile = await picker.pickImage(
@@ -45,13 +47,13 @@ class FishImageHelper {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Refocus Image Viewport',
-            toolbarColor: const Color(0xFF131B2A),
-            toolbarWidgetColor: Colors.white,
+            toolbarColor: colors.surface,
+            toolbarWidgetColor: colors.text,
             initAspectRatio: CropAspectRatioPreset.ratio16x9,
             lockAspectRatio: false,
-            activeControlsWidgetColor: const Color(0xFF38BDF8),
-            statusBarLight: false,
-            backgroundColor: const Color(0xFF070B12),
+            activeControlsWidgetColor: colors.info,
+            statusBarLight: !colors.isDark,
+            backgroundColor: colors.canvas,
           ),
           IOSUiSettings(title: 'Refocus Image Viewport'),
         ],
@@ -134,36 +136,41 @@ class FishImageHelper {
   }) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF131B2A),
+      backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
       ),
       builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpace.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Manage Species Gallery',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.title,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.add_photo_alternate_outlined,
-                color: Color(0xFF38BDF8),
+                color: AppColors.of(context).info,
               ),
-              title: const Text(
+              title: Text(
                 'Add Another Photo',
-                style: TextStyle(color: Colors.white),
+                style: AppType.style(color: AppColors.of(context).text),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Upload new image for this species',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
+                style: AppType.style(
+                  color: AppColors.of(context).textSecondary,
+                  fontSize: AppType.label,
+                ),
               ),
               onTap: () async {
                 Navigator.pop(sheetContext);

@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// Shown instead of the app when the build is missing its settings (see
@@ -13,7 +14,9 @@ class ConfigErrorApp extends StatelessWidget {
     return MaterialApp(
       title: 'Koi Monitor',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       home: ConfigErrorScreen(problems: problems),
     );
   }
@@ -30,20 +33,20 @@ class ConfigErrorScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Configuration error')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpace.xl),
           children: [
-            const Text(
+            Text(
               'This build of the app is missing its server settings, so it '
               'cannot load pond readings or log interventions.',
-              style: TextStyle(fontSize: 16),
+              style: AppType.style(fontSize: AppType.body),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             for (final problem in problems)
               Padding(
-                padding: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.only(bottom: AppSpace.sm),
                 child: Text('- $problem'),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             const Text(
               'To fix: copy env/dev.json.example to env/dev.json, fill in '
               'every value, then rebuild with\n'

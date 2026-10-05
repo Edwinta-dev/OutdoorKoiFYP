@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/providers.dart';
@@ -26,18 +27,26 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               fallbackHeight: 200,
             ), // Temporary stand-in for your graph
 
-            const SizedBox(height: 16), // Adds clean spacing between elements
+            const SizedBox(
+              height: AppSpace.lg,
+            ), // Adds clean spacing between elements
             // 2. The Menu Section Title
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
               child: Text(
                 'Quick Actions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: AppType.style(
+                  fontSize: AppType.title,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             // 3. The Menu Items
             ListTile(
-              leading: const Icon(Icons.water_drop, color: Colors.teal),
+              leading: Icon(
+                Icons.water_drop,
+                color: AppColors.of(context).water,
+              ),
               title: const Text('Water Quality Log'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
@@ -45,7 +54,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.scale, color: Colors.teal),
+              leading: Icon(Icons.scale, color: AppColors.of(context).water),
               title: const Text('Biomass Tracker'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
@@ -55,14 +64,16 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
 
             TextButton(
               style: ButtonStyle(
-                foregroundColor: WidgetStateProperty.all<Color>(Colors.red),
+                foregroundColor: WidgetStateProperty.all<Color>(
+                  AppColors.of(context).danger,
+                ),
               ),
               onPressed:
                   deletePondData, // Implement this function to handle data deletion
 
-              child: const Text(
+              child: Text(
                 'Delete Pond Data',
-                style: TextStyle(fontSize: 16),
+                style: AppType.style(fontSize: AppType.body),
               ),
             ),
           ],

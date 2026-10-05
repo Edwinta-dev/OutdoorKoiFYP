@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/screens/fish_tips_view.dart
 
 import 'package:flutter/material.dart';
@@ -72,36 +74,29 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
   Widget build(BuildContext context) {
     final state = ref.watch(fishProfilesProvider);
     if (state.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+      return Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).info),
       );
     }
 
+    if (state.hasError) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: PondErrorState(
+          title: 'Fish inventory unavailable',
+          message: 'Check the connection and try again.',
+          onRetry: refreshData,
+        ),
+      );
+    }
     if (_fishProfiles.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.phishing_outlined, size: 64, color: Colors.white54),
-              SizedBox(height: 16),
-              Text(
-                'No Fish Inventory Found',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Complete your tank onboarding to view specific maintenance tips.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white60, fontSize: 14),
-              ),
-            ],
-          ),
+      return const SingleChildScrollView(
+        padding: EdgeInsets.all(AppSpace.xxxl),
+        child: PondEmptyState(
+          title: 'No Fish Inventory Found',
+          message:
+              'Complete your tank onboarding to view specific maintenance tips.',
+          icon: Icons.phishing_outlined,
         ),
       );
     }
@@ -123,11 +118,16 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
     };
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: AppColors.of(context).canvas,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.xl,
+            AppSpace.lg,
+            AppSpace.xl,
+            110,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -143,7 +143,7 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
                   onDataRefresh: refreshData,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
 
               if (_fishProfiles.length > 1) ...[
                 Row(
@@ -160,20 +160,24 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
                       child: Container(
                         width: _currentCarouselIndex == entry.key ? 18 : 6,
                         height: 6,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.xs,
+                        ),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(AppRadius.small),
                           color: _currentCarouselIndex == entry.key
-                              ? const Color(0xFF38BDF8)
-                              : Colors.white.withValues(alpha: 0.3),
+                              ? AppColors.of(context).info
+                              : AppColors.of(
+                                  context,
+                                ).text.withValues(alpha: 0.3),
                         ),
                       ),
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpace.xl),
               ] else
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpace.xxl),
 
               FishParameterTable(
                 parameters: parameters,

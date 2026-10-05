@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/fish/fish_parameter_table.dart
 
 import 'package:flutter/material.dart';
@@ -16,33 +18,41 @@ class FishParameterTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppColors.of(context).text.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.08),
+        ),
       ),
       child: Column(
         children: [
           // Section Banner Header
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.lg,
+              vertical: AppSpace.md,
+            ),
             decoration: BoxDecoration(
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+              color: AppColors.of(context).info.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+                top: Radius.circular(AppRadius.card),
               ),
             ),
             child: Text(
               headerTitle,
-              style: const TextStyle(
-                color: Color(0xFF38BDF8),
-                fontSize: 11,
+              style: AppType.style(
+                color: AppColors.of(context).info,
+                fontSize: AppType.caption,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.8,
               ),
             ),
           ),
-          Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
+          Divider(
+            color: AppColors.of(context).text.withValues(alpha: 0.06),
+            height: 1,
+          ),
 
           // Parameter Rows
           ListView.separated(
@@ -50,7 +60,7 @@ class FishParameterTable extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: parameters.length,
             separatorBuilder: (_, _) => Divider(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: AppColors.of(context).text.withValues(alpha: 0.06),
               height: 1,
               indent: 16,
               endIndent: 16,
@@ -65,8 +75,8 @@ class FishParameterTable extends StatelessWidget {
 
               return Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+                  horizontal: AppSpace.lg,
+                  vertical: AppSpace.lg,
                 ),
                 child: isLongTextField
                     ? Column(
@@ -74,43 +84,44 @@ class FishParameterTable extends StatelessWidget {
                         children: [
                           Text(
                             key,
-                            style: const TextStyle(
-                              color: Color(0xFF38BDF8),
-                              fontSize: 12,
+                            style: AppType.style(
+                              color: AppColors.of(context).info,
+                              fontSize: AppType.label,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: AppSpace.sm),
                           Text(
                             value,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
+                            style: AppType.style(
+                              color: AppColors.of(context).text,
+                              fontSize: AppType.body,
                               fontWeight: FontWeight.w500,
                               height: 1.4,
                             ),
                           ),
                         ],
                       )
-                    : Row(
+                    : AdaptiveRow(
+                        minWidth: 300,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             key,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 13,
+                            style: AppType.style(
+                              color: AppColors.of(context).textMuted,
+                              fontSize: AppType.body,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpace.md),
                           Flexible(
                             child: Text(
                               value,
                               textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
+                              style: AppType.style(
+                                color: AppColors.of(context).text,
+                                fontSize: AppType.body,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),

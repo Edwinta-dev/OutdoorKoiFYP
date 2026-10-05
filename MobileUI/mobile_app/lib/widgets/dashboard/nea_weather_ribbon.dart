@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class NeaWeatherRibbon extends StatelessWidget {
@@ -102,16 +104,20 @@ class NeaWeatherRibbon extends StatelessWidget {
     return GestureDetector(
       onTap: onOpenFullForecast,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: AppSpace.md,
+        ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1F26),
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.of(context).surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: AppColors.of(context).text.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
-        child: Row(
+        child: AdaptiveRow(
+          minWidth: 300,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -121,60 +127,66 @@ class NeaWeatherRibbon extends StatelessWidget {
               width: 24,
               height: 24,
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Icon(
+              errorBuilder: (_, _, _) => Icon(
                 Icons.cloud_queue,
-                color: Colors.cyanAccent,
+                color: AppColors.of(context).info,
                 size: 20,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.sm),
 
             // 2. Sky Condition (Flexible prevents overflow on long NEA strings)
             Flexible(
               child: Text(
                 forecast2hr,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
+                style: AppType.style(
+                  color: AppColors.of(context).text,
+                  fontSize: AppType.body,
                   fontWeight: FontWeight.bold,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.sm),
 
             // 3. Air Temperature
             Text(
               '•  ${airTemp.toStringAsFixed(1)}°C',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.label,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.sm),
 
             // 4. UV Index Badge (Safe integer comparison)
             _buildMiniBadge(
+              context,
               '•  UV',
               uvVal.toString(),
-              color: uvInt > 3 ? const Color(0xFFFACC15) : Colors.white70,
+              color: uvInt > 3
+                  ? AppColors.of(context).warning
+                  : AppColors.of(context).textSecondary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.sm),
 
             // 5. Rainfall Metric
             _buildMiniStat(
+              context,
               Icons.water_drop,
               '${rainfall.toStringAsFixed(1)} mm',
-              color: rainfall > 0 ? const Color(0xFF38BDF8) : Colors.white70,
+              color: rainfall > 0
+                  ? AppColors.of(context).info
+                  : AppColors.of(context).textSecondary,
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: AppSpace.sm),
 
             // 6. Navigation Chevron
-            const Icon(
+            Icon(
               Icons.arrow_forward_ios,
-              color: Colors.white38,
+              color: AppColors.of(context).textMuted,
               size: 12,
             ),
           ],
@@ -184,21 +196,25 @@ class NeaWeatherRibbon extends StatelessWidget {
   }
 
   Widget _buildMiniBadge(
+    BuildContext context,
     String label,
     String value, {
-    Color color = Colors.white70,
+    Color? color,
   }) {
     return Row(
       children: [
         Text(
           '$label ',
-          style: const TextStyle(color: Colors.white54, fontSize: 11),
+          style: AppType.style(
+            color: AppColors.of(context).textMuted,
+            fontSize: AppType.caption,
+          ),
         ),
         Text(
           value,
-          style: TextStyle(
+          style: AppType.style(
             color: color,
-            fontSize: 11,
+            fontSize: AppType.caption,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -207,19 +223,20 @@ class NeaWeatherRibbon extends StatelessWidget {
   }
 
   Widget _buildMiniStat(
+    BuildContext context,
     IconData icon,
     String text, {
-    Color color = Colors.white70,
+    Color? color,
   }) {
     return Row(
       children: [
-        Icon(icon, color: Colors.white54, size: 13),
-        const SizedBox(width: 3),
+        Icon(icon, color: AppColors.of(context).textMuted, size: 13),
+        const SizedBox(width: AppSpace.xs),
         Text(
           text,
-          style: TextStyle(
+          style: AppType.style(
             color: color,
-            fontSize: 11,
+            fontSize: AppType.caption,
             fontWeight: FontWeight.w500,
           ),
         ),

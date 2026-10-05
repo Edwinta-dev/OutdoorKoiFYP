@@ -3,14 +3,15 @@
 //
 // The goldens are recorded on Linux, as CI runs them: text anti-aliasing
 // on Windows differs by 3-6 % of pixels, so this file is skipped there.
-// Regenerate after an intended visual change, from MobileUI/mobile_app:
-//   docker run --rm -v "$PWD:/app" -w /app ghcr.io/cirruslabs/flutter:<CI version> \
-//     flutter test --update-goldens test/goldens_test.dart
-// and review the PNG diff before committing.
+// Regenerate after an intended visual change with tools/update_goldens.py
+// (Docker, the Flutter version CI pins; see docs/dev.md) and review the
+// PNG diff before committing.
 @TestOn('linux')
 library;
 
 import 'package:flutter/material.dart';
+import 'package:mobile_app/theme/app_theme.dart';
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/utils/pond_heuristics.dart';
 import 'package:mobile_app/widgets/dashboard/ph_outcome_card.dart';
@@ -29,9 +30,12 @@ const _cardWidth = 372.0; // 412 dp phone minus the dashboard's 20 dp padding
 Future<Finder> _pumpGolden(
   WidgetTester tester,
   Widget child, {
-  Color background = const Color(0xFF070B12),
+  Color? background,
+  Brightness brightness = Brightness.dark,
+  double textScale = 1,
   double height = 400,
 }) async {
+  background ??= AppColors(brightness).canvas;
   await pumpScreen(
     tester,
     Scaffold(
@@ -51,6 +55,8 @@ Future<Finder> _pumpGolden(
       ),
     ),
     size: Size(_cardWidth + 40, height),
+    brightness: brightness,
+    textScale: textScale,
   );
   await tester.runAsync(() async {
     for (final element in find.byType(Image).evaluate()) {
@@ -61,6 +67,8 @@ Future<Finder> _pumpGolden(
   await tester.pumpAndSettle();
   return find.byKey(const ValueKey('golden'));
 }
+
+String _goldenPath(String name) => 'goldens/$name';
 
 void main() {
   final payload = Fixtures.dashboardPayload();
@@ -82,7 +90,7 @@ void main() {
     );
     await expectLater(
       target,
-      matchesGoldenFile('goldens/temperature_outcome_card.png'),
+      matchesGoldenFile(_goldenPath('temperature_outcome_card.png')),
     );
   });
 
@@ -107,7 +115,10 @@ void main() {
         onTap: () {},
       ),
     );
-    await expectLater(target, matchesGoldenFile('goldens/ph_outcome_card.png'));
+    await expectLater(
+      target,
+      matchesGoldenFile(_goldenPath('ph_outcome_card.png')),
+    );
   });
 
   testWidgets('solar outcome card', (tester) async {
@@ -121,7 +132,7 @@ void main() {
     );
     await expectLater(
       target,
-      matchesGoldenFile('goldens/solar_outcome_card.png'),
+      matchesGoldenFile(_goldenPath('solar_outcome_card.png')),
     );
   });
 
@@ -131,15 +142,75 @@ void main() {
       InterventionLogSheet(
         eventType: 'FEEDING',
         title: 'Feeding Session',
-        accentColor: Colors.orangeAccent,
+        accentColor: const AppColors(Brightness.dark).feeding,
         initialTimestamp: Fixtures.now,
       ),
-      background: const Color(0xFF131B2A),
+      background: const AppColors(Brightness.dark).surface,
       height: 520,
     );
     await expectLater(
       target,
-      matchesGoldenFile('goldens/feeding_log_sheet.png'),
+      matchesGoldenFile(_goldenPath('feeding_log_sheet.png')),
     );
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets('shared components $brightness at $scale', (tester) async {
+        final target = await _pumpGolden(
+          tester,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SectionHeader(
+                title: 'Pond readings',
+                icon: Icons.water_drop_outlined,
+              ),
+              const MetricTile(label: 'Water temperature', value: '27.4 °C'),
+              const SizedBox(height: AppSpace.sm),
+              const MetricTile(
+                label: 'Estimated water loss',
+                value: '8.4 L',
+                estimate: true,
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.sm,
+                children: [
+                  for (final status in PondStatus.values)
+                    StatusChip(status: status),
+                ],
+              ),
+              const SizedBox(height: AppSpace.sm),
+              const OutcomeCardShell(
+                child: PondEmptyState(
+                  title: 'No readings yet',
+                  message: 'Readings appear after the sensor reports.',
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              OutcomeCardShell(
+                child: PondErrorState(
+                  title: 'Pond readings unavailable',
+                  message: 'Check the connection and try again.',
+                  onRetry: () {},
+                ),
+              ),
+            ],
+          ),
+          brightness: brightness,
+          textScale: scale,
+          height: 1400,
+        );
+        await expectLater(
+          target,
+          matchesGoldenFile(
+            _goldenPath(
+              'shared_${brightness.name}_${scale.toStringAsFixed(1)}.png',
+            ),
+          ),
+        );
+      });
+    }
+  }
 }

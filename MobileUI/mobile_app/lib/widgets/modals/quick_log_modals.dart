@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/modals/quick_log_modals.dart
 
 import 'package:flutter/material.dart';
@@ -12,74 +14,79 @@ import '../../utils/event_id.dart';
 void showQuickActionSelector(BuildContext context) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF131B2A),
+    isScrollControlled: true,
+    backgroundColor: AppColors.of(context).surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppRadius.panel),
+      ),
     ),
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Log Pond Intervention',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+    builder: (ctx) => SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Log Pond Intervention',
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.body,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _actionTile(
-            ctx,
-            Icons.grain,
-            Colors.purpleAccent,
-            'Salt Addition',
-            'Logs added salt in grams',
-            'SALT',
-          ),
-          _actionTile(
-            ctx,
-            Icons.filter_alt_outlined,
-            Colors.amberAccent,
-            'Filter Cleaning',
-            'Marks pH and TDS after maintenance for 24 hours',
-            'FILTER_CLEAN',
-          ),
-          _actionTile(
-            ctx,
-            Icons.water_drop,
-            Colors.lightBlueAccent,
-            'Water Change',
-            'Resets pH & TDS mineral accumulation',
-            'WATER_CHANGE',
-          ),
-          _actionTile(
-            ctx,
-            Icons.opacity,
-            Colors.cyanAccent,
-            'Water Top-Up',
-            'Restores volume lost to evaporation',
-            'WATER_TOPUP',
-          ),
-          _actionTile(
-            ctx,
-            Icons.cleaning_services_outlined,
-            Colors.tealAccent,
-            'Algae Scrub',
-            'Resets visual greenery & photo solar buildup',
-            'ALGAE_SCRUB',
-          ),
-          _actionTile(
-            ctx,
-            Icons.set_meal_outlined,
-            Colors.orangeAccent,
-            'Feeding Session',
-            'Logs food grams & protein content',
-            'FEEDING',
-          ),
-        ],
+            const SizedBox(height: AppSpace.md),
+            _actionTile(
+              ctx,
+              Icons.grain,
+              AppColors.of(context).intervention,
+              'Salt Addition',
+              'Logs added salt in grams',
+              'SALT',
+            ),
+            _actionTile(
+              ctx,
+              Icons.filter_alt_outlined,
+              AppColors.of(context).warning,
+              'Filter Cleaning',
+              'Marks pH and TDS after maintenance for 24 hours',
+              'FILTER_CLEAN',
+            ),
+            _actionTile(
+              ctx,
+              Icons.water_drop,
+              AppColors.of(context).info,
+              'Water Change',
+              'Resets pH & TDS mineral accumulation',
+              'WATER_CHANGE',
+            ),
+            _actionTile(
+              ctx,
+              Icons.opacity,
+              AppColors.of(context).info,
+              'Water Top-Up',
+              'Restores volume lost to evaporation',
+              'WATER_TOPUP',
+            ),
+            _actionTile(
+              ctx,
+              Icons.cleaning_services_outlined,
+              AppColors.of(context).water,
+              'Algae Scrub',
+              'Resets visual greenery & photo solar buildup',
+              'ALGAE_SCRUB',
+            ),
+            _actionTile(
+              ctx,
+              Icons.set_meal_outlined,
+              AppColors.of(context).feeding,
+              'Feeding Session',
+              'Logs food grams & protein content',
+              'FEEDING',
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -101,24 +108,29 @@ Widget _actionTile(
     ),
     title: Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
+      style: AppType.style(
+        color: AppColors.of(ctx).text,
         fontWeight: FontWeight.w600,
-        fontSize: 13,
+        fontSize: AppType.body,
       ),
     ),
     subtitle: Text(
       sub,
-      style: const TextStyle(color: Colors.white54, fontSize: 11),
+      style: AppType.style(
+        color: AppColors.of(ctx).textMuted,
+        fontSize: AppType.caption,
+      ),
     ),
     onTap: () {
       Navigator.pop(ctx);
       showModalBottomSheet(
         context: ctx,
         isScrollControlled: true,
-        backgroundColor: const Color(0xFF131B2A),
+        backgroundColor: AppColors.of(ctx).surface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.panel),
+          ),
         ),
         builder: (_) => InterventionLogSheet(
           eventType: type,
@@ -267,7 +279,7 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppColors.of(context).danger,
           ),
         );
       }
@@ -361,10 +373,10 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
       physics: const BouncingScrollPhysics(),
       child: Padding(
         padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: bottomPad + 20,
+          left: AppSpace.xl,
+          right: AppSpace.xl,
+          top: AppSpace.xl,
+          bottom: bottomPad + AppSpace.xl,
         ),
         child: Form(
           key: _formKey,
@@ -372,25 +384,26 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              AdaptiveRow(
+                minWidth: 300,
                 children: [
                   Icon(
                     Icons.cleaning_services,
                     color: widget.accentColor,
                     size: 20,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   Text(
                     'Log ${widget.title}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
+                    style: AppType.style(
+                      color: AppColors.of(context).text,
+                      fontSize: AppType.body,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               // DYNAMIC FIELD 1 (Water % or Food Grams)
               if (isWater || isFeed || isSalt) ...[
@@ -412,7 +425,7 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
                       ? 'Enter valid value'
                       : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpace.md),
               ],
 
               // DYNAMIC FIELD 2 (Litres or Protein %)
@@ -420,7 +433,7 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
                 TextFormField(
                   controller: _val2Ctrl,
                   maxLength: 1000,
-                  style: const TextStyle(color: Colors.white),
+                  style: AppType.style(color: AppColors.of(context).text),
                   decoration: _inputDeco(
                     'Notes (optional)',
                     widget.accentColor,
@@ -443,8 +456,11 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
               else if (isAlgae)
                 DropdownButtonFormField<String>(
                   initialValue: _selectedOption,
-                  dropdownColor: const Color(0xFF131B2A),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  dropdownColor: AppColors.of(context).surface,
+                  style: AppType.style(
+                    color: AppColors.of(context).text,
+                    fontSize: AppType.label,
+                  ),
                   decoration: _inputDeco('Scrub Method', widget.accentColor),
                   items: ['Manual Scrub', 'UV Clarifier', 'Chemical Treatment']
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
@@ -452,15 +468,19 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
                   onChanged: (v) => setState(() => _selectedOption = v!),
                 ),
 
-              const SizedBox(height: 16),
-              const Text(
+              const SizedBox(height: AppSpace.lg),
+              Text(
                 'Event Timestamp',
-                style: TextStyle(color: Colors.white54, fontSize: 11),
+                style: AppType.style(
+                  color: AppColors.of(context).textMuted,
+                  fontSize: AppType.caption,
+                ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpace.sm),
 
               // COMPACT TIME/DATE SELECTOR
-              Row(
+              AdaptiveRow(
+                minWidth: 300,
                 children: [
                   InkWell(
                     onTap: () async {
@@ -474,61 +494,67 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                        horizontal: AppSpace.md,
+                        vertical: AppSpace.sm,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24),
+                        color: AppColors.of(
+                          context,
+                        ).text.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                        border: Border.all(
+                          color: AppColors.of(context).outline,
+                        ),
                       ),
                       child: Text(
                         '${_date.day}/${_date.month}/${_date.year}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                        style: AppType.style(
+                          color: AppColors.of(context).text,
+                          fontSize: AppType.label,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   _timeDropdown(
                     _hour,
                     12,
                     1,
                     (v) => setState(() => _hour = v!),
                   ),
-                  const Text(
+                  Text(
                     ' : ',
-                    style: TextStyle(
-                      color: Colors.white70,
+                    style: AppType.style(
+                      color: AppColors.of(context).textSecondary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   _timeDropdown(_min, 60, 0, (v) => setState(() => _min = v!)),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   ToggleButtons(
                     isSelected: [!_isPm, _isPm],
                     constraints: const BoxConstraints(
                       minWidth: 32,
                       minHeight: 32,
                     ),
-                    borderRadius: BorderRadius.circular(6),
-                    selectedColor: Colors.black,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    selectedColor: AppColors.of(
+                      context,
+                    ).foregroundOn(widget.accentColor),
                     fillColor: widget.accentColor,
-                    children: const [
+                    children: [
                       Text(
                         'AM',
-                        style: TextStyle(
-                          fontSize: 10,
+                        style: AppType.style(
+                          fontSize: AppType.micro,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         'PM',
-                        style: TextStyle(
-                          fontSize: 10,
+                        style: AppType.style(
+                          fontSize: AppType.micro,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -537,30 +563,34 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpace.xl),
 
               // SAVE BUTTON
-              SizedBox(
+              Container(
                 width: double.infinity,
-                height: 46,
+                constraints: const BoxConstraints(minHeight: 46),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: widget.accentColor,
                   ),
                   onPressed: _isSaving ? null : _save,
                   child: _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.black,
+                            color: AppColors.of(
+                              context,
+                            ).foregroundOn(widget.accentColor),
                           ),
                         )
                       : Text(
                           'Save ${widget.title}',
-                          style: const TextStyle(
-                            color: Colors.black,
+                          style: AppType.style(
+                            color: AppColors.of(
+                              context,
+                            ).foregroundOn(widget.accentColor),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -583,7 +613,7 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
     return TextFormField(
       controller: ctrl,
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.white),
+      style: AppType.style(color: AppColors.of(context).text),
       decoration: _inputDeco(label, color, suffix: suffix),
       validator: validator,
     );
@@ -592,11 +622,11 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
   InputDecoration _inputDeco(String label, Color color, {String? suffix}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white60),
+      labelStyle: AppType.style(color: AppColors.of(context).textSecondary),
       suffixText: suffix,
-      suffixStyle: TextStyle(color: color),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white24),
+      suffixStyle: AppType.style(color: color),
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: AppColors.of(context).outline),
       ),
       focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: color)),
     );
@@ -610,10 +640,10 @@ class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
   ) {
     return DropdownButton<int>(
       value: val,
-      dropdownColor: const Color(0xFF131B2A),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 12,
+      dropdownColor: AppColors.of(context).surface,
+      style: AppType.style(
+        color: AppColors.of(context).text,
+        fontSize: AppType.label,
         fontWeight: FontWeight.bold,
       ),
       items: List.generate(count, (i) => i + offset)
