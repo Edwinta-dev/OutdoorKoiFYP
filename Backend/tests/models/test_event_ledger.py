@@ -373,7 +373,7 @@ def test_ledger_loads_a_recorded_v3_snapshot():
     newest = datetime.fromisoformat(snap["sensor_inputs"]["last_input_at"])
     assert twin.ledger.newest_input_at == newest
     assert [c.through for c in twin.ledger.checkpoints] == [newest]
-    assert twin.to_snapshot()["version"] == 4
+    assert twin.to_snapshot()["version"] == 5
 
 
 def test_ledger_survives_a_snapshot_round_trip():

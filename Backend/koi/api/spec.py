@@ -99,7 +99,8 @@ def openapi_path(rule: str) -> str:
     """A Flask rule as an OpenAPI path: <int:user_id> becomes {pond}
     under /v1 and {user_id} on the old paths."""
     name = "pond" if rule.startswith("/v1/") else "user_id"
-    return re.sub(r"<(?:\w+:)?user_id>", "{" + name + "}", rule)
+    path = re.sub(r"<(?:\w+:)?user_id>", "{" + name + "}", rule)
+    return re.sub(r"<(?:\w+:)?(\w+)>", r"{\1}", path)
 
 
 def after_request(response: Response) -> Response:

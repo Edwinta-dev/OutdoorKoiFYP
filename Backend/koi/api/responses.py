@@ -33,6 +33,32 @@ class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TdsPrompt(_Open):
+    id: str
+    detection: Literal["step", "slope"]
+    detected_at: datetime
+    event_at: datetime
+    time_basis: Literal["ingestion", "sample"]
+    baseline_ppm: float
+    level_ppm: float
+    delta_ppm: float
+    slope_ppm_hour: Optional[float]
+    confidence: float = Field(ge=0, le=1, description="Signal confidence; not an event-kind probability.")
+    event_kinds: list[str]
+    answer: Optional[str]
+    message: str
+
+
+class TdsPromptList(_Closed):
+    enabled: bool
+    prompts: list[TdsPrompt]
+
+
+class TdsPromptAnswer(_Closed):
+    prompt: TdsPrompt
+    event_id: Optional[str]
+
+
 class KitValues(_Closed):
     ammonia_mg_l: Optional[float] = Field(description="Total ammonia (TAN), mg/L.")
     nitrite_mg_l: Optional[float] = Field(description="Nitrite, mg/L.")

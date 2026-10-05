@@ -258,3 +258,41 @@ Both GETs use the usual authentication, pond access and ETag rules.
 Apply migration `0020_kit_readings.sql` before redeploying the API.
 It adds a backend-only table with nullable measurement and comparison
 fields; existing engine state and model constants are unchanged.
+## TDS owner questions (issue #35)
+
+`GET /v1/ponds/{pond}/prompts` returns `enabled` and unanswered `prompts`,
+with the usual authentication, pond isolation and ETag rules. With
+`KOI_TDS_PROMPTS=false` (default) it returns `enabled: false` and an empty
+list, without collecting readings or writing snapshots. Enable the same
+setting on the API and worker. The worker produces questions after sensor
+ingestion and event reconciliation. No schema migration is required.
+
+Each question contains its UUID `id`, `detection` (`step` or `slope`),
+`event_at`, `detected_at`, reading `time_basis`, measured `baseline_ppm`,
+`level_ppm`, `delta_ppm`, nullable `slope_ppm_hour`, signal `confidence`,
+possible `event_kinds`, nullable `answer` and owner-facing `message`.
+Confidence describes the signal, not the likelihood of a particular cause.
+Thresholds and suppression rules are in [models.md](../models.md).
+
+`POST /v1/ponds/{pond}/prompts/{prompt_id}` takes `answer`: `water_change`,
+`top_up`, `algal_scrub`, `feeding`, `salt`, `filter_clean`, `none of these`
+or `dismiss`. Owners may choose an event outside the offered guesses.
+Event answers require the same fields as event endpoints: water change
+and top-up need `volume_percent` or `volume_litres`, salt needs positive
+`salt_grams`, feeding needs `food_grams` and `protein_percent`; scrub has
+optional `scrub_type`, and `notes` are optional. Values must be finite.
+The signal's first timestamp is the event time and must fall in the existing
+30-day replay window. Old questions can still be rejected or dismissed.
+
+The response contains `prompt` and nullable `event_id`. An event uses the
+prompt UUID in the ledger and re-assesses the pond. A repeated answer is
+a no-op; a different answer to a closed question returns 409. Rejections
+persist across restarts; dismissals do not reject later guesses. A missing
+question or an answer while the feature is disabled returns 404. No separate
+`pondInterventions` row is written, matching existing API event behavior.
+
+Owner actions: redeploy the API and worker; optionally enable
+`KOI_TDS_PROMPTS` and configure `KOI_TDS_PROMPT_MIN_STEP_PPM` (20),
+`KOI_TDS_PROMPT_CONFIDENCE_THRESHOLD` (0.8) and
+`KOI_TDS_PROMPT_COOLDOWN_HOURS` (24) on both. No credentials or hardware
+changes are needed.

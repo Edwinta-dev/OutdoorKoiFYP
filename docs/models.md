@@ -184,3 +184,35 @@ of parameters. First-crossing ranges retain day-zero breaches and mark
 the upper day unknown if any scenario stays below threshold through the
 horizon. The live engines, existing snapshots and default kinetics use
 the same central values as before.
+## TDS owner questions (issue #35)
+
+No existing numeric constants change. New prompt defaults are: minimum
+step 20 ppm, signal confidence threshold 0.8 and per-pond cool-down 24 hours.
+They are settings, and `KOI_TDS_PROMPTS=false` disables observation and answers.
+The viability detector's existing 12-reading median baseline and two-reading
+persistence are unchanged. Its floor is the greater of the configured minimum
+and three times the baseline's max-minus-min spread. Step signal confidence
+is `max(0, 1 - spread / abs(delta))`; this is a heuristic, not a calibrated
+probability of an intervention.
+
+A slope uses the latest 12 readings: its net change must exceed the minimum
+step, no adjacent change may exceed that minimum, and the linear fit's
+R-squared must meet the confidence threshold. The fitted rate is ppm/hour,
+using reading timestamps. Both rises and falls are candidates. Missing,
+nonfinite and out-of-range TDS (outside the existing 5..5000 ppm channel
+bounds) are excluded. Duplicate or older timestamps do not advance the baseline.
+
+An applied ledger event within six hours before the signal start through
+its confirmation supplies an explanation, so no question is created.
+Cool-down begins at confirmation time, including when the question is later
+dismissed. Detected steps reset the baseline even when their questions are
+suppressed. A rise suggests salt or filter cleaning; a fall suggests water
+change, top-up or filter cleaning. These are hypotheses, not event detections.
+An owner can name any supported event and must provide the normal event
+amounts. No mass or volume is inferred from the TDS signal.
+
+Snapshot version 5 stores the rolling baseline, pending deviation, slope
+window, questions, answers and rejections in each pond's existing snapshot.
+Older versions load empty prompt state without changing engine history.
+`none of these` suppresses all offered event kinds for later signals of the
+same type and direction on this pond. `dismiss` closes only that question.

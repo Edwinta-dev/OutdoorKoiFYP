@@ -76,6 +76,8 @@ def _parameters(op: Operation) -> list[dict]:
         required = set(schema.get("required", []))
         for name, prop in schema.get("properties", {}).items():
             params.append({"name": name, "in": "query", "required": name in required, "schema": prop})
+    if "<prompt_id>" in op.rule:
+        params.append({"name": "prompt_id", "in": "path", "required": True, "schema": {"type": "string"}})
     return params
 
 

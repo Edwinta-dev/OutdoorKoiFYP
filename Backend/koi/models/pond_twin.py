@@ -55,6 +55,11 @@ engine for replaying an event that arrives in the past. A v3 or older
 snapshot loads with an empty ledger whose since is the snapshot's
 saved_at (rows created before it count as applied) and one checkpoint at
 its newest input.
+
+Version 5 adds "tds_prompts": rolling baseline, pending steps, recent
+readings, questions, answers and rejected explanations. Older snapshots
+load with empty prompt state. Both storage adapters keep it in the same
+snapshot transaction as sensors and events, with no schema change.
 """
 from __future__ import annotations
 
@@ -69,10 +74,11 @@ from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, Water
 from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
 from koi.models.sensor_inputs import SensorInput, parse_timestamp
+from koi.models.tds_prompts import TdsPrompts
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 4
+SNAPSHOT_VERSION = 5
 
 # Ledgered sensor inputs with a time in (after, until], oldest first
 # (EngineRegistry.sensor_history): what a replay reads back.
@@ -110,6 +116,7 @@ class PondTwin:
         # The events applied and the chemistry checkpoints for replay
         # (event_ledger.py). A new twin has a genesis checkpoint.
         self.ledger = el.EventLedger()
+        self.tds_prompts = TdsPrompts()
         self.ledger.add_checkpoint(el.Checkpoint(None, self._chemistry_checkpoint(None)))
 
     # ----------------------------------------------------------
@@ -665,6 +672,7 @@ class PondTwin:
                 "last_input_at": self.last_input_at.isoformat() if self.last_input_at else None,
             },
             "event_ledger": self.ledger.to_dict(),
+            "tds_prompts": self.tds_prompts.to_dict(),
         }
 
     @classmethod
@@ -675,7 +683,8 @@ class PondTwin:
     ) -> "PondTwin":
         """Rehydrates a twin, tolerating these shapes:
 
-          v4  - the namespaced shape to_snapshot() emits now
+          v5  - adds per-pond TDS baseline, prompts and rejected explanations
+          v4  - the same without "tds_prompts": empty prompt state
           v3  - the same without "event_ledger": a new ledger (_load_ledger)
           v2  - the same without "sensor_inputs": no channel readings yet
           v1  - a BARE WaterChemistryEngine snapshot, which is what every
@@ -735,6 +744,7 @@ class PondTwin:
         last = inputs.get("last_input_at")
         twin.last_input_at = parse_timestamp(last) if last else None
         twin._load_ledger(snapshot)
+        twin.tds_prompts = TdsPrompts.from_dict(snapshot.get("tds_prompts") or {})
         return twin
 
     def _load_ledger(self, snapshot: dict) -> None:

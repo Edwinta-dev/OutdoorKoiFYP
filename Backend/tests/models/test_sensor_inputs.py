@@ -143,7 +143,7 @@ def test_twin_snapshot_keeps_channel_readings_and_v2_loads_without_them():
     twin = PondTwin.create(_config())
     twin.ingest_sensor_inputs(group_rows(upload(1, T0, pH=7.6, temp=29.0)).inputs)
     snap = json.loads(json.dumps(twin.to_snapshot()))
-    assert snap["version"] == SNAPSHOT_VERSION == 4
+    assert snap["version"] == SNAPSHOT_VERSION == 5
     again = PondTwin.from_snapshot(snap)
     assert again.sensor_channels == twin.sensor_channels and again.last_input_at == T0
     assert again.sensor_channels["ph"] == {"value": 7.6, "reading_at": T0.isoformat(), "time_basis": "ingestion",

@@ -316,6 +316,70 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
 
 
 # ===================================================================
+# TDS owner questions
+# ===================================================================
+@route(bp, "GET", "/v1/ponds/<int:user_id>/prompts", summary="List unanswered TDS questions",
+       tag="events", response=res.TdsPromptList, errors=POND_ERRORS)
+def get_prompts(user_id: int):
+    """Off by default. Confidence describes a measured TDS signal, not its cause."""
+    _require_pond(user_id)
+    if not current_app.config["KOI_SETTINGS"].tds_prompts:
+        return jsonify({"enabled": False, "prompts": []})
+    return jsonify(_registry().with_twin(
+        user_id, lambda twin: {"enabled": True, "prompts": [p for p in twin.tds_prompts.prompts
+                                                            if p["answer"] is None]},
+        profiles=_profiles_for(user_id), persist=False))
+
+
+@route(bp, "POST", "/v1/ponds/<int:user_id>/prompts/<prompt_id>", summary="Answer a TDS question",
+       tag="events", body=schemas.on_pond_path(schemas.PromptAnswer), response=res.TdsPromptAnswer,
+       errors=(400, 409, *POND_ERRORS))
+def answer_prompt(user_id: int, prompt_id: str):
+    """Event answers need the usual measured amounts and are applied once through the ledger.
+
+    'none of these' remembers rejected guesses for this signal type and direction.
+    'dismiss' closes this question without rejecting future explanations. A repeat of
+    the same answer is a no-op; changing an answered question returns 409.
+    """
+    _require_pond(user_id)
+    if not current_app.config["KOI_SETTINGS"].tds_prompts:
+        raise ApiError("TDS questions are disabled.", code="prompts_disabled", status=404)
+    body = _parse_body(schemas.PromptAnswer, user_id)
+    _, ctx = _environment_for(user_id)
+    registry = _registry()
+    history = registry.sensor_history(user_id)
+
+    def mutate(twin):
+        prompt = next((p for p in twin.tds_prompts.prompts if p["id"] == prompt_id), None)
+        if prompt is None:
+            raise ApiError("TDS question not found.", code="prompt_not_found", status=404)
+        event_id = None
+        if prompt["answer"] is not None:
+            if prompt["answer"] != body.answer:
+                raise ApiError("This question was already answered.", code="prompt_answered", status=409)
+            return {"prompt": prompt, "event_id": prompt.get("event_id")}
+        if body.answer == "none of these":
+            twin.tds_prompts.reject(prompt)
+        elif body.answer != "dismiss":
+            fields = {"water_change": ("volume_percent", "volume_litres"),
+                      "top_up": ("volume_percent", "volume_litres"), "salt": ("salt_grams",),
+                      "feeding": ("food_grams", "protein_percent"), "algal_scrub": ("scrub_type",),
+                      "filter_clean": ()}
+            event_time = schemas.EventBody.model_validate(
+                {"user_id": user_id, "timestamp": prompt["event_at"]}).event_time()
+            event = PondEvent(kind=EventKind(body.answer), time=event_time,
+                              **body.model_dump(include=set(fields[body.answer]) | {"notes"}))
+            outcome = twin.record_event(prompt_id, event, now=datetime.now(timezone.utc), history=history)
+            event_id = outcome["event_id"]
+            _recompute_and_push(user_id, twin, ctx, "prompt", events=int(outcome["status"] == "applied"))
+        prompt["answer"] = body.answer
+        prompt["event_id"] = event_id
+        return {"prompt": prompt, "event_id": event_id}
+
+    return jsonify(registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id)))
+
+
+# ===================================================================
 # Owner test-kit measurements
 # ===================================================================
 @route(bp, "POST", "/v1/ponds/<int:user_id>/kit-readings", summary="Record a test-kit measurement",

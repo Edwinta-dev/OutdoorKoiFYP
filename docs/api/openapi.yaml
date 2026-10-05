@@ -1025,7 +1025,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id057
+              schema: &id059
                 $ref: '#/components/schemas/AlgaeRatingContext'
           headers:
             ETag:
@@ -1081,7 +1081,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id060
+              schema: &id062
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -2442,6 +2442,125 @@ paths:
           content: *id056
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/prompts:
+    get:
+      operationId: get_prompts
+      summary: List unanswered TDS questions
+      tags:
+      - events
+      description: Off by default. Confidence describes a measured TDS signal, not its cause.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TdsPromptList'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id057
+            application/json:
+              schema: *id002
+        '403':
+          description: Another account's pond
+          content: *id057
+        '404':
+          description: Pond or assessment not found
+          content: *id057
+        '500':
+          description: Unexpected server error
+          content: *id057
+        '503':
+          description: Storage or service not available
+          content: *id057
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/prompts/{prompt_id}:
+    post:
+      operationId: answer_prompt
+      summary: Answer a TDS question
+      tags:
+      - events
+      description: Event answers need the usual measured amounts and are applied once through the ledger.
+        'none of these' remembers rejected guesses for this signal type and direction. 'dismiss' closes
+        this question without rejecting future explanations. A repeat of the same answer is a no-op; changing
+        an answered question returns 409.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptAnswerOnPond'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TdsPromptAnswer'
+        '400':
+          description: Invalid request
+          content: &id058
+            application/json:
+              schema: *id002
+        '401':
+          description: Not signed in
+          content: *id058
+        '403':
+          description: Another account's pond
+          content: *id058
+        '404':
+          description: Pond or assessment not found
+          content: *id058
+        '409':
+          description: Conflict
+          content: *id058
+        '500':
+          description: Unexpected server error
+          content: *id058
+        '503':
+          description: Storage or service not available
+          content: *id058
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/ratings/algae:
     get:
       operationId: get_algae_ratings
@@ -2469,7 +2588,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id057
+              schema: *id059
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2483,21 +2602,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id058
+          content: &id060
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id058
+          content: *id060
         '404':
           description: Pond or assessment not found
-          content: *id058
+          content: *id060
         '500':
           description: Unexpected server error
-          content: *id058
+          content: *id060
         '503':
           description: Storage or service not available
-          content: *id058
+          content: *id060
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/validation:
@@ -2543,21 +2662,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id059
+          content: &id061
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id059
+          content: *id061
         '404':
           description: Pond or assessment not found
-          content: *id059
+          content: *id061
         '500':
           description: Unexpected server error
-          content: *id059
+          content: *id061
         '503':
           description: Storage or service not available
-          content: *id059
+          content: *id061
       security:
       - bearerAuth: []
   /v1/ready:
@@ -2580,7 +2699,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id060
+              schema: *id062
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2594,12 +2713,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id061
+          content: &id063
             application/json:
               schema: *id002
         '503':
           description: Storage or service not available
-          content: *id061
+          content: *id063
       security: []
 components:
   schemas:
@@ -5536,6 +5655,84 @@ components:
       - first_crossing_days
       title: ProjectionUncertainty
       type: object
+    PromptAnswerOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        answer:
+          enum:
+          - water_change
+          - top_up
+          - algal_scrub
+          - feeding
+          - salt
+          - filter_clean
+          - none of these
+          - dismiss
+          title: Answer
+          type: string
+        volume_percent:
+          anyOf:
+          - exclusiveMinimum: 0
+            maximum: 100
+            type: number
+          - type: 'null'
+          default: null
+          title: Volume Percent
+        volume_litres:
+          anyOf:
+          - exclusiveMinimum: 0
+            maximum: 1000000
+            type: number
+          - type: 'null'
+          default: null
+          title: Volume Litres
+        salt_grams:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Salt Grams
+        food_grams:
+          anyOf:
+          - maximum: 10000
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Food Grams
+        protein_percent:
+          anyOf:
+          - maximum: 100
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Protein Percent
+        scrub_type:
+          default: unspecified
+          maxLength: 64
+          minLength: 1
+          title: Scrub Type
+          type: string
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      required:
+      - answer
+      title: PromptAnswerOnPond
+      type: object
     Ready:
       additionalProperties: true
       properties:
@@ -5844,6 +6041,112 @@ components:
       required:
       - verdict
       title: TdsCrossCheck
+      type: object
+    TdsPrompt:
+      additionalProperties: true
+      properties:
+        id:
+          title: Id
+          type: string
+        detection:
+          enum:
+          - step
+          - slope
+          title: Detection
+          type: string
+        detected_at:
+          format: date-time
+          title: Detected At
+          type: string
+        event_at:
+          format: date-time
+          title: Event At
+          type: string
+        time_basis:
+          enum:
+          - ingestion
+          - sample
+          title: Time Basis
+          type: string
+        baseline_ppm:
+          title: Baseline Ppm
+          type: number
+        level_ppm:
+          title: Level Ppm
+          type: number
+        delta_ppm:
+          title: Delta Ppm
+          type: number
+        slope_ppm_hour:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Slope Ppm Hour
+        confidence:
+          description: Signal confidence; not an event-kind probability.
+          maximum: 1
+          minimum: 0
+          title: Confidence
+          type: number
+        event_kinds:
+          items:
+            type: string
+          title: Event Kinds
+          type: array
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+        message:
+          title: Message
+          type: string
+      required:
+      - id
+      - detection
+      - detected_at
+      - event_at
+      - time_basis
+      - baseline_ppm
+      - level_ppm
+      - delta_ppm
+      - slope_ppm_hour
+      - confidence
+      - event_kinds
+      - answer
+      - message
+      title: TdsPrompt
+      type: object
+    TdsPromptAnswer:
+      additionalProperties: false
+      properties:
+        prompt:
+          $ref: '#/components/schemas/TdsPrompt'
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+      required:
+      - prompt
+      - event_id
+      title: TdsPromptAnswer
+      type: object
+    TdsPromptList:
+      additionalProperties: false
+      properties:
+        enabled:
+          title: Enabled
+          type: boolean
+        prompts:
+          items:
+            $ref: '#/components/schemas/TdsPrompt'
+          title: Prompts
+          type: array
+      required:
+      - enabled
+      - prompts
+      title: TdsPromptList
       type: object
     UvIndex:
       additionalProperties: false

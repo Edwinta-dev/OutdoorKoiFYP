@@ -50,6 +50,7 @@ from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.pond_twin import PondTwin, SensorHistory
 from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
 from koi.models.sensor_inputs import SENSOR_TYPES, IngestConfig, group_rows
+from koi.models.tds_prompts import PromptConfig
 from koi.storage import StaleSnapshotError, Storage
 
 log = logging.getLogger(__name__)
@@ -67,13 +68,14 @@ class EngineRegistry:
     run in it (see koi.api.create_app and koi.worker)."""
 
     def __init__(self, storage: Storage, hypoxia_thresholds: Optional[HypoxiaThresholds] = None,
-                 sensor_ingest: Optional[IngestConfig] = None):
+                 sensor_ingest: Optional[IngestConfig] = None, tds_prompt_config: Optional[PromptConfig] = None):
         self.storage = storage
         # Temperature levels for the night-time hypoxia flag (Settings),
         # read by the poller and /assessment/all.
         self.hypoxia_thresholds = hypoxia_thresholds or HypoxiaThresholds()
         # The poller's sensor ingestion settings (Settings.sensor_ingest).
         self.sensor_ingest = sensor_ingest or IngestConfig()
+        self.tds_prompt_config = tds_prompt_config or PromptConfig()
         self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from functools import cache
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
 from pydantic_core import PydanticCustomError
@@ -161,6 +161,27 @@ class FilterCleanEvent(EventBody):
 
 class AlgalScrubEvent(EventBody):
     scrub_type: str = Field(default="unspecified", min_length=1, max_length=64)
+
+
+class PromptAnswer(_Body):
+    user_id: int = Field(gt=0)
+    answer: Literal["water_change", "top_up", "algal_scrub", "feeding", "salt", "filter_clean",
+                    "none of these", "dismiss"]
+    volume_percent: Optional[float] = Field(default=None, gt=0, le=100, allow_inf_nan=False)
+    volume_litres: Optional[float] = Field(default=None, gt=0, le=1_000_000, allow_inf_nan=False)
+    salt_grams: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    food_grams: Optional[float] = Field(default=None, ge=0, le=10_000, allow_inf_nan=False)
+    protein_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    scrub_type: str = Field(default="unspecified", min_length=1, max_length=64)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _event_amounts(self):
+        models = {"water_change": VolumeEvent, "top_up": VolumeEvent, "salt": SaltEvent,
+                  "feeding": FeedingEvent, "filter_clean": FilterCleanEvent, "algal_scrub": AlgalScrubEvent}
+        if self.answer in models:
+            on_pond_path(models[self.answer]).model_validate(self.model_dump(exclude_none=True))
+        return self
 
 
 class AlgaeRatingEvent(EventBody):
