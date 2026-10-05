@@ -1,0 +1,7 @@
+{
+  "tan_to_no2_rate": {"low": 0.025, "central": 0.05, "high": 0.075, "source": "Sensitivity assumption: +/-50% around the placeholder hourly TAN nitrification rate in engine.py; not a measured confidence interval."},
+  "no2_to_no3_rate": {"low": 0.0175, "central": 0.035, "high": 0.0525, "source": "Sensitivity assumption: +/-50% around the placeholder hourly nitrite nitrification rate in engine.py; not a measured confidence interval."},
+  "shelter_factor": {"low": 0.4, "central": 0.6, "high": 0.8, "source": "Sensitivity assumption around the telemetry-calibrated 0.6 shelter factor documented in evaporation_engine.py; no fitted error distribution is available."},
+  "depth_m": {"low": 1.0, "central": 1.2, "high": 1.5, "source": "Typical koi pond depth range already documented in evaporation_engine.py. Applied only when depth is assumed, never to a measured profile or explicit query depth."},
+  "fallback_intrinsic_rate": {"low": 0.225, "central": 0.45, "high": 0.675, "source": "Sensitivity assumption: +/-50% around FALLBACK_INTRINSIC_RATE in algae_engine.py (per day). Applied only to literature_fallback, not a camera-fitted rate."}
+}

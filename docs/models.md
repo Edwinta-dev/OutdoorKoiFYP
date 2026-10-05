@@ -162,3 +162,25 @@ and the server's 60 s .. 24 h clamp.
 The stored `imageTable.current_state` grows from `[label, smoothed]` to
 `[label, smoothed, raised_frames, stable_frames]`. Rows in the old shape load
 with both counters at 0; the app only reads element 0.
+
+
+## Projection sensitivity ranges (issue #31)
+
+The central constants remain unchanged: TAN nitrification 0.05/hour,
+nitrite nitrification 0.035/hour, wind shelter factor 0.6, assumed depth
+1.2 m, and fallback algae intrinsic rate 0.45/day.
+`Backend/koi/models/uncertainty.json` records low/central/high values and
+a source comment for each range. Nitrification and fallback algae rates
+use an explicitly assumed +/-50% sensitivity range; shelter uses
+0.4/0.6/0.8. These are not measured confidence intervals. Assumed depth
+uses the existing documented typical 1.0 to 1.5 m range; a measured
+profile or query depth stays fixed. Camera-fitted and declining algae
+rates stay fixed; only the literature fallback varies.
+
+Forecasts take the pointwise minimum and maximum of three paired
+scenarios, including the central one. Pairing all low constants and all
+high constants bounds these scenarios, not every possible combination
+of parameters. First-crossing ranges retain day-zero breaches and mark
+the upper day unknown if any scenario stays below threshold through the
+horizon. The live engines, existing snapshots and default kinetics use
+the same central values as before.

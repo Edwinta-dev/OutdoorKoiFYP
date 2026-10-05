@@ -261,7 +261,26 @@ class ForecastDay(_Open):
     lux_assumed: Optional[float] = None
 
 
+class CrossingDayRange(_Closed):
+    low: Optional[int] = Field(description="Earliest crossing; null when no run crosses within the horizon.")
+    high: Optional[int] = Field(description="Latest crossing; null when any run does not cross within the horizon.")
+    not_crossed_runs: int = Field(ge=0, le=3)
+
+
+class ProjectionUncertainty(_Closed):
+    method: Literal["three_scenario_sensitivity"]
+    low: list[dict[str, float]] = Field(
+        description="Pointwise minima of numeric trajectory fields, in their original units.")
+    high: list[dict[str, float]] = Field(
+        description="Pointwise maxima of numeric trajectory fields, in their original units.")
+    first_crossing_days: dict[str, CrossingDayRange] = Field(description=(
+        "Ranges keyed by the central forecast's crossing field names. Day 0 means already crossed. "
+        "Sensitivity scenarios are model estimates, not statistical confidence intervals."))
+
+
 class _ForecastProvenance(_Open):
+    uncertainty: ProjectionUncertainty = Field(description=(
+        "Low/central/high constants from koi/models/uncertainty.json. The existing trajectory remains central."))
     model_version: Optional[str] = Field(default=None, description=(
         "Backend version that computed the forecast: the package version, plus +g<commit> when known."))
     input_cutoff: Optional[str] = Field(default=None, description=(

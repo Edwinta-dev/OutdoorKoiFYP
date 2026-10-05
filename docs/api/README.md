@@ -49,6 +49,26 @@ them. `/metrics` stays unversioned (Prometheus text).
 
 ## Conditional GET and caching
 
+The three pond forecast endpoints include `uncertainty.low` and
+`uncertainty.high`: pointwise envelopes of numeric trajectory fields in
+their original units. `trajectory` is the existing central projection.
+`uncertainty.first_crossing_days` maps each crossing field to `low`,
+`high` and `not_crossed_runs`. Day 0 means already crossed. A null low
+means none of the runs crosses within the requested horizon; a null high
+means at least one run does not cross within it. Scrub benefit includes
+its own crossing range under `scrub_benefit_days_bought`.
+
+These are model sensitivity estimates, not statistical confidence
+intervals. Each domain runs at most three scenarios per request, using
+`koi/models/uncertainty.json`. Algae uses the paired nitrate trajectories
+from three chemistry runs, and computes scrub benefit within its own
+three runs. The registry caches by pond, domain, horizon and depth query
+until the next poll or event; profile changes and a newer stored snapshot
+also invalidate it. The cache is process-local and uses the existing
+snapshot-version protocol for both storage adapters. No schema change is
+needed. A concurrent snapshot save conflict ends the forecast rather than
+re-running it beyond the cost cap.
+
 Every GET that returns 200 JSON has a strong `ETag` computed over the
 response body, `Cache-Control: private, no-cache` and `Vary:
 Authorization`. A request with a matching `If-None-Match` gets 304 with no

@@ -671,6 +671,8 @@ class WaterChemistryEngine:
         hours: float,
         temp_c: float,
         lux_value: Optional[float],
+        base_tan_to_no2: float = 0.05,
+        base_no2_to_no3: float = 0.035,
     ) -> tuple[float, float, float, int]:
         """Pure pool-kinetics step - no self, no side effects. This is the
         single implementation shared by real sensor ingestion
@@ -678,8 +680,6 @@ class WaterChemistryEngine:
         below), so a forecast day and a real elapsed-time step always
         behave identically for the same (hours, temp_c, lux) inputs."""
         mult = WaterChemistryEngine._nitrification_temp_multiplier(temp_c)
-        base_tan_to_no2 = 0.05
-        base_no2_to_no3 = 0.035
 
         tan_converted = tan_mg * (1 - math.exp(-base_tan_to_no2 * mult * hours))
         tan_mg -= tan_converted
@@ -913,6 +913,8 @@ class WaterChemistryEngine:
         fallback_lux: Optional[float] = None,
         horizon_days: int = 21,
         steps_per_day: int = 4,
+        tan_to_no2_rate: float = 0.05,
+        no2_to_no3_rate: float = 0.035,
     ) -> dict:
         """Simulates the pond forward assuming feeding continues at
         avg_daily_tan_mg/day and NO further water changes, top-ups, or
@@ -1009,6 +1011,7 @@ class WaterChemistryEngine:
                 tan_mg += tan_per_step
                 tan_mg, no2_mg, no3_mg, algae_days = self._step_pools(
                     tan_mg, no2_mg, no3_mg, algae_days, hours_per_step, temp_c, lux_value,
+                    tan_to_no2_rate, no2_to_no3_rate,
                 )
 
             tan_ppm = tan_mg / self.config.volume_litres

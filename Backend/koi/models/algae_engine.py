@@ -1237,6 +1237,7 @@ class AlgaeGrowthEngine:
         horizon_days: int = 21,
         steps_per_day: int = 4,
         start_green: Optional[float] = None,
+        include_scrub_benefit: bool = False,
     ) -> dict:
         """Projects green_ratio forward from CURRENT engine state.
         Operates on local copies only - never mutates the engine.
@@ -1262,6 +1263,9 @@ class AlgaeGrowthEngine:
                 ),
             }
 
+        post_scrub = max(green * (1.0 - SCRUB_REMOVAL_EFFICIENCY), 1e-6)
+        scrub_green = post_scrub
+        scrub_day = 0 if post_scrub >= self._thresholds["watch"] else None
         initial_green = green
         K = self.config.carrying_capacity
         watch = self._thresholds["watch"]
@@ -1286,7 +1290,12 @@ class AlgaeGrowthEngine:
             for _ in range(steps_per_day):
                 green = green + mu * green * (1.0 - green / K) * dt_days
                 green = min(max(green, 0.0), K)
+                if include_scrub_benefit:
+                    scrub_green += mu * scrub_green * (1.0 - scrub_green / K) * dt_days
+                    scrub_green = min(max(scrub_green, 0.0), K)
 
+            if include_scrub_benefit and scrub_day is None and scrub_green >= min(watch, action):
+                scrub_day = days_from_now
             if green >= watch and first_watch_day is None:
                 first_watch_day = days_from_now
             if green >= action and first_action_day is None:
@@ -1304,7 +1313,7 @@ class AlgaeGrowthEngine:
 
         candidates = [d for d in (first_watch_day, first_action_day) if d is not None]
 
-        return {
+        result = {
             "current_green_ratio": round(initial_green, 5),
             "predicted_scrub_days_from_now": min(candidates) if candidates else None,
             "first_watch_days_from_now": first_watch_day,
@@ -1330,6 +1339,14 @@ class AlgaeGrowthEngine:
                 "observed baseline where enough history exists."
             ),
         }
+
+        if include_scrub_benefit:
+            result["scrub_benefit"] = {
+                "post_scrub_green_ratio": round(post_scrub, 5),
+                "removal_efficiency": SCRUB_REMOVAL_EFFICIENCY,
+                "days_bought": scrub_day,
+            }
+        return result
 
     def project_scrub_benefit(
         self, *, daily_environment: list, horizon_days: int = 21

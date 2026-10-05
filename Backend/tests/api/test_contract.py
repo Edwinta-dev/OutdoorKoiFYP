@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 import api_contract
 import pytest
 
-from koi.models import algae_engine, forecast_utils
+from koi.models import algae_engine, forecast_utils, uncertainty
 from koi.models import evaporation_engine as ev
 
 # Resolved relative to this file so the test works from any working
@@ -112,7 +112,7 @@ def evap_payload():
     # the payload exercises the same fields the endpoint actually returns.
     engine._cumulative_loss_litres = 120.0
     engine._last_topup_time = datetime.now(timezone.utc) - timedelta(days=6)
-    payload = engine.project_forward(daily_environment=env, horizon_days=14)
+    payload = uncertainty.project(engine, "evaporation", daily_environment=env, horizon_days=14)
     payload["tds_cross_check"] = ev.cross_check_against_tds(
         predicted_daily_loss_litres=payload["avg_loss_litres_per_day"],
         volume_litres=5000, observed_tds_slope_ppm_per_day=0.7, current_tds_ppm=220,
@@ -131,9 +131,8 @@ def algae_payload():
     aenv = [algae_engine.AlgaeDayEnvironment(lux=20000 * d["lux_multiplier"],
                                              temp_c=d["air_temp_c"], no3_ppm=10.0)
             for d in fdays]
-    payload = aengine.project_forward(daily_environment=aenv, horizon_days=21)
-    payload["scrub_benefit"] = aengine.project_scrub_benefit(
-        daily_environment=aenv, horizon_days=21)
+    payload = uncertainty.project(aengine, "algae", daily_environment=aenv, horizon_days=21,
+                                  include_scrub_benefit=True)
     payload["latest_image_url"] = "https://example/photo.jpg"
     return payload
 

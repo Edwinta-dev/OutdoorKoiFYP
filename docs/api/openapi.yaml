@@ -2852,6 +2852,10 @@ components:
     AlgaeForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -2966,6 +2970,7 @@ components:
           default: null
           title: Assimilated Camera Frames
       required:
+      - uncertainty
       - trajectory
       - thresholds
       - rate_source
@@ -3691,6 +3696,32 @@ components:
       - message
       title: ConfidenceReason
       type: object
+    CrossingDayRange:
+      additionalProperties: false
+      properties:
+        low:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Earliest crossing; null when no run crosses within the horizon.
+          title: Low
+        high:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Latest crossing; null when any run does not cross within the horizon.
+          title: High
+        not_crossed_runs:
+          maximum: 3
+          minimum: 0
+          title: Not Crossed Runs
+          type: integer
+      required:
+      - low
+      - high
+      - not_crossed_runs
+      title: CrossingDayRange
+      type: object
     DailyStats:
       additionalProperties: true
       properties:
@@ -4234,6 +4265,10 @@ components:
     EvaporationForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -4318,6 +4353,7 @@ components:
         tds_cross_check:
           $ref: '#/components/schemas/TdsCrossCheck'
       required:
+      - uncertainty
       - trajectory
       - volume_litres
       - avg_loss_litres_per_day
@@ -5463,6 +5499,43 @@ components:
       - biomass_g
       title: ProfileUpdate
       type: object
+    ProjectionUncertainty:
+      additionalProperties: false
+      properties:
+        method:
+          const: three_scenario_sensitivity
+          title: Method
+          type: string
+        low:
+          description: Pointwise minima of numeric trajectory fields, in their original units.
+          items:
+            additionalProperties:
+              type: number
+            type: object
+          title: Low
+          type: array
+        high:
+          description: Pointwise maxima of numeric trajectory fields, in their original units.
+          items:
+            additionalProperties:
+              type: number
+            type: object
+          title: High
+          type: array
+        first_crossing_days:
+          additionalProperties:
+            $ref: '#/components/schemas/CrossingDayRange'
+          description: Ranges keyed by the central forecast's crossing field names. Day 0 means already
+            crossed. Sensitivity scenarios are model estimates, not statistical confidence intervals.
+          title: First Crossing Days
+          type: object
+      required:
+      - method
+      - low
+      - high
+      - first_crossing_days
+      title: ProjectionUncertainty
+      type: object
     Ready:
       additionalProperties: true
       properties:
@@ -6080,6 +6153,10 @@ components:
     WaterChemistryForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -6141,6 +6218,7 @@ components:
           - $ref: '#/components/schemas/DailyStats'
           - type: 'null'
       required:
+      - uncertainty
       - trajectory
       - avg_daily_tan_mg
       - temp_baseline

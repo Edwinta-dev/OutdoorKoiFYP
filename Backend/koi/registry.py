@@ -35,9 +35,10 @@ snapshot. The poller relies on this for sensor ingestion: readings
 applied to a twin whose save failed are not in the ledger, so the next
 cycle finds them again and applies them once to the stored state.
 """
+import copy
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -57,6 +58,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class _Loaded:
     twin: PondTwin
+    forecasts: dict = field(default_factory=dict, init=False)
     version: int  # snapshot_version the twin was loaded at or last saved as; 0 = never stored
 
 
@@ -153,6 +155,7 @@ class EngineRegistry:
         persist: bool = True,
         profiles: Optional[ProfileHistory] = None,
         ingest: Optional[Callable[[], Optional[dict]]] = None,
+        forecast_key: Optional[tuple] = None,
     ):
         """Runs fn(twin) under this user's lock, then persists the snapshot.
 
@@ -177,6 +180,11 @@ class EngineRegistry:
         (Discovery.commit()) or None; they are saved with the snapshot in
         one transaction (Storage.save_engine_snapshot).
 
+        forecast_key caches a forecast callback under the pond lock. Repeated
+        reads return private copies without running or saving again. Polls and
+        events clear this cache; a newer stored version reloads it away. Keys
+        include the domain and query options, and current profile settings.
+
         If another process saved this pond between the load and the save,
         the in-memory twin is dropped, reloaded and fn runs once more (see
         the module docstring); a second StaleSnapshotError is raised. Any
@@ -186,10 +194,12 @@ class EngineRegistry:
         with lock:
             for attempt in (1, 2):
                 try:
-                    return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles, ingest)
+                    return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles, ingest, forecast_key)
                 except StaleSnapshotError as exc:
                     self._twins.pop(user_id, None)
-                    if attempt == 2:
+                    # Re-running a forecast would exceed its three-run budget.
+                    # The caller can retry against the newly stored snapshot.
+                    if attempt == 2 or forecast_key is not None:
                         raise
                     log_event(log, "stale_snapshot_retry", level=logging.WARNING, pond_id=user_id, error=str(exc))
                 except BaseException:
@@ -197,11 +207,15 @@ class EngineRegistry:
                     raise
             raise AssertionError("unreachable")
 
-    def _run(self, user_id, fn, default_config, pond_depth_m, persist, profiles=None, ingest=None):
+    def _run(self, user_id, fn, default_config, pond_depth_m, persist, profiles=None, ingest=None, forecast_key=None):
         loaded = self._load_or_create(user_id, default_config, pond_depth_m, profiles)
         loaded.twin.profiles = profiles
         if profiles is not None:
             loaded.twin.use_profile(profiles.at(datetime.now(timezone.utc)))
+        # Profile edits also invalidate forecasts before the next poll.
+        key = (forecast_key, repr(loaded.twin.chemistry.config), repr(loaded.twin.evaporation.config))
+        if forecast_key is not None and key in loaded.forecasts:
+            return copy.deepcopy(loaded.forecasts[key])
         result = fn(loaded.twin)
         if persist:
             commit = ingest() if ingest is not None else None
@@ -211,6 +225,11 @@ class EngineRegistry:
             else:
                 loaded.version = self.storage.save_engine_snapshot(
                     user_id, loaded.twin.to_snapshot(), base_version=loaded.version, ingest=commit)
+        if forecast_key is not None:
+            loaded.forecasts[key] = copy.deepcopy(result)
+        elif persist:
+            # Every poll/event invalidates, even if it consumed no new input.
+            loaded.forecasts.clear()
         return result
 
     # Backwards-compatible alias. Older call sites passed a callback

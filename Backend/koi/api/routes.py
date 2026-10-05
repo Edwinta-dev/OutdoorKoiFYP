@@ -75,7 +75,7 @@ from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
-from koi.models import device_health, forecast_utils
+from koi.models import device_health, forecast_utils, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
@@ -790,7 +790,7 @@ def get_forecast(user_id):
     ]
 
     def run(twin):
-        return twin.chemistry.project_forward(
+        return uncertainty.project(twin.chemistry, "chemistry",
             avg_daily_tan_mg=avg_daily_tan_mg,
             daily_temp_forecast_c=daily["temp_c"],
             daily_lux_forecast=daily_lux_forecast,
@@ -801,7 +801,8 @@ def get_forecast(user_id):
         ), twin.input_cutoff()
 
     result, cutoff = _registry().with_twin(
-        user_id, run, profiles=_profiles_for(user_id), persist=False
+        user_id, run, profiles=_profiles_for(user_id), persist=False,
+        forecast_key=("chemistry", horizon_days)
     )
     result.update(_provenance(cutoff))
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
@@ -831,7 +832,9 @@ def get_evaporation_forecast(user_id):
         if query.depth_m is not None:
             twin.evaporation.config = dataclasses.replace(stored, pond_depth_m=query.depth_m)
         try:
-            return twin.evaporation.project_forward(
+            return uncertainty.project(twin.evaporation, "evaporation",
+                assumed_depth=query.depth_m is None and (
+                    twin.profiles is None or twin.profiles.at(datetime.now(timezone.utc)).depth_m is None),
                 daily_environment=env, horizon_days=query.horizon_days
             ), twin.input_cutoff(), list(twin.chemistry._events), twin.chemistry.config.time_zone
         finally:
@@ -842,6 +845,7 @@ def get_evaporation_forecast(user_id):
         run,
         profiles=_profiles_for(user_id),
         persist=False,
+        forecast_key=("evaporation", query.horizon_days, query.depth_m),
     )
     result.update(_provenance(cutoff))
 
@@ -898,13 +902,14 @@ def get_algae_forecast(user_id):
         fresh = ae.parse_image_rows(_storage().fetch_image_history(user_id, limit=50))
         assimilated = twin.algae.ingest_camera_samples(fresh)
 
-        no3_series = []
+        no3_scenarios = [[], [], []]
         if avg_tan is not None:
-            no3_series = twin.no3_projection(
-                avg_daily_tan_mg=avg_tan,
-                fallback_temp_c=baseline_temp,
-                horizon_days=horizon_days,
+            runs = uncertainty.scenarios(
+                twin.chemistry, "chemistry", avg_daily_tan_mg=avg_tan,
+                fallback_temp_c=baseline_temp, horizon_days=horizon_days,
             )
+            no3_scenarios = [[d["no3_ppm"] for d in r["trajectory"]] for r in runs]
+        no3_series = no3_scenarios[1]
         no3_now = no3_series[0] if no3_series else None
 
         if assimilated:
@@ -916,21 +921,21 @@ def get_algae_forecast(user_id):
                 history_samples=twin.algae._last_history_samples,
             )
 
-        env = _algae_env(ctx, baseline_lux, baseline_temp, no3_series, no3_now)
-        projection = twin.algae.project_forward(
+        environments = [_algae_env(ctx, baseline_lux, baseline_temp, series, series[0] if series else None)
+                        for series in no3_scenarios]
+        env = environments[1]
+        projection = uncertainty.project(twin.algae, "algae",
+            include_scrub_benefit=True, scenario_environments=environments,
             daily_environment=env, horizon_days=horizon_days
         )
-        if "error" not in projection:
-            projection["scrub_benefit"] = twin.algae.project_scrub_benefit(
-                daily_environment=env, horizon_days=horizon_days
-            )
         return projection, assimilated, twin.input_cutoff()
 
     # persist=True here: unlike the other forecast endpoints this one can
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
     result, assimilated, cutoff = _registry().with_twin(
-        user_id, run, profiles=_profiles_for(user_id), persist=True
+        user_id, run, profiles=_profiles_for(user_id), persist=True,
+        forecast_key=("algae", horizon_days)
     )
 
     if "error" in result:
