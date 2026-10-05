@@ -174,6 +174,28 @@ def test_ledger_replay_starts_at_the_checkpoint_before_the_event():
     assert max(t for t in throughs if t is not None and t < at(60)) == used
 
 
+def test_ledger_checkpoint_is_not_changed_by_later_readings():
+    """A checkpoint holds the day buckets from its own local day on. One
+    that holds a bucket the engine is still filling must keep its copy as
+    taken: the lists are copied, not shared with the live engine (found by
+    the snapshot round-trip property test, issue #25)."""
+    def varied(hours: float) -> SensorInput:
+        return SensorInput(at(hours), "ingestion", {"ph": 7.4 + 0.05 * (hours % 4), "tds": 200.0 + hours % 3,
+                                                    "temp": 28.0 + 0.1 * (hours % 5), "lux": 1000.0 + 10 * hours},
+                           {})
+
+    twin = PondTwin.create(CONFIG)
+    twin.ingest_sensor_inputs([varied(h) for h in range(21)])
+    # An event applied outside the ledger opens the next local day's bucket
+    # (local midnight is hour 40), so the checkpoint the 43:00 reading takes
+    # at hour 20 holds that bucket.
+    twin.apply_event(water_change(42), now=at(42))
+    twin.ingest_sensor_inputs([varied(43)])
+    taken = [json.dumps(c.to_dict(), sort_keys=True) for c in twin.ledger.checkpoints]
+    twin.ingest_sensor_inputs([varied(h) for h in range(44, 48)])
+    assert [json.dumps(c.to_dict(), sort_keys=True) for c in twin.ledger.checkpoints] == taken
+
+
 def test_replay_of_a_sensor_input_older_than_the_newest_event():
     """An event logged at 10:05 is applied before the poll ingests the
     10:00 reading: the reading is replayed in before the event."""

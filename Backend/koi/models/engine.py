@@ -328,12 +328,14 @@ class DailyAggregate:
         return sum(self.trusted_tds) / len(self.trusted_tds)
 
     def to_dict(self) -> dict:
+        # Copies: a ledger checkpoint keeps this dict in memory, and the
+        # live lists keep growing after it is taken.
         return {
             "day": self.day.isoformat(),
-            "trusted_ph": self.trusted_ph,
-            "trusted_lux": self.trusted_lux,
-            "trusted_tds": self.trusted_tds,
-            "night_ph": self.night_ph,
+            "trusted_ph": list(self.trusted_ph),
+            "trusted_lux": list(self.trusted_lux),
+            "trusted_tds": list(self.trusted_tds),
+            "night_ph": list(self.night_ph),
             "had_volume_event": self.had_volume_event,
             "basis": self.basis,
             "calendar_day": self.calendar_day.isoformat() if self.calendar_day is not None else None,
