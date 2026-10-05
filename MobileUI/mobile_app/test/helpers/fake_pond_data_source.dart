@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:mobile_app/data/pond_profile.dart';
 // A PondDataSource for tests. Each call answers from the fields below,
 // so a test sets up exactly the state it wants:
 //   - leave a field at its default for the "data" state,
@@ -84,6 +86,39 @@ class FakePondDataSource extends PondDataSource {
   Iterable<FakeCall> callsTo(String name) => calls.where((c) => c.name == name);
 
   Future<T> _answer<T>(String name, Map<String, Object?> args, T value) {
+    if (name.startsWith('log')) {
+      final kind = {
+        'logFeeding': 'FEEDING',
+        'logSalt': 'SALT',
+        'logFilterClean': 'FILTER_CLEAN',
+        'logWaterChange': 'WATER_CHANGE',
+        'logTopUp': 'WATER_TOPUP',
+        'logAlgalScrub': 'ALGAE_SCRUB',
+      }[name];
+      calls.add(
+        FakeCall('insertIntervention', {
+          'userID': args['userId'],
+          'event_type': kind,
+          'event_id': args['eventId'],
+          'event_timestamp': (args['timestamp'] as DateTime?)
+              ?.toIso8601String(),
+          if (args.containsKey('saltGrams')) 'salt_grams': args['saltGrams'],
+          if (args.containsKey('notes')) 'notes': args['notes'],
+          if (args.containsKey('foodGrams')) 'food_grams': args['foodGrams'],
+          if (args.containsKey('proteinPercent'))
+            'protein_percentage': args['proteinPercent'],
+          if (args.containsKey('volumePercent'))
+            'volume_percentage': args['volumePercent'],
+          if (args.containsKey('volumeLitres'))
+            'volume_litres': args['volumeLitres'],
+          if (args.containsKey('scrubType')) 'algae_method': args['scrubType'],
+        }),
+      );
+      if (hanging.contains('insertIntervention')) return Completer<T>().future;
+      if (failing.contains('insertIntervention')) {
+        return Future<T>.error(const FakeSourceError('insertIntervention'));
+      }
+    }
     calls.add(FakeCall(name, args));
     if (hanging.contains(name)) return Completer<T>().future;
     if (failing.contains(name)) return Future<T>.error(FakeSourceError(name));
@@ -91,8 +126,45 @@ class FakePondDataSource extends PondDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>?> fetchDashboardPayload(String userId) =>
-      _answer('fetchDashboardPayload', {'userId': userId}, dashboardPayload);
+  Future<PondProfileResponse> fetchPondProfile(int pondId) => _answer(
+    'fetchPondProfile',
+    {'pondId': pondId},
+    PondProfileResponse.fromJson({
+      'pond_id': pondId,
+      'source': 'userdata',
+      'current': {'volume_l': 1200, 'biomass_g': 5000},
+      'history': [],
+    }),
+  );
+
+  @override
+  Future<Map<String, dynamic>?> fetchDashboardPayload(String userId) async {
+    final payload = await _answer('fetchDashboardPayload', {
+      'userId': userId,
+    }, dashboardPayload);
+    if (payload == null) return null;
+    return {
+      ...payload,
+      'assessments': {
+        'chemistry': assessment == null
+            ? null
+            : {
+                'status': assessment!.status,
+                'category': assessment!.category,
+                'advisory': assessment!.advisory,
+              },
+      },
+    };
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchFishProfiles(
+    int pondId,
+    List<String> species,
+  ) => _answer('fetchFishProfiles', {'pondId': pondId, 'species': species}, []);
+  @override
+  Future<void> deletePond(int pondId) =>
+      _answer<void>('deletePond', {'pondId': pondId}, null);
 
   @override
   Future<Map<String, dynamic>?> fetchHistoricalGraphPayload(
@@ -179,7 +251,7 @@ class FakePondDataSource extends PondDataSource {
     required double saltGrams,
     String? notes,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
   }) => _answer('logSalt', {
     'userId': userId,
     'saltGrams': saltGrams,
@@ -193,7 +265,7 @@ class FakePondDataSource extends PondDataSource {
     required int userId,
     String? notes,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
   }) => _answer('logFilterClean', {
     'userId': userId,
     'notes': notes,
@@ -207,7 +279,7 @@ class FakePondDataSource extends PondDataSource {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logFeeding', {
@@ -226,7 +298,7 @@ class FakePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logWaterChange', {
@@ -245,7 +317,7 @@ class FakePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logTopUp', {
@@ -263,7 +335,7 @@ class FakePondDataSource extends PondDataSource {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
   }) => _answer('logAlgalScrub', {
@@ -274,4 +346,10 @@ class FakePondDataSource extends PondDataSource {
     'fishType': fishType,
     'fishCount': fishCount,
   }, eventAssessment);
+  @override
+  Future<void> uploadSpeciesPhoto(String path, Uint8List bytes) =>
+      _answer<void>('uploadSpeciesPhoto', {'path': path, 'bytes': bytes}, null);
+  @override
+  Future<void> deleteSpeciesPhoto(String path) =>
+      _answer<void>('deleteSpeciesPhoto', {'path': path}, null);
 }

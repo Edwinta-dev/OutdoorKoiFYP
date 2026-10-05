@@ -9,12 +9,20 @@ from koi.storage import MemoryStorage, StorageError, SupabaseStorage
 def test_create_app_serves_health_and_every_route():
     app = create_app(make_settings())
     rules = {r.rule for r in app.url_map.iter_rules()}
-    assert {"/health", "/events/feeding", "/events/water-change", "/events/top-up",
-            "/events/algal-scrub", "/events/algae-rating", "/events/algae-rating/undo",
-            "/ratings/algae/<int:user_id>", "/assessment/<int:user_id>",
-            "/assessment/evaporation/<int:user_id>", "/assessment/algae/<int:user_id>",
-            "/assessment/all/<int:user_id>", "/forecast/<int:user_id>",
-            "/forecast/evaporation/<int:user_id>", "/forecast/algae/<int:user_id>"} <= rules
+    assert {"/health", "/v1/ponds/<int:user_id>/events/feeding",
+            "/v1/ponds/<int:user_id>/events/water-change",
+            "/v1/ponds/<int:user_id>/events/top-up",
+            "/v1/ponds/<int:user_id>/events/algal-scrub",
+            "/v1/ponds/<int:user_id>/events/algae-rating",
+            "/v1/ponds/<int:user_id>/events/algae-rating/undo",
+            "/v1/ponds/<int:user_id>/ratings/algae",
+            "/v1/ponds/<int:user_id>/assessments/chemistry",
+            "/v1/ponds/<int:user_id>/assessments/evaporation",
+            "/v1/ponds/<int:user_id>/assessments/algae",
+            "/v1/ponds/<int:user_id>/assessments",
+            "/v1/ponds/<int:user_id>/forecasts/chemistry",
+            "/v1/ponds/<int:user_id>/forecasts/evaporation",
+            "/v1/ponds/<int:user_id>/forecasts/algae"} <= rules
     resp = app.test_client().get("/health")
     assert resp.status_code == 200
     assert resp.get_json()["domains"] == ["chemistry", "evaporation", "algae"]

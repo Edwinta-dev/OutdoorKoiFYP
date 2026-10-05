@@ -49,8 +49,7 @@ pond linked to that account (koi/api/auth.py): 401 without a valid token,
 _parse_body checks the body's user_id.
 
 Versions: every route is declared with koi.api.spec.route, which serves
-it under /v1 (the pond in the path), keeps the old path as a deprecated
-alias, and records it for docs/api/openapi.yaml. Response models are in
+it under /v1 (the pond in the path) and records it for docs/api/openapi.yaml. Response models are in
 koi.api.responses. GET /v1/ponds/{pond}/dashboard is the one call the
 dashboard screen needs (koi/api/dashboard.py).
 """
@@ -423,8 +422,8 @@ def get_kit_validation(user_id: int):
 
 def _event_route(name: str, summary: str, body: type[BaseModel], response: type[BaseModel] = res.EventAssessments,
                  errors: tuple[int, ...] = (400, *POND_ERRORS)):
-    return route(bp, "POST", f"/v1/ponds/<int:user_id>/events/{name}", legacy=f"/events/{name}",
-                 summary=summary, tag="events", body=schemas.on_pond_path(body), legacy_body=body,
+    return route(bp, "POST", f"/v1/ponds/<int:user_id>/events/{name}", summary=summary, tag="events",
+        body=schemas.on_pond_path(body),
                  response=response, errors=errors)
 
 
@@ -625,8 +624,8 @@ def undo_algae_rating(user_id: Optional[int] = None):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/ratings/algae", legacy="/ratings/algae/<int:user_id>",
-       summary="Algae rating history and calibration", tag="ratings", response=res.AlgaeRatingContext,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/ratings/algae",
+    summary="Algae rating history and calibration", tag="ratings", response=res.AlgaeRatingContext,
        errors=POND_ERRORS)
 def get_algae_ratings(user_id):
     """Rating history plus the calibration state it produces. Drives the
@@ -721,8 +720,8 @@ def _no_assessment(user_id: int, message: str):
     raise ApiError(message, status=404, code="no_assessment_yet")
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/chemistry", legacy="/assessment/<int:user_id>",
-       summary="Latest water chemistry assessment", tag="assessments", response=res.WaterChemistryAssessment,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/chemistry",
+    summary="Latest water chemistry assessment", tag="assessments", response=res.WaterChemistryAssessment,
        errors=POND_ERRORS)
 def get_latest_assessment(user_id):
     """Most recent chemistry assessment, whether produced by a poll tick
@@ -736,7 +735,7 @@ def get_latest_assessment(user_id):
 
 
 @route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/evaporation",
-       legacy="/assessment/evaporation/<int:user_id>", summary="Latest evaporation assessment", tag="assessments",
+       summary="Latest evaporation assessment", tag="assessments",
        response=res.EvaporationAssessment, errors=POND_ERRORS)
 def get_latest_evaporation_assessment(user_id):
     """Most recent evaporation and feed assessment."""
@@ -749,8 +748,8 @@ def get_latest_evaporation_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/algae", legacy="/assessment/algae/<int:user_id>",
-       summary="Latest algae assessment", tag="assessments", response=res.AlgaeAssessment, errors=POND_ERRORS)
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/algae", summary="Latest algae assessment",
+    tag="assessments", response=res.AlgaeAssessment, errors=POND_ERRORS)
 def get_latest_algae_assessment(user_id):
     """Most recent algae assessment."""
     assessment = fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None)
@@ -762,8 +761,8 @@ def get_latest_algae_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments", legacy="/assessment/all/<int:user_id>",
-       summary="All three latest assessments and the hypoxia flag", tag="assessments",
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments",
+    summary="All three latest assessments and the hypoxia flag", tag="assessments",
        response=res.AllAssessments, errors=POND_ERRORS)
 def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
@@ -816,8 +815,8 @@ def _provenance(cutoff: Optional[datetime]) -> dict:
     return {"model_version": model_version(), "input_cutoff": cutoff.isoformat() if cutoff else None}
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", legacy="/forecast/<int:user_id>",
-       summary="Water chemistry lookahead", tag="forecasts", query=schemas.ForecastQuery,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", summary="Water chemistry lookahead",
+    tag="forecasts", query=schemas.ForecastQuery,
        response=res.WaterChemistryForecast, errors=(400, 422, *POND_ERRORS))
 def get_forecast(user_id):
     """Water chemistry lookahead: projects TAN/NO2/NO3 assuming feeding
@@ -875,8 +874,8 @@ def get_forecast(user_id):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/evaporation", legacy="/forecast/evaporation/<int:user_id>",
-       summary="Evaporation and feed lookahead", tag="forecasts", query=schemas.EvaporationForecastQuery,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/evaporation",
+    summary="Evaporation and feed lookahead", tag="forecasts", query=schemas.EvaporationForecastQuery,
        response=res.EvaporationForecast, errors=(400, *POND_ERRORS))
 def get_evaporation_forecast(user_id):
     """Evaporation + feed lookahead for the Temperature & Feed screen.
@@ -933,8 +932,8 @@ def get_evaporation_forecast(user_id):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/algae", legacy="/forecast/algae/<int:user_id>",
-       summary="Algae lookahead", tag="forecasts", query=schemas.ForecastQuery, response=res.AlgaeForecast,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/algae", summary="Algae lookahead", tag="forecasts",
+    query=schemas.ForecastQuery, response=res.AlgaeForecast,
        errors=(400, 422, *POND_ERRORS))
 def get_algae_forecast(user_id):
     """Algae lookahead for the Algal & Solar screen.

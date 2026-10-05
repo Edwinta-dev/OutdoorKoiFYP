@@ -208,7 +208,7 @@ def test_hypoxia_in_the_dashboard_response():
     app, storage = _app(_night_reading(32.5))
     client = api_client(app)
     poller._poll_user(app.extensions["koi_registry"], USER, storage.fetch_active_pond_configs()[0])
-    body = client.get(f"/assessment/all/{USER}").get_json()
+    body = client.get(f"/v1/ponds/{USER}/assessments").get_json()
     assert set(body) == {"chemistry", "evaporation", "algae", "hypoxia"}
     hypoxia = body["hypoxia"]
     assert hypoxia["level"] == "high" and hypoxia["flagged"] is True
@@ -222,7 +222,7 @@ def test_hypoxia_dashboard_reads_profile_and_cached_algae():
     client = api_client(app)
     client.put(f"/v1/ponds/{USER}/profile", json={"volume_l": 4000.0, "biomass_g": 12000.0, "aeration": True})
     storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, **PROVENANCE, "status": "Red", "scrub_now": True})
-    hypoxia = client.get(f"/assessment/all/{USER}").get_json()["hypoxia"]
+    hypoxia = client.get(f"/v1/ponds/{USER}/assessments").get_json()["hypoxia"]
     assert hypoxia["aeration"] is True and hypoxia["algae_high"] is True
     assert hypoxia["level"] == "high" and hypoxia["raised_by"] == ["high_algae"]
 
@@ -231,13 +231,13 @@ def test_hypoxia_dashboard_daytime_and_missing_reading():
     app, _ = _app(DASHBOARD_PAYLOAD["raw_sensor"])
     client = api_client(app)
     client.put(f"/v1/ponds/{USER}/profile", json={"volume_l": 4000.0, "biomass_g": 12000.0})
-    hypoxia = client.get(f"/assessment/all/{USER}").get_json()["hypoxia"]
+    hypoxia = client.get(f"/v1/ponds/{USER}/assessments").get_json()["hypoxia"]
     assert hypoxia["level"] == "none" and hypoxia["dark"] is False and hypoxia["advice"] == []
 
     app, storage = _app({"pH": 7.6})
     client = api_client(app)
     client.put(f"/v1/ponds/{USER}/profile", json={"volume_l": 4000.0, "biomass_g": 12000.0})
-    assert client.get(f"/assessment/all/{USER}").get_json()["hypoxia"]["level"] == "unknown"
+    assert client.get(f"/v1/ponds/{USER}/assessments").get_json()["hypoxia"]["level"] == "unknown"
     storage.failing.add("fetch_dashboard_payload")
-    resp = client.get(f"/assessment/all/{USER}")
+    resp = client.get(f"/v1/ponds/{USER}/assessments")
     assert resp.status_code == 200 and resp.get_json()["hypoxia"]["level"] == "unknown"

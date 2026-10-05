@@ -20,13 +20,9 @@ read is a property of the matching schema.
 ## Versions and the old paths
 
 Every route is served under `/v1`, with the pond in the path. The paths
-the app calls today are kept as deprecated aliases of their `/v1` route.
-They give the same response with two extra headers: `Deprecation:
-@1790985600` (RFC 9745, 2026-10-03) and, when the pond is in the path,
-`Link: </v1/...>; rel="successor-version"`. They are removed by the
-mobile repositories issue, once the app calls `/v1`.
+the app previously called have been removed. The app uses `/v1`.
 
-| Old path (deprecated) | `/v1` path |
+| Retired path (returns 404) | `/v1` path |
 |---|---|
 | `GET /assessment/{id}` | `GET /v1/ponds/{pond}/assessments/chemistry` |
 | `GET /assessment/evaporation/{id}` | `GET /v1/ponds/{pond}/assessments/evaporation` |
@@ -209,8 +205,8 @@ which describes its growth-rate fit.
 (grams), with optional `notes` (up to 1000 characters). `filter-clean`
 accepts optional `notes`. Both share `timestamp` and stable UUID `event_id`
 with other events; duplicate IDs are applied once and backdated events
-use the existing replay window. Their deprecated `/events/...` aliases
-require `user_id`. Responses contain all three assessments and the event
+use the existing replay window. Their retired `/events/...` paths
+return 404. Responses contain all three assessments and the event
 outcome, including `event_id`.
 
 Migration 0019 adds nullable `salt_grams numeric` and `notes text` to

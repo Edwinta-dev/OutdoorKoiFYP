@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Added for native system bar styling
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'data/local_profile_repository.dart';
+import 'data/providers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Updated import for Supabase Flutter
 import 'config/app_config.dart';
 import 'config/error_tracking.dart';
@@ -37,10 +39,15 @@ Future<void> _startApp() async {
     ),
   );
 
-  final prefs = await SharedPreferences.getInstance();
-  final bool isOnboarded = prefs.getBool('isOnboarded') ?? false;
-
-  runApp(KoiMonitorApp(isOnboarded: isOnboarded));
+  final repository = PreferencesProfileRepository();
+  final profile = await repository.load();
+  runApp(
+    ProviderScope(
+      retry: (_, _) => null,
+      overrides: [localProfileRepositoryProvider.overrideWithValue(repository)],
+      child: KoiMonitorApp(isOnboarded: profile.isOnboarded),
+    ),
+  );
 }
 
 class KoiMonitorApp extends StatelessWidget {

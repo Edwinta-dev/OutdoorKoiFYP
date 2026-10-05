@@ -1,18 +1,12 @@
 // lib/widgets/modals/quick_log_modals.dart
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/providers.dart';
+import '../../data/repositories.dart';
 import '../../utils/digital_twin_api.dart';
 import '../../utils/event_id.dart';
-
-/// The live write behind PondDataSource.insertIntervention. It lives next
-/// to the payload built in _InterventionLogSheetState._save so the schema
-/// check can match the payload keys to pondInterventions columns.
-Future<void> insertPondIntervention(Map<String, dynamic> payload) async {
-  await Supabase.instance.client.from('pondInterventions').insert(payload);
-}
 
 /// Main Entry Point: Opens the Quick Action Option Selector
 void showQuickActionSelector(BuildContext context) {
@@ -139,7 +133,7 @@ Widget _actionTile(
 // ============================================================================
 // UNIFIED, DRY INTERVENTION LOG SHEET (~100 LINES FOR ALL 4 EVENT TYPES)
 // ============================================================================
-class InterventionLogSheet extends StatefulWidget {
+class InterventionLogSheet extends ConsumerStatefulWidget {
   final String eventType;
   final String title;
   final Color accentColor;
@@ -157,10 +151,11 @@ class InterventionLogSheet extends StatefulWidget {
   });
 
   @override
-  State<InterventionLogSheet> createState() => _InterventionLogSheetState();
+  ConsumerState<InterventionLogSheet> createState() =>
+      _InterventionLogSheetState();
 }
 
-class _InterventionLogSheetState extends State<InterventionLogSheet> {
+class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
   final _formKey = GlobalKey<FormState>();
   final _val1Ctrl = TextEditingController(text: '25'); // Pct or Grams
   final _val2Ctrl = TextEditingController(); // Volume or Protein %
@@ -186,17 +181,17 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final source = PondDataScope.of(context);
+    final source = ref.read(eventsRepositoryProvider);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
+      final prefs = await ref.read(localProfileRepositoryProvider).load();
+      final userId = int.tryParse(prefs.pondId?.toString() ?? '0') ?? 0;
 
-      // Fish stock was captured at onboarding into SharedPreferences (not
+      // Fish stock was captured at onboarding into local profile storage (not
       // synced to Supabase's UserData table), so it rides along on each
       // event push for the DigitalTwin engine to use as PondConfig context.
-      final ownedSpecies = prefs.getStringList('ownedFishSpecies') ?? [];
+      final ownedSpecies = prefs.species;
       final fishType = ownedSpecies.isEmpty ? null : ownedSpecies.join(', ');
-      final fishCount = int.tryParse(prefs.getString('fishCount') ?? '');
+      final fishCount = prefs.fishCount;
 
       final hour24 = (_hour % 12) + (_isPm ? 12 : 0);
       final timestamp = DateTime(
@@ -210,13 +205,6 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
       // One id for the row and the post, so the twin applies the event
       // once however it arrives (the post, a retry or its poller).
       final eventId = newEventId();
-      final Map<String, dynamic> payload = {
-        'userID': userId,
-        'event_id': eventId,
-        'event_type': widget.eventType,
-        'event_timestamp': timestamp.toIso8601String(),
-      };
-
       double? saltGrams;
       String? notes;
       double? volumePercent;
@@ -229,30 +217,16 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           widget.eventType == 'WATER_TOPUP') {
         volumePercent = double.parse(_val1Ctrl.text.trim());
         volumeLitres = double.tryParse(_val2Ctrl.text.trim());
-        payload['volume_percentage'] = volumePercent;
-        payload['volume_litres'] = volumeLitres;
       } else if (widget.eventType == 'FEEDING') {
         foodGrams = double.parse(_val1Ctrl.text.trim());
         proteinPercent = double.tryParse(_val2Ctrl.text.trim()) ?? 40.0;
-        payload['food_grams'] = foodGrams;
-        payload['protein_percentage'] = proteinPercent;
       } else if (widget.eventType == 'SALT') {
         saltGrams = double.parse(_val1Ctrl.text.trim());
-        payload['salt_grams'] = saltGrams;
       } else if (widget.eventType == 'FILTER_CLEAN') {
         notes = _val2Ctrl.text.trim().isEmpty ? null : _val2Ctrl.text.trim();
-        payload['notes'] = notes;
-      } else if (widget.eventType == 'ALGAE_SCRUB') {
-        payload['algae_method'] = _selectedOption;
-      }
+      } else if (widget.eventType == 'ALGAE_SCRUB') {}
 
-      // Historical intervention record - feeds the timeline graph markers.
-      await source.insertIntervention(payload);
-
-      // Push the same event into the DigitalTwin chemistry engine so its
-      // TAN/NO2/NO3 pools and the water buffer status card reflect it.
-      // Best-effort: the Supabase insert above already succeeded, so a
-      // slow/unreachable Flask host must not fail this save.
+      // The repository records chart history and sends the same ID to /v1.
       final assessment = await _pushToDigitalTwin(
         source,
         userId: userId,
@@ -268,6 +242,12 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         fishCount: fishCount,
       );
 
+      if (!mounted) return;
+      ref.invalidate(pondDashboardProvider);
+      ref.invalidate(assessmentProvider(userId));
+      ref.invalidate(evaporationForecastProvider(userId));
+      ref.invalidate(algaeForecastProvider(userId));
+      ref.invalidate(historyProvider);
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -295,7 +275,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   }
 
   Future<WaterChemistryAssessment?> _pushToDigitalTwin(
-    PondDataSource source, {
+    EventsRepository source, {
     required int userId,
     required DateTime timestamp,
     required String eventId,

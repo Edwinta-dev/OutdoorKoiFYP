@@ -17,7 +17,6 @@
 // project or bucket ever changes underneath rows that were written
 // earlier. The stored value is the fallback.
 
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
@@ -42,6 +41,15 @@ class PondCameraFrame {
     required this.state,
   });
 
+  factory PondCameraFrame.fromJson(Map<String, dynamic> json) =>
+      PondCameraFrame(
+        id: (json['id'] as num?)?.toInt(),
+        imageUrl: json['imageURL'] as String?,
+        greenRatio: (json['green_ratio'] as num?)?.toDouble(),
+        capturedAt: DateTime.tryParse('${json['created_at']}'),
+        state: PondCameraStorage._stateLabel(json['current_state']),
+      );
+
   bool get isFlaggedObstructed => state == 'obstruction';
 }
 
@@ -52,25 +60,16 @@ class PondCameraStorage {
 
   static const String tableName = 'imageTable';
 
-  /// App user id, from the same SharedPreferences key the rest of the app
-  /// uses (dashboard_view.dart, detail_graph_screen.dart). The onboarding
-  /// flow takes this from the hardware, so it is also the id the ESP32
-  /// uploads under - one number, both sides.
-  static Future<int> currentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('userID') ?? prefs.getInt('userID')?.toString();
-    return int.tryParse(raw ?? '') ?? 0;
-  }
-
   /// Newest frame for [userId], defaulting to the logged-in user.
   ///
   /// Returns a null frame with a human-readable reason rather than just
   /// null, so the card can distinguish "camera hasn't reported yet" from
   /// "couldn't reach Supabase" - different problems, different message.
   static Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame({
-    int? userId,
+    required int userId,
+    SupabaseClient? client,
   }) async {
-    final uid = userId ?? await currentUserId();
+    final uid = userId;
     if (uid == 0) {
       return (frame: null, error: 'No user id stored on this device.');
     }
@@ -79,7 +78,7 @@ class PondCameraStorage {
       // NOTE the column is "user_ID" here - imageTable's spelling.
       // pondInterventions uses "userID" and daily_sensor_averages uses
       // "userid"; all three coexist in this schema.
-      final rows = await Supabase.instance.client
+      final rows = await (client ?? Supabase.instance.client)
           .from(tableName)
           .select('id, created_at, green_ratio, current_state, "imageURL"')
           .eq('user_ID', uid)
@@ -90,7 +89,7 @@ class PondCameraStorage {
       if (list.isEmpty) {
         return (frame: null, error: 'The pond camera has not reported yet.');
       }
-      return (frame: _frameFromRow(list.first), error: null);
+      return (frame: _frameFromRow(list.first, client), error: null);
     } catch (e) {
       return (frame: null, error: 'Could not read camera history: $e');
     }
@@ -98,11 +97,14 @@ class PondCameraStorage {
 
   // ------------------------------------------------------------------
 
-  static PondCameraFrame _frameFromRow(Map<String, dynamic> row) {
+  static PondCameraFrame _frameFromRow(
+    Map<String, dynamic> row,
+    SupabaseClient? client,
+  ) {
     final stored = _clean(row['imageURL']?.toString());
     return PondCameraFrame(
       id: (row['id'] as num?)?.toInt(),
-      imageUrl: _rebuildUrl(stored) ?? stored,
+      imageUrl: _rebuildUrl(stored, client) ?? stored,
       greenRatio: (row['green_ratio'] as num?)?.toDouble(),
       capturedAt: DateTime.tryParse(row['created_at']?.toString() ?? ''),
       state: _stateLabel(row['current_state']),
@@ -117,7 +119,7 @@ class PondCameraStorage {
   /// Everything after `/public/<bucket>/` is the object path. Returns null
   /// if the URL doesn't match that shape, in which case the caller keeps
   /// the stored value as-is.
-  static String? _rebuildUrl(String? storedUrl) {
+  static String? _rebuildUrl(String? storedUrl, SupabaseClient? client) {
     if (storedUrl == null || storedUrl.isEmpty) return null;
     final marker = '/public/$bucketName/';
     final i = storedUrl.indexOf(marker);
@@ -128,7 +130,7 @@ class PondCameraStorage {
 
     try {
       return _clean(
-        Supabase.instance.client.storage
+        (client ?? Supabase.instance.client).storage
             .from(bucketName)
             .getPublicUrl(objectPath),
       );

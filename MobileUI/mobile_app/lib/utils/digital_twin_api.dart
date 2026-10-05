@@ -18,8 +18,6 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 
-final String _digitalTwinBaseUrl = AppConfig.environment.digitalTwinBaseUrl;
-
 /// The message from a DigitalTwin error body. The service sends
 /// {"error": {"code", "message", "details"}}; a service not yet
 /// redeployed sends `{"error": "<message>"}`. Anything else gives fallback.
@@ -498,7 +496,7 @@ class AlgaeForecast {
 }
 
 /// ---------------------------------------------------------------------
-/// ALGAE SEVERITY RATINGS  (POST /events/algae-rating)
+/// ALGAE SEVERITY RATINGS  (POST /v1/ponds/$userId/events/algae-rating)
 ///
 /// A human rating is a first-class observation, not just UI garnish: the
 /// engine corrects its modelled level toward the rating at HUMAN_TRUST
@@ -781,15 +779,56 @@ class AlgaeRatingResult {
 }
 
 class DigitalTwinApi {
+  final String _digitalTwinBaseUrl;
+  final http.Client client;
+  final String? Function() accessToken;
+  DigitalTwinApi({
+    http.Client? client,
+    String? baseUrl,
+    String? Function()? accessToken,
+  }) : client = client ?? http.Client(),
+       _digitalTwinBaseUrl =
+           (baseUrl ?? AppConfig.environment.digitalTwinBaseUrl).replaceFirst(
+             RegExp(r'/+$'),
+             '',
+           ),
+       accessToken = accessToken ?? (() => null);
+
+  Map<String, String> get headers => {
+    'Content-Type': 'application/json',
+    if (accessToken() case final String token) 'Authorization': 'Bearer $token',
+  };
+
+  Future<Map<String, dynamic>> request(
+    String method,
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
+    final uri = Uri.parse('$_digitalTwinBaseUrl$path');
+    final response = await (switch (method) {
+      'GET' => client.get(uri, headers: headers),
+      'PUT' => client.put(uri, headers: headers, body: jsonEncode(body)),
+      'DELETE' => client.delete(uri, headers: headers),
+      _ => client.post(uri, headers: headers, body: jsonEncode(body)),
+    }).timeout(const Duration(seconds: 10));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(errorMessageFrom(data, 'Pond service unavailable'));
+    }
+    return data;
+  }
+
   /// Returns null if there's no assessment yet for this user, or the
   /// DigitalTwin service is unreachable - callers should treat both cases
   /// as "not available yet" rather than a hard error.
-  static Future<WaterChemistryAssessment?> fetchLatestAssessment(
-    int userId,
-  ) async {
+  Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) async {
     try {
-      final uri = Uri.parse('$_digitalTwinBaseUrl/assessment/$userId');
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      final uri = Uri.parse(
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/assessments/chemistry',
+      );
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         return WaterChemistryAssessment.fromJson(
           jsonDecode(response.body) as Map<String, dynamic>,
@@ -808,15 +847,17 @@ class DigitalTwinApi {
   /// feeding/sensor history to project (HTTP 422) - callers can't tell
   /// those apart from the return value alone; use fetchForecastOrError
   /// below if you need to show the user *why* it's unavailable.
-  static Future<WaterChemistryForecast?> fetchForecast(
+  Future<WaterChemistryForecast?> fetchForecast(
     int userId, {
     int horizonDays = 21,
   }) async {
     try {
       final uri = Uri.parse(
-        '$_digitalTwinBaseUrl/forecast/$userId?horizon_days=$horizonDays',
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/forecasts/chemistry?horizon_days=$horizonDays',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         return WaterChemistryForecast.fromJson(
           jsonDecode(response.body) as Map<String, dynamic>,
@@ -831,21 +872,20 @@ class DigitalTwinApi {
   /// Same as fetchForecast, but surfaces the server's "not enough history
   /// yet" message (HTTP 422) instead of collapsing it to null, for UIs
   /// that want to show that reason rather than a generic "unavailable".
-  static Future<({WaterChemistryForecast? forecast, String? error})>
+  Future<({WaterChemistryForecast? forecast, String? error})>
   fetchForecastOrError(int userId, {int horizonDays = 21}) async {
     try {
       final uri = Uri.parse(
-        '$_digitalTwinBaseUrl/forecast/$userId?horizon_days=$horizonDays',
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/forecasts/chemistry?horizon_days=$horizonDays',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 8));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200) {
         return (forecast: WaterChemistryForecast.fromJson(body), error: null);
       }
-      return (
-        forecast: null,
-        error: errorMessageFrom(body, 'Unavailable'),
-      );
+      return (forecast: null, error: errorMessageFrom(body, 'Unavailable'));
     } catch (_) {
       return (forecast: null, error: 'DigitalTwin service unreachable');
     }
@@ -855,7 +895,7 @@ class DigitalTwinApi {
   /// screen. Returns null if unreachable OR if the pond has no config
   /// yet (HTTP 422) - use fetchEvaporationForecastOrError to tell those
   /// apart.
-  static Future<EvaporationForecast?> fetchEvaporationForecast(
+  Future<EvaporationForecast?> fetchEvaporationForecast(
     int userId, {
     int horizonDays = 14,
     double? depthM,
@@ -870,7 +910,7 @@ class DigitalTwinApi {
 
   /// Same, but surfaces the server's "not enough history" reason instead
   /// of collapsing it to null.
-  static Future<({EvaporationForecast? forecast, String? error})>
+  Future<({EvaporationForecast? forecast, String? error})>
   fetchEvaporationForecastOrError(
     int userId, {
     int horizonDays = 14,
@@ -882,10 +922,12 @@ class DigitalTwinApi {
         if (depthM != null) 'depth_m': '$depthM',
       };
       final uri = Uri.parse(
-        '$_digitalTwinBaseUrl/forecast/evaporation/$userId',
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/forecasts/evaporation',
       ).replace(queryParameters: params);
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200) {
         return (forecast: EvaporationForecast.fromJson(body), error: null);
@@ -902,7 +944,7 @@ class DigitalTwinApi {
   /// Algae lookahead for the Algal & Solar detail screen, grounded on the
   /// ESP32-CAM HSV history. Returns null if unreachable or if the camera
   /// has never reported (HTTP 422).
-  static Future<AlgaeForecast?> fetchAlgaeForecast(
+  Future<AlgaeForecast?> fetchAlgaeForecast(
     int userId, {
     int horizonDays = 21,
   }) async {
@@ -910,13 +952,17 @@ class DigitalTwinApi {
     return r.forecast;
   }
 
-  static Future<({AlgaeForecast? forecast, String? error})>
-  fetchAlgaeForecastOrError(int userId, {int horizonDays = 21}) async {
+  Future<({AlgaeForecast? forecast, String? error})> fetchAlgaeForecastOrError(
+    int userId, {
+    int horizonDays = 21,
+  }) async {
     try {
       final uri = Uri.parse(
-        '$_digitalTwinBaseUrl/forecast/algae/$userId?horizon_days=$horizonDays',
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/forecasts/algae?horizon_days=$horizonDays',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200) {
         return (forecast: AlgaeForecast.fromJson(body), error: null);
@@ -932,10 +978,14 @@ class DigitalTwinApi {
 
   /// Fetches the latest camera frame plus rating history and calibration
   /// state - everything AlgaeSeverityRatingCard needs in one round-trip.
-  static Future<AlgaeRatingContext?> fetchAlgaeRatingContext(int userId) async {
+  Future<AlgaeRatingContext?> fetchAlgaeRatingContext(int userId) async {
     try {
-      final uri = Uri.parse('$_digitalTwinBaseUrl/ratings/algae/$userId');
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final uri = Uri.parse(
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/ratings/algae',
+      );
+      final response = await client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         return AlgaeRatingContext.fromJson(
           jsonDecode(response.body) as Map<String, dynamic>,
@@ -952,8 +1002,7 @@ class DigitalTwinApi {
   /// 9pm and the newest frame is from 6pm, an inferred pairing silently
   /// corrupts the calibration set with a mismatched (label, measurement)
   /// pair.
-  static Future<({AlgaeRatingResult? result, String? error})>
-  submitAlgaeRating({
+  Future<({AlgaeRatingResult? result, String? error})> submitAlgaeRating({
     required int userId,
     required AlgaeSeverity severity,
     int? imageId,
@@ -961,11 +1010,13 @@ class DigitalTwinApi {
     String? notes,
   }) async {
     try {
-      final uri = Uri.parse('$_digitalTwinBaseUrl/events/algae-rating');
-      final response = await http
+      final uri = Uri.parse(
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/events/algae-rating',
+      );
+      final response = await client
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'user_id': userId,
               'severity': severity.wire,
@@ -992,20 +1043,16 @@ class DigitalTwinApi {
   /// Reverses the most recent rating, restoring the engine's level,
   /// thresholds and growth fit exactly. Only the most recent rating is
   /// reversible - that is the mis-tap case this exists for.
-  static Future<bool> undoAlgaeRating({
-    required int userId,
-    int? ratingId,
-  }) async {
+  Future<bool> undoAlgaeRating({required int userId, int? ratingId}) async {
     try {
-      final uri = Uri.parse('$_digitalTwinBaseUrl/events/algae-rating/undo');
-      final response = await http
+      final uri = Uri.parse(
+        '$_digitalTwinBaseUrl/v1/ponds/$userId/events/algae-rating/undo',
+      );
+      final response = await client
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'user_id': userId,
-              'rating_id': ?ratingId,
-            }),
+            headers: headers,
+            body: jsonEncode({'user_id': userId, 'rating_id': ?ratingId}),
           )
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
@@ -1014,40 +1061,33 @@ class DigitalTwinApi {
     }
   }
 
-  /// Pushes a logged pond intervention into the chemistry engine so its
-  /// TAN/NO2/NO3 pools reflect it. Best-effort: returns null (rather than
-  /// throwing) on any network/server error so a slow or unreachable
-  /// DigitalTwin host never blocks the caller's own success path - the
-  /// event's historical record (pondInterventions table) is written
-  /// separately and is the source of truth for "was this logged". The
-  /// same event_id goes in that row and in this post: the twin applies an
-  /// event_id once, and its poller applies any row whose post never
-  /// arrived.
-  static Future<WaterChemistryAssessment?> _postEvent(
+  /// Applies the recorded event through /v1; the repository handles history persistence.
+  Future<WaterChemistryAssessment?> _postEvent(
     String path,
     Map<String, dynamic> body,
   ) async {
     try {
-      final uri = Uri.parse('$_digitalTwinBaseUrl$path');
-      final response = await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(body),
-          )
+      final uri = Uri.parse(
+        '$_digitalTwinBaseUrl/v1/ponds/${body['user_id']}$path',
+      );
+      final response = await client
+          .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         return WaterChemistryAssessment.fromJson(
-          jsonDecode(response.body) as Map<String, dynamic>,
+          (jsonDecode(response.body) as Map<String, dynamic>)['chemistry']
+              as Map<String, dynamic>,
         );
       }
-      return null;
+      throw StateError(
+        errorMessageFrom(jsonDecode(response.body), 'Could not save event'),
+      );
     } catch (_) {
-      return null;
+      rethrow;
     }
   }
 
-  static Future<WaterChemistryAssessment?> logSalt({
+  Future<WaterChemistryAssessment?> logSalt({
     required int userId,
     required double saltGrams,
     String? notes,
@@ -1061,7 +1101,7 @@ class DigitalTwinApi {
     'event_id': ?eventId,
   });
 
-  static Future<WaterChemistryAssessment?> logFilterClean({
+  Future<WaterChemistryAssessment?> logFilterClean({
     required int userId,
     String? notes,
     DateTime? timestamp,
@@ -1073,7 +1113,7 @@ class DigitalTwinApi {
     'event_id': ?eventId,
   });
 
-  static Future<WaterChemistryAssessment?> logFeeding({
+  Future<WaterChemistryAssessment?> logFeeding({
     required int userId,
     required double foodGrams,
     required double proteinPercent,
@@ -1093,7 +1133,7 @@ class DigitalTwinApi {
     });
   }
 
-  static Future<WaterChemistryAssessment?> logWaterChange({
+  Future<WaterChemistryAssessment?> logWaterChange({
     required int userId,
     double? volumePercent,
     double? volumeLitres,
@@ -1113,7 +1153,7 @@ class DigitalTwinApi {
     });
   }
 
-  static Future<WaterChemistryAssessment?> logTopUp({
+  Future<WaterChemistryAssessment?> logTopUp({
     required int userId,
     double? volumePercent,
     double? volumeLitres,
@@ -1133,7 +1173,7 @@ class DigitalTwinApi {
     });
   }
 
-  static Future<WaterChemistryAssessment?> logAlgalScrub({
+  Future<WaterChemistryAssessment?> logAlgalScrub({
     required int userId,
     String? scrubType,
     DateTime? timestamp,

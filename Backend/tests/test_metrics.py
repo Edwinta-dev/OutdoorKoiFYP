@@ -53,13 +53,16 @@ def test_metrics_endpoint_counts_requests_by_route_pattern():
     client = api_client(create_app(make_settings(), storage=make_storage()))
     client.get("/health")
     client.get("/health")
-    client.get(f"/assessment/{USER}")
+    client.get(f"/v1/ponds/{USER}/assessments/chemistry")
     client.get("/no-such-route")
     resp = client.get("/metrics")
     assert resp.status_code == 200 and resp.content_type == CONTENT_TYPE
     text = resp.get_data(as_text=True)
     assert _value(text, 'koi_http_requests_total{service="api",route="/health",method="GET",status="200"}') == 2
-    assert 'route="/assessment/<int:user_id>"' in text and f"/assessment/{USER}" not in text
+    assert (
+        'route="/v1/ponds/<int:user_id>/assessments/chemistry"' in text
+        and f"/v1/ponds/{USER}/assessments/chemistry" not in text
+    )
     assert _value(text, 'koi_http_requests_total{service="api",route="unmatched",method="GET",status="404"}') == 1
     assert _value(text, 'koi_http_request_duration_seconds_count{service="api",route="/health",method="GET"}') == 2
 

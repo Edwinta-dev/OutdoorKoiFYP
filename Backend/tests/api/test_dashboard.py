@@ -34,7 +34,6 @@ from conftest import (
     mint_token,
 )
 from koi.api import create_app, schemas
-from koi.api.spec import DEPRECATION_HEADER
 
 DART_FIXTURE = Path(__file__).resolve().parents[3] / "MobileUI" / "mobile_app" / "test" / "fixtures" / \
     "v1_dashboard.json"
@@ -290,7 +289,7 @@ def test_posts_carry_no_etag(storage):
 def pond_client():
     app = create_app(make_settings(), storage=make_storage())
     client = api_client(app)
-    client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+    client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
     return client
 
 
@@ -301,23 +300,21 @@ def pond_client():
     (f"/forecast/evaporation/{USER}", f"/v1/ponds/{USER}/forecasts/evaporation"),
     (f"/ratings/algae/{USER}", f"/v1/ponds/{USER}/ratings/algae"),
 ])
-def test_old_paths_are_deprecated_aliases(pond_client, old, new):
+def test_old_paths_are_removed(pond_client, old, new):
     old_r, new_r = pond_client.get(old), pond_client.get(new)
-    assert old_r.status_code == new_r.status_code == 200
-    assert old_r.get_json() == new_r.get_json()
-    assert old_r.headers["Deprecation"] == DEPRECATION_HEADER
-    assert old_r.headers["Link"] == f'<{new}>; rel="successor-version"'
+    assert old_r.status_code == 404
+    assert new_r.status_code == 200
     assert "Deprecation" not in new_r.headers
 
 
-def test_deprecation_on_old_error_responses_too(pond_client):
+def test_removed_path_does_not_resolve_a_pond(pond_client):
     r = pond_client.get("/assessment/456")
-    assert r.status_code == 403 and r.headers["Deprecation"] == DEPRECATION_HEADER
+    assert r.status_code == 404 and "Deprecation" not in r.headers
 
 
-def test_old_event_path_is_deprecated(pond_client):
+def test_old_event_path_is_removed(pond_client):
     r = pond_client.post("/events/feeding", json={"user_id": USER, "food_grams": 20, "protein_percent": 35})
-    assert r.status_code == 200 and r.headers["Deprecation"] == DEPRECATION_HEADER
+    assert r.status_code == 404 and "Deprecation" not in r.headers
     assert "Link" not in r.headers  # the pond is in the body, so no single successor URL
 
 

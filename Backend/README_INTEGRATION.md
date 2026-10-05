@@ -165,7 +165,7 @@ sensor type per poll:
 ### Event ledger (issue #19, migration 0015)
 
 Each logged intervention has a UUID, `event_id`, that the app writes to
-`pondInterventions.event_id` and posts to `/v1/ponds/{pond}/events/...`
+`pondInterventions.event_id` and posts to `/v1/ponds/{pond}/v1/ponds/<uid>/events/...`
 (body field `event_id`). The twin keeps a ledger of the event_ids it has
 applied in its snapshot (`koi/models/event_ledger.py`, snapshot version 4):
 
@@ -359,7 +359,7 @@ Three, all through the same locked+persisted path:
 telemetry/forecast, and any new camera frames; advances all three engines
 to now; pushes one evaluation row per domain.
 
-**Logged intervention** (`/events/*`) — fans out to every affected engine,
+**Logged intervention** (`/v1/ponds/<uid>/events/*`) — fans out to every affected engine,
 then immediately re-assesses and re-projects:
 
 | Event | chemistry | evaporation | algae |
@@ -369,7 +369,7 @@ then immediately re-assesses and re-projects:
 | `WATER_CHANGE` | dilute TAN/NO2, blend NO3 | **loss reset** | dilute suspended |
 | `ALGAE_SCRUB` | suppress NO3 uptake 5d | — | **level reset** |
 
-**Human severity rating** (`/events/algae-rating`) — the user rates the latest
+**Human severity rating** (`/v1/ponds/<uid>/events/algae-rating`) — the user rates the latest
 camera frame. Corrects the algae engine's level at `HUMAN_TRUST = 0.85`
 (above the camera's `0.70`), and the accumulated (label, green_ratio) pairs
 calibrate the alert thresholds. `obstruction` retroactively removes the
@@ -402,17 +402,17 @@ development only; the API refuses to start with it in any other
 `KOI_ENV`.
 
 Cheap cached reads (dashboard cards + alert badges):
-- `GET /assessment/<uid>` — chemistry
-- `GET /assessment/evaporation/<uid>`
-- `GET /assessment/algae/<uid>`
-- `GET /assessment/all/<uid>` — all three in one call, plus `hypoxia`: the night-time
+- `GET /v1/ponds/<uid>/assessments/chemistry` — chemistry
+- `GET /v1/ponds/<uid>/assessments/evaporation`
+- `GET /v1/ponds/<uid>/assessments/algae`
+- `GET /v1/ponds/<uid>/assessments` — all three in one call, plus `hypoxia`: the night-time
   low-oxygen flag (`level` none/watch/high/unknown, `explanation`, `advice`) from the
   latest reading, the profile's aeration and the cached algae assessment
   (`koi/models/hypoxia.py`)
 
 Live projections (detail graph screens):
-- `GET /forecast/<uid>?horizon_days=21` — chemistry
-- `GET /forecast/evaporation/<uid>?horizon_days=14` — uses the depth in
+- `GET /v1/ponds/<uid>/forecasts/chemistry?horizon_days=21` — chemistry
+- `GET /v1/ponds/<uid>/forecasts/evaporation?horizon_days=14` — uses the depth in
   the pond profile, or 1.2 m when none is stored; `&depth_m=0.9` replaces
   it for that one projection
 
@@ -421,15 +421,15 @@ Pond profile (volume, depth, fish, tap water, aeration; effective-dated):
 - `PUT /v1/ponds/<uid>/profile` — `{volume_l, biomass_g, depth_m?, fish_type?,
   fish_count?, tap_tds_ppm?, tap_nitrate_ppm?, aeration?, effective_from?}`;
   adds a row in force from `effective_from` (default now, UTC when no offset)
-- `GET /forecast/algae/<uid>?horizon_days=21`
+- `GET /v1/ponds/<uid>/forecasts/algae?horizon_days=21`
 
 Algae severity ratings:
-- `POST /events/algae-rating` — `{user_id, severity, image_id, green_ratio}`
+- `POST /v1/ponds/<uid>/events/algae-rating` — `{user_id, severity, image_id, green_ratio}`
   where severity is `none|minor|moderate|severe|obstruction`
-- `POST /events/algae-rating/undo` — `{user_id, rating_id}`
+- `POST /v1/ponds/<uid>/events/algae-rating/undo` — `{user_id, rating_id}`
 - `GET /ratings/algae/<uid>` — history + calibration state + latest frame
 
-Every `/events/*` response now returns all three domain assessments, so
+Every `/v1/ponds/<uid>/events/*` response now returns all three domain assessments, so
 the app can refresh every card from one response.
 
 Operations (`koi/api/health.py`, `koi/observability.py`):

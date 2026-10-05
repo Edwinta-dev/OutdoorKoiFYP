@@ -33,11 +33,8 @@ _STATUS_TEXT = {200: "OK", 201: "Created", 304: "Not modified", 400: "Invalid re
 _DESCRIPTION = """\
 Digital twin API of OutdoorKoi: pond chemistry, evaporation and algae.
 
-Every route is served under /v1. The old unversioned paths are deprecated
-aliases of their /v1 route (same response, plus `Deprecation` and, where the
-/v1 path can be built, `Link: rel="successor-version"`); they are removed
-once the app calls /v1. /health and /ready are also served unversioned,
-without deprecation, for probes. /metrics is Prometheus text.
+Every pond route is served under /v1. The retired mobile aliases are not served.
+/health and /ready are also served unversioned for probes. /metrics is Prometheus text.
 
 GET responses with a JSON body carry a strong `ETag` and
 `Cache-Control: private, no-cache`; send it back in `If-None-Match` to get
@@ -91,9 +88,6 @@ def _responses(op: Operation, refs: dict[tuple[type[BaseModel], Mode], dict]) ->
             entry["headers"] = {"ETag": {"description": "Strong validator over the response body.",
                                          "schema": {"type": "string"}},
                                 "Cache-Control": {"schema": {"type": "string", "const": "private, no-cache"}}}
-        if op.deprecated:
-            entry.setdefault("headers", {})["Deprecation"] = {
-                "description": "RFC 9745: the date this path was deprecated.", "schema": {"type": "string"}}
         out[str(status)] = entry
     if op.method == "GET":
         out["304"] = {"description": "Not modified: If-None-Match matches the current ETag. No body."}
@@ -107,10 +101,6 @@ def _operation(op: Operation, refs: dict) -> dict:
     entry: dict[str, Any] = {"operationId": op.endpoint, "summary": op.summary, "tags": [op.tag]}
     if op.description:
         entry["description"] = " ".join(op.description.split())
-    if op.deprecated:
-        entry["deprecated"] = True
-        entry["description"] = (f"Deprecated alias of {openapi_path(op.successor or '')}. "
-                                + entry.get("description", "")).strip()
     params = _parameters(op)
     if op.method == "GET":
         params.append({"name": "If-None-Match", "in": "header", "required": False,

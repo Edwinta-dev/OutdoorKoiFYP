@@ -16,10 +16,10 @@ def app():
 
 @pytest.mark.parametrize("name,fields", [("salt", {"salt_grams": 1.0, "notes": "Added"}),
                                          ("filter-clean", {"notes": "Rinsed"}), ("filter-clean", {})])
-@pytest.mark.parametrize("versioned", [True, False])
-def test_salt_filter_contract_and_duplicate(app, name, fields, versioned):
-    path = f"/v1/ponds/{USER}/events/{name}" if versioned else f"/events/{name}"
-    body = {**fields, "event_id": str(uuid.uuid4()), **({} if versioned else {"user_id": USER})}
+@pytest.mark.parametrize("include_body_pond", [True, False])
+def test_salt_filter_contract_and_duplicate(app, name, fields, include_body_pond):
+    path = f"/v1/ponds/{USER}/events/{name}"
+    body = {**fields, "event_id": str(uuid.uuid4()), **({"user_id": USER} if include_body_pond else {})}
     client = api_client(app)
     first = client.post(path, json=body)
     assert first.status_code == 200

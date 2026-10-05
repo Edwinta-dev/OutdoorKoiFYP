@@ -13,37 +13,26 @@
 // evidence for is one they can calibrate their trust against.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
 
-class AlgaeStatusCard extends StatefulWidget {
+class AlgaeStatusCard extends ConsumerStatefulWidget {
   final int userId;
 
   const AlgaeStatusCard({super.key, required this.userId});
 
   @override
-  State<AlgaeStatusCard> createState() => _AlgaeStatusCardState();
+  ConsumerState<AlgaeStatusCard> createState() => _AlgaeStatusCardState();
 }
 
-class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
-  late Future<({AlgaeForecast? forecast, String? error})> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
-  }
-
-  void _retry() {
-    setState(() {
-      _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
-    });
-  }
+class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
+  void _retry() => ref.invalidate(algaeForecastProvider(widget.userId));
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<({AlgaeForecast? forecast, String? error})>(
-      future: _future,
+      future: ref.watch(algaeForecastProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(child: _loadingState());
@@ -151,7 +140,11 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               const Expanded(
                 child: Row(
                   children: [
-                    Icon(Icons.grass_outlined, color: Colors.tealAccent, size: 18),
+                    Icon(
+                      Icons.grass_outlined,
+                      color: Colors.tealAccent,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -215,11 +208,7 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _metricBox(
-                  'Frames',
-                  '${f.sampleCount}',
-                  Colors.white70,
-                ),
+                child: _metricBox('Frames', '${f.sampleCount}', Colors.white70),
               ),
             ],
           ),
@@ -233,12 +222,17 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               decoration: BoxDecoration(
                 color: Colors.tealAccent.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: Colors.tealAccent.withValues(alpha: 0.35),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.cleaning_services_outlined,
-                      color: Colors.tealAccent, size: 15),
+                  const Icon(
+                    Icons.cleaning_services_outlined,
+                    color: Colors.tealAccent,
+                    size: 15,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -351,7 +345,10 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 10.5)),
+        Text(
+          sub,
+          style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+        ),
         const SizedBox(height: 2),
         FittedBox(
           alignment: Alignment.centerLeft,
@@ -457,12 +454,18 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.visibility_off_outlined,
-                      color: Colors.white38, size: 12),
+                  const Icon(
+                    Icons.visibility_off_outlined,
+                    color: Colors.white38,
+                    size: 12,
+                  ),
                   const SizedBox(width: 3),
                   Text(
                     '${f.obstructedSampleCount}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 9.5),
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 9.5,
+                    ),
                   ),
                 ],
               ),

@@ -9,37 +9,27 @@
 // 20px radius) so the three detail screens read as one system.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
 
-class EvaporationStatusCard extends StatefulWidget {
+class EvaporationStatusCard extends ConsumerStatefulWidget {
   final int userId;
 
   const EvaporationStatusCard({super.key, required this.userId});
 
   @override
-  State<EvaporationStatusCard> createState() => _EvaporationStatusCardState();
+  ConsumerState<EvaporationStatusCard> createState() =>
+      _EvaporationStatusCardState();
 }
 
-class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
-  late Future<({EvaporationForecast? forecast, String? error})> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = PondDataScope.of(context).fetchEvaporationForecastOrError(widget.userId);
-  }
-
-  void _retry() {
-    setState(() {
-      _future = PondDataScope.of(context).fetchEvaporationForecastOrError(widget.userId);
-    });
-  }
+class _EvaporationStatusCardState extends ConsumerState<EvaporationStatusCard> {
+  void _retry() => ref.invalidate(evaporationForecastProvider(widget.userId));
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<({EvaporationForecast? forecast, String? error})>(
-      future: _future,
+      future: ref.watch(evaporationForecastProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(child: _loadingState());
@@ -432,11 +422,7 @@ class _EvaporationStatusCardState extends State<EvaporationStatusCard> {
     ),
     child: Text(
       text,
-      style: TextStyle(
-        color: color,
-        fontSize: 10,
-        fontWeight: FontWeight.bold,
-      ),
+      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
     ),
   );
 

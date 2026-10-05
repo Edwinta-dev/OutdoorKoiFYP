@@ -36,11 +36,12 @@
 // The two are merged in _load() and degrade independently.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
+import '../../data/rating_card_data.dart';
 import '../../utils/digital_twin_api.dart';
-import '../../utils/pond_camera_storage.dart';
 
-class AlgaeSeverityRatingCard extends StatefulWidget {
+class AlgaeSeverityRatingCard extends ConsumerStatefulWidget {
   final int userId;
 
   /// Called after a successful submit or undo so the parent can refresh
@@ -55,62 +56,32 @@ class AlgaeSeverityRatingCard extends StatefulWidget {
   });
 
   @override
-  State<AlgaeSeverityRatingCard> createState() =>
+  ConsumerState<AlgaeSeverityRatingCard> createState() =>
       _AlgaeSeverityRatingCardState();
 }
 
-class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
+class _AlgaeSeverityRatingCardState
+    extends ConsumerState<AlgaeSeverityRatingCard> {
   static const Color _surface = Color(0xFF131B2A);
   static const Color _accent = Colors.tealAccent;
-
-  late Future<_RatingCardData> _future;
 
   AlgaeSeverity? _selected;
   bool _submitting = false;
   AlgaeRatingResult? _lastResult;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  /// Frame from Supabase, calibration from Flask, merged.
-  ///
-  /// Both are awaited concurrently and each failure is tolerated
-  /// independently: a missing frame still allows rating (the engine
-  /// accepts a rating with no paired measurement, it just cannot use it
-  /// for calibration), and unreachable Flask still shows the photo.
-  Future<_RatingCardData> _load() async {
-    // Started together, awaited separately. Future.wait over
-    // heterogeneous futures collapses to List<Object?> and would need a
-    // cast back to a record type on the way out - fragile, and needless
-    // here. Kicking all three off before the first await gives the same
-    // concurrency with full static typing.
-    final source = PondDataScope.of(context);
-    final frameFuture = source.fetchLatestFrame(widget.userId);
-    final contextFuture = source.fetchAlgaeRatingContext(widget.userId);
-
-    final frameResult = await frameFuture;
-    final ctx = await contextFuture;
-
-    return _RatingCardData(
-      frame: frameResult.frame,
-      frameError: frameResult.error,
-      context: ctx,
-    );
-  }
-
   void _reload({bool notifyParent = false}) {
+    ref.invalidate(cameraFrameProvider(widget.userId));
+    ref.invalidate(ratingContextProvider(widget.userId));
+    ref.invalidate(algaeForecastProvider(widget.userId));
+    ref.invalidate(pondDashboardProvider);
     setState(() {
-      _future = _load();
       _selected = null;
     });
     if (notifyParent) widget.onRatingChanged?.call();
   }
 
-  Future<void> _submit(_RatingCardData data) async {
+  Future<void> _submit(RatingCardData data) async {
     final choice = _selected;
     if (choice == null || _submitting) return;
 
@@ -119,13 +90,15 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       _error = null;
     });
 
-    final res = await PondDataScope.of(context).submitAlgaeRating(
-      userId: widget.userId,
-      severity: choice,
-      // Pin the exact frame being rated - see the header comment.
-      imageId: data.frame?.id,
-      greenRatio: data.frame?.greenRatio,
-    );
+    final res = await ref
+        .read(ratingsRepositoryProvider)
+        .submitAlgaeRating(
+          userId: widget.userId,
+          severity: choice,
+          // Pin the exact frame being rated - see the header comment.
+          imageId: data.frame?.id,
+          greenRatio: data.frame?.greenRatio,
+        );
 
     if (!mounted) return;
     setState(() {
@@ -142,10 +115,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
   Future<void> _undo() async {
     final id = _lastResult?.ratingId;
     setState(() => _submitting = true);
-    final ok = await PondDataScope.of(context).undoAlgaeRating(
-      userId: widget.userId,
-      ratingId: id,
-    );
+    final ok = await ref
+        .read(ratingsRepositoryProvider)
+        .undoAlgaeRating(userId: widget.userId, ratingId: id);
     if (!mounted) return;
     setState(() {
       _submitting = false;
@@ -159,8 +131,8 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_RatingCardData>(
-      future: _future,
+    return FutureBuilder<RatingCardData>(
+      future: ref.watch(ratingCardProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(
@@ -220,7 +192,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     ),
   );
 
-  Widget _card(_RatingCardData data) {
+  Widget _card(RatingCardData data) {
     final ctx = data.context;
     final cal = ctx?.calibration;
     final frame = data.frame;
@@ -292,10 +264,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
           ],
 
           const SizedBox(height: 14),
-          if (canRate)
-            _submitRow(data)
-          else
-            _ratingOfflineNotice(),
+          if (canRate) _submitRow(data) else _ratingOfflineNotice(),
 
           // --- what the last rating actually did ---
           if (_lastResult != null) ...[
@@ -307,12 +276,19 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 14),
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.redAccent,
+                  size: 14,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 10.5),
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 10.5,
+                    ),
                   ),
                 ),
               ],
@@ -350,7 +326,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     ],
   );
 
-  Widget _framePanel(_RatingCardData data) {
+  Widget _framePanel(RatingCardData data) {
     final frame = data.frame;
     final url = frame?.imageUrl;
     return ClipRRect(
@@ -368,13 +344,18 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.photo_camera_outlined,
-                                color: Colors.white24, size: 30),
+                            const Icon(
+                              Icons.photo_camera_outlined,
+                              color: Colors.white24,
+                              size: 30,
+                            ),
                             const SizedBox(height: 8),
                             const Text(
                               'No camera frame yet',
                               style: TextStyle(
-                                  color: Colors.white54, fontSize: 11.5),
+                                color: Colors.white54,
+                                fontSize: 11.5,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -386,9 +367,10 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                                   'Waiting for the pond camera to report.',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  color: Colors.white24,
-                                  fontSize: 10,
-                                  height: 1.35),
+                                color: Colors.white24,
+                                fontSize: 10,
+                                height: 1.35,
+                              ),
                             ),
                           ],
                         ),
@@ -407,13 +389,18 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.broken_image_outlined,
-                                color: Colors.white24, size: 28),
+                            Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.white24,
+                              size: 28,
+                            ),
                             SizedBox(height: 6),
                             Text(
                               'Photo could not be loaded',
                               style: TextStyle(
-                                  color: Colors.white38, fontSize: 10.5),
+                                color: Colors.white38,
+                                fontSize: 10.5,
+                              ),
                             ),
                           ],
                         ),
@@ -446,12 +433,18 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
               right: 0,
               bottom: 0,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.75),
+                    ],
                   ),
                 ),
                 child: Row(
@@ -488,23 +481,29 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
               top: 8,
               left: 8,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.visibility_off_outlined,
-                        color: Colors.orangeAccent, size: 11),
+                    Icon(
+                      Icons.visibility_off_outlined,
+                      color: Colors.orangeAccent,
+                      size: 11,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'view may be blocked',
                       style: TextStyle(
-                          color: Colors.orangeAccent, fontSize: 9.5),
+                        color: Colors.orangeAccent,
+                        fontSize: 9.5,
+                      ),
                     ),
                   ],
                 ),
@@ -532,7 +531,10 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
               'Analysis service unreachable - ratings cannot be saved right '
               'now. The photo above is live from storage.',
               style: TextStyle(
-                  color: Colors.white38, fontSize: 10.5, height: 1.35),
+                color: Colors.white38,
+                fontSize: 10.5,
+                height: 1.35,
+              ),
             ),
           ),
           TextButton(
@@ -570,7 +572,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  severe ? 'Camera lens may need cleaning' : 'Camera baseline shifting',
+                  severe
+                      ? 'Camera lens may need cleaning'
+                      : 'Camera baseline shifting',
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -605,13 +609,15 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
 
     final widgets = <Widget>[];
     for (final s in severityScale) {
-      widgets.add(_optionTile(
-        s,
-        // Highlight classes the model is still short of examples for -
-        // uncertainty sampling beats random prompting when a healthy
-        // pond reads "none" almost every time.
-        wanted: (needed[s.wire] ?? 0) > 0,
-      ));
+      widgets.add(
+        _optionTile(
+          s,
+          // Highlight classes the model is still short of examples for -
+          // uncertainty sampling beats random prompting when a healthy
+          // pond reads "none" almost every time.
+          wanted: (needed[s.wire] ?? 0) > 0,
+        ),
+      );
       widgets.add(const SizedBox(height: 6));
     }
 
@@ -619,19 +625,21 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     // fifth severity level, and it is handled completely differently by
     // the engine (it removes a reading rather than describing one).
     widgets.add(const SizedBox(height: 4));
-    widgets.add(Row(
-      children: [
-        Expanded(child: Container(height: 1, color: Colors.white10)),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            'or flag the reading',
-            style: TextStyle(color: Colors.white24, fontSize: 9.5),
+    widgets.add(
+      Row(
+        children: [
+          Expanded(child: Container(height: 1, color: Colors.white10)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'or flag the reading',
+              style: TextStyle(color: Colors.white24, fontSize: 9.5),
+            ),
           ),
-        ),
-        Expanded(child: Container(height: 1, color: Colors.white10)),
-      ],
-    ));
+          Expanded(child: Container(height: 1, color: Colors.white10)),
+        ],
+      ),
+    );
     widgets.add(const SizedBox(height: 8));
     widgets.add(_optionTile(AlgaeSeverity.obstruction, wanted: false));
 
@@ -649,10 +657,14 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.03),
+          color: selected
+              ? color.withValues(alpha: 0.14)
+              : Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? color.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.06),
+            color: selected
+                ? color.withValues(alpha: 0.6)
+                : Colors.white.withValues(alpha: 0.06),
             width: selected ? 1.4 : 1,
           ),
         ),
@@ -670,8 +682,11 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
               _severityDot(s),
               const SizedBox(width: 9),
             ] else ...[
-              const Icon(Icons.visibility_off_outlined,
-                  color: Colors.white38, size: 14),
+              const Icon(
+                Icons.visibility_off_outlined,
+                color: Colors.white38,
+                size: 14,
+              ),
               const SizedBox(width: 9),
             ],
             Expanded(
@@ -686,8 +701,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                           style: TextStyle(
                             color: selected ? Colors.white : Colors.white70,
                             fontSize: 12,
-                            fontWeight:
-                                selected ? FontWeight.bold : FontWeight.w500,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
                           ),
                         ),
                       ),
@@ -695,7 +711,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1.5),
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
                           decoration: BoxDecoration(
                             color: _accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
@@ -739,7 +757,11 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
         color: color,
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 5, spreadRadius: 0.5),
+          BoxShadow(
+            color: color.withValues(alpha: 0.5),
+            blurRadius: 5,
+            spreadRadius: 0.5,
+          ),
         ],
       ),
     );
@@ -778,7 +800,7 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     );
   }
 
-  Widget _submitRow(_RatingCardData data) {
+  Widget _submitRow(RatingCardData data) {
     final canSubmit = _selected != null && !_submitting;
     return SizedBox(
       width: double.infinity,
@@ -793,7 +815,9 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: canSubmit ? _accent.withValues(alpha: 0.4) : Colors.white10,
+              color: canSubmit
+                  ? _accent.withValues(alpha: 0.4)
+                  : Colors.white10,
             ),
           ),
         ),
@@ -801,7 +825,10 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
             ? const SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _accent,
+                ),
               )
             : const Icon(Icons.check_circle_outline, size: 16),
         label: Text(
@@ -843,8 +870,11 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.check_circle_outline,
-                  color: Colors.greenAccent, size: 14),
+              const Icon(
+                Icons.check_circle_outline,
+                color: Colors.greenAccent,
+                size: 14,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -907,8 +937,8 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
                 cal.isCalibrated
                     ? 'Alert levels calibrated from your ratings'
                     : cal.isPartiallyCalibrated
-                          ? 'Alert levels partly calibrated'
-                          : 'Alert levels still estimated',
+                    ? 'Alert levels partly calibrated'
+                    : 'Alert levels still estimated',
                 style: TextStyle(
                   color: cal.isCalibrated ? Colors.greenAccent : Colors.white54,
                   fontSize: 10.5,
@@ -1008,29 +1038,4 @@ class _AlgaeSeverityRatingCardState extends State<AlgaeSeverityRatingCard> {
     if (d.inDays < 7) return '${d.inDays} days ago';
     return '${t.toLocal().day}/${t.toLocal().month}';
   }
-}
-
-/// Merged view model: camera frame straight from imageTable, calibration
-/// state from the Flask engine.
-///
-/// Kept as one object so the widget tree never has to reason about which
-/// of the two sources failed - each field is independently nullable and
-/// the render path degrades per-field.
-class _RatingCardData {
-  final PondCameraFrame? frame;
-
-  /// Why there is no frame, in words worth showing the user - "camera
-  /// hasn't reported yet" and "couldn't reach Supabase" are different
-  /// problems and deserve different messages.
-  final String? frameError;
-
-  /// Null when the Flask service is unreachable. The card still renders
-  /// the photo in that case; only the rating controls are withheld.
-  final AlgaeRatingContext? context;
-
-  const _RatingCardData({
-    required this.frame,
-    required this.frameError,
-    required this.context,
-  });
 }

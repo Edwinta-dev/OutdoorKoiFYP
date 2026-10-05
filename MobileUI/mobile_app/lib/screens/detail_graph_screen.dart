@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/pond_data_source.dart';
+import '../data/providers.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/detail_graph/algae_status_card.dart';
 import '../widgets/detail_graph/evaporation_status_card.dart';
@@ -11,7 +11,7 @@ import '../widgets/detail_graph/scarce_data_placeholder.dart';
 import '../widgets/detail_graph/timeline_header_selector.dart';
 import '../widgets/detail_graph/water_buffer_status_card.dart';
 
-class DetailGraphScreen extends StatefulWidget {
+class DetailGraphScreen extends ConsumerStatefulWidget {
   final String
   metricType; // 'temperature', 'ph', 'lux', 'water_quality', 'evaporation', 'algae'
   final String title;
@@ -23,13 +23,13 @@ class DetailGraphScreen extends StatefulWidget {
   });
 
   @override
-  State<DetailGraphScreen> createState() => _DetailGraphScreenState();
+  ConsumerState<DetailGraphScreen> createState() => _DetailGraphScreenState();
 }
 
-class _DetailGraphScreenState extends State<DetailGraphScreen> {
+class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
   bool _isLoading = true;
   int _selectedDays = 30;
-  int _chemistryRefreshTick = 0;
+  final int _chemistryRefreshTick = 0;
 
   /// Bumped when a severity rating is submitted or undone. A rating moves
   /// the engine's modelled level, so the algae forecast card underneath is
@@ -43,44 +43,9 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
   List<Map<String, dynamic>> _dailyTrends = [];
   List<Map<String, dynamic>> _interventions = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadUserPreferencesAndPayload();
-  }
-
-  /// Loads tank parameters from SharedPreferences & fetches database trends
   Future<void> _loadUserPreferencesAndPayload() async {
-    setState(() => _isLoading = true);
-    final source = PondDataScope.of(context);
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
-      _userId = userId;
-
-      final response = await source.fetchHistoricalGraphPayload(
-        userId,
-        _selectedDays,
-      );
-
-      if (mounted && response != null) {
-        final Map<String, dynamic> data = response;
-        setState(() {
-          _dailyTrends = List<Map<String, dynamic>>.from(
-            data['daily_trends'] ?? [],
-          );
-          _interventions = List<Map<String, dynamic>>.from(
-            data['interventions'] ?? [],
-          );
-          _isLoading = false;
-          _chemistryRefreshTick++;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching historical payload: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+    ref.invalidate(historyProvider((pond: _userId, days: _selectedDays)));
+    ref.invalidate(assessmentProvider(_userId));
   }
 
   List<String> _getTargetSensorTypes() {
@@ -107,6 +72,19 @@ class _DetailGraphScreenState extends State<DetailGraphScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = ref.watch(localProfileProvider);
+    if (profile.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    _userId = profile.asData?.value.pondId ?? 0;
+    final state = ref.watch(
+      historyProvider((pond: _userId, days: _selectedDays)),
+    );
+    _isLoading = profile.isLoading || state.isLoading;
+    final data = state.asData?.value;
+    _dailyTrends = data?.days.map((day) => day.toJson()).toList() ?? [];
+    _interventions =
+        data?.interventions.map((event) => event.toJson()).toList() ?? [];
     final targetSensors = _getTargetSensorTypes();
     final primaryType = targetSensors.first;
     final primaryEvent = _getDomainPrimaryEventType();

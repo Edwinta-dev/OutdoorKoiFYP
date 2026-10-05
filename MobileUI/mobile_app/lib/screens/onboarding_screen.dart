@@ -1,24 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'main_layout.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
-import '../data/pond_data_source.dart';
+import '../data/providers.dart';
 import '../utils/app_log.dart';
-
-/// The live write behind PondDataSource.upsertUserProfile. It lives next
-/// to the `profile` map built in _saveAndContinue so the schema check can
-/// match its keys to UserData columns.
-Future<Map<String, dynamic>> upsertUserProfileRow(
-  Map<String, dynamic> profile,
-) async {
-  return await Supabase.instance.client
-      .from('UserData')
-      .upsert(profile)
-      .select()
-      .single();
-}
 
 // --- Data Model for Fish Inhabitant Items ---
 class FishEntry {
@@ -42,14 +29,14 @@ class FishEntry {
   };
 }
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool useCurrentLocation = true;
   final TextEditingController _volumeController = TextEditingController();
   final TextEditingController _locationcontroller = TextEditingController();
@@ -59,18 +46,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final TextEditingController _fishWeightController = TextEditingController();
   String _currentSelectedSpecies = '';
 
-  // Fish Species Dictionary downloaded from Supabase
-  List<String> _speciesDictionary = [];
-  bool _isLoadingSpecies = true;
-
-  // Active user's added fish inventory
+  List<String> get _speciesDictionary =>
+      ref.read(speciesProvider).asData?.value ??
+      const [
+        'Japanese Koi (Kohaku)',
+        'Japanese Koi (Taisho Sanke)',
+        'Japanese Koi (Showa Sanshoku)',
+        'Butterfly Koi',
+        'Comet Goldfish',
+        'Shubunkin Goldfish',
+        'Fantail Goldfish',
+        'Plecostomus (Algae Eater)',
+      ];
+  bool get _isLoadingSpecies => ref.read(speciesProvider).isLoading;
   final List<FishEntry> _addedFishList = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchFishSpeciesDictionary();
-  }
 
   /// Opens a full-screen/bottom-sheet modal with a live search bar
   /// Opens a full-screen/bottom-sheet modal with a live search bar
@@ -264,39 +253,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  /// Fetch species dictionary list from Supabase
-  Future<void> _fetchFishSpeciesDictionary() async {
-    try {
-      final names = await PondDataScope.of(context).fetchSpeciesNames();
-
-      if (!mounted) return;
-
-      setState(() {
-        _speciesDictionary = names;
-        _isLoadingSpecies = false;
-      });
-    } catch (e) {
-      debugPrint("Failed to fetch species from Supabase: $e");
-
-      // Fallback to local default array on network/configuration failure
-      if (mounted) {
-        setState(() {
-          _speciesDictionary = [
-            'Japanese Koi (Kohaku)',
-            'Japanese Koi (Taisho Sanke)',
-            'Japanese Koi (Showa Sanshoku)',
-            'Butterfly Koi',
-            'Comet Goldfish',
-            'Shubunkin Goldfish',
-            'Fantail Goldfish',
-            'Plecostomus (Algae Eater)',
-          ];
-          _isLoadingSpecies = false;
-        });
-      }
-    }
-  }
-
   /// Calculates sum of total fish biomass across all added entries
   double get _totalCalculatedBiomass {
     return _addedFishList.fold(0.0, (sum, item) => sum + item.totalWeight);
@@ -340,8 +296,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _saveAndContinue() async {
-    final source = PondDataScope.of(context);
-    final prefs = await SharedPreferences.getInstance();
+    final source = ref.read(pondProfileRepositoryProvider);
     final volume = _volumeController.text;
     final totalBiomassKg = _totalCalculatedBiomass.toStringAsFixed(2);
     final userID = _userIDcontroller.text;
@@ -384,14 +339,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
 
     // Writing onboarding data locally into Shared Preferences
-    await prefs.setString('tankVolume', volume);
-    await prefs.setString('fishBiomass', totalBiomassKg);
-    await prefs.setStringList('ownedFishSpecies', uniqueOwnedSpecies);
-    await prefs.setString('fishCount', totalFishCount.toString());
-    await prefs.setBool('isOnboarded', true);
-    await prefs.setString('latitude', latitude);
-    await prefs.setString('longitude', longitude);
-    await prefs.setString('userID', userID);
+    await ref.read(localProfileRepositoryProvider).save({
+      'tankVolume': volume,
+      'fishBiomass': totalBiomassKg,
+      'ownedFishSpecies': uniqueOwnedSpecies,
+      'fishCount': totalFishCount,
+      'isOnboarded': true,
+      'latitude': latitude,
+      'longitude': longitude,
+      'userID': int.parse(userID),
+    });
+    if (!mounted) return;
+    ref.invalidate(localProfileProvider);
     log("Tank Volume: $volume");
     log("Total Biomass: $totalBiomassKg");
     log("Owned Fish Species: $uniqueOwnedSpecies");
@@ -409,12 +368,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'userID': userID,
       };
       final response = await source.upsertUserProfile(profile);
+      if (!mounted) return;
       final Map<String, dynamic>? closestStations = response['ClosestStations'];
       if (closestStations != null) {
         log("Assigned NEA Stations: $closestStations");
-        // 2. Encode the JSON map to a string and persist to SharedPreferences
+        // 2. Encode the JSON map to a string and persist to local profile storage
         final String jsonString = jsonEncode(closestStations);
-        await prefs.setString('assignedStationsJson', jsonString);
+        await ref.read(localProfileRepositoryProvider).save({
+          'assignedStationsJson': jsonString,
+        });
       } else {
         log("No assigned stations returned from database.");
       }
@@ -443,6 +405,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(speciesProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Koi Pond Setup')),
       body: SingleChildScrollView(
@@ -587,7 +550,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   decoration: BoxDecoration(
                     color: Colors.teal.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: Colors.teal.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

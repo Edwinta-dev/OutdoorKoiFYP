@@ -289,10 +289,7 @@ python simulator.py                    # interactive four-arm simulator
 
 Every route is under `/v1`; the full description is
 [docs/api/openapi.yaml](docs/api/openapi.yaml) (generated, see
-[docs/api/README.md](docs/api/README.md)). The unversioned paths the app
-still calls (`/assessment/...`, `/forecast/...`, `/events/...`,
-`/ratings/...`) are deprecated aliases and answer with a `Deprecation`
-header. GET responses carry an `ETag` and answer `If-None-Match` with 304.
+[docs/api/README.md](docs/api/README.md)). The mobile app uses `/v1`; deprecated assessment, forecast, event and rating aliases have been removed. GET responses carry an `ETag` and answer `If-None-Match` with 304.
 
 | Method | Route | |
 |---|---|---|

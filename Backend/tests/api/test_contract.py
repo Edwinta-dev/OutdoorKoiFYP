@@ -27,6 +27,7 @@ API = os.path.join(
     "..", "..", "..", "MobileUI", "mobile_app", "lib", "utils", "digital_twin_api.dart",
 )
 DASHBOARD_API = os.path.join(os.path.dirname(API), "pond_dashboard.dart")
+PROFILE_API = os.path.join(os.path.dirname(API), "..", "data", "pond_profile.dart")
 # Dart class -> OpenAPI schema, where the names differ.
 SCHEMA_FOR_DART_CLASS = {"PondDashboard": "Dashboard"}
 # Dart classes that read no JSON.
@@ -279,7 +280,8 @@ def test_rating_models_read_only_emitted_keys(rating_payloads):
 # ---------------------------------------------------------------------
 # The OpenAPI document
 # ---------------------------------------------------------------------
-@pytest.mark.parametrize("path", [API, DASHBOARD_API], ids=["digital_twin_api", "pond_dashboard"])
+@pytest.mark.parametrize("path", [API, DASHBOARD_API, PROFILE_API], ids=["digital_twin_api",
+    "pond_dashboard", "pond_profile"])
 def test_openapi_schemas_hold_every_dart_read_key(path):
     schemas = api_contract.document()["components"]["schemas"]
     classes = [c for c in dart_classes(path) if c not in NO_JSON]

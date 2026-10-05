@@ -5,7 +5,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/data/pond_data_source.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_app/data/providers.dart';
+import 'package:mobile_app/data/local_profile_repository.dart';
 
 import 'fake_pond_data_source.dart';
 
@@ -23,8 +25,18 @@ const Map<String, Object> onboardedPrefs = {
 const Size phoneSize = Size(412, 1400);
 
 /// Wraps [child] in the data scope and a dark MaterialApp.
-Widget wrapWithSource(Widget child, PondDataSource source) => PondDataScope(
-  source: source,
+Widget wrapWithSource(
+  Widget child,
+  PondDataSource source, {
+  Map<String, Object> prefs = onboardedPrefs,
+}) => ProviderScope(
+  retry: (_, _) => null,
+  overrides: [
+    pondDataSourceProvider.overrideWithValue(source),
+    localProfileRepositoryProvider.overrideWithValue(
+      FakeLocalProfileRepository(prefs),
+    ),
+  ],
   child: MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
@@ -43,12 +55,11 @@ Future<FakePondDataSource> pumpScreen(
   Map<String, Object> prefs = onboardedPrefs,
   Size size = phoneSize,
 }) async {
-  SharedPreferences.setMockInitialValues(Map.of(prefs));
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   final fake = source ?? FakePondDataSource();
-  await tester.pumpWidget(wrapWithSource(screen, fake));
+  await tester.pumpWidget(wrapWithSource(screen, fake, prefs: prefs));
   return fake;
 }
 

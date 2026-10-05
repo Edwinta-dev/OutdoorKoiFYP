@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../data/local_profile_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> handleImageManagement(
@@ -10,9 +10,8 @@ Future<void> handleImageManagement(
   VoidCallback onImageUpdated,
 ) async {
   // 1. Retrieve the userID stored locally during onboarding
-  final prefs = await SharedPreferences.getInstance();
-  final userId =
-      prefs.getString('userID') ?? prefs.getInt('userID')?.toString() ?? '1';
+  final prefs = await PreferencesProfileRepository().load();
+  final userId = prefs.pondId?.toString() ?? '0';
 
   if (!context.mounted) return;
 

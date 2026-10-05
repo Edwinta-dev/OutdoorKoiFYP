@@ -150,7 +150,7 @@ def test_environmental_change_moves_evaporation_state(store, registry):
 
 
 def test_top_up_endpoint_resets_evaporation(store, client):
-    resp = client.post("/events/top-up", json={"user_id": USER, "volume_percent": 25.0})
+    resp = client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER, "volume_percent": 25.0})
     assert resp.status_code == 200, f"top-up endpoint returns 200: {resp.status_code}"
     body = resp.get_json()
     assert all(k in body for k in ("chemistry", "evaporation", "algae")), \
@@ -167,7 +167,7 @@ def test_top_up_endpoint_resets_evaporation(store, client):
 
 def test_algal_scrub_endpoint_resets_algae(store, client):
     green_before = algae_evals(store)[-1]["green_ratio"]
-    resp = client.post("/events/algal-scrub",
+    resp = client.post(f"/v1/ponds/{USER}/events/algal-scrub",
                        json={"user_id": USER, "scrub_type": "Manual Scrub"})
     assert resp.status_code == 200, f"scrub endpoint returns 200: {resp.status_code}"
     green_after = resp.get_json()["algae"]["green_ratio"]
@@ -181,19 +181,19 @@ def test_algal_scrub_endpoint_resets_algae(store, client):
 
 
 def test_cached_assessment_endpoints_serve_pushed_rows(client):
-    for path in [f"/assessment/{USER}", f"/assessment/evaporation/{USER}",
-                 f"/assessment/algae/{USER}"]:
+    for path in [f"/v1/ponds/{USER}/assessments/chemistry", f"/v1/ponds/{USER}/assessments/evaporation",
+                 f"/v1/ponds/{USER}/assessments/algae"]:
         r = client.get(path)
         assert r.status_code == 200, f"GET {path} -> 200: {r.status_code}"
 
-    allbody = client.get(f"/assessment/all/{USER}").get_json()
+    allbody = client.get(f"/v1/ponds/{USER}/assessments").get_json()
     assert all(allbody.get(k) is not None for k in ("chemistry", "evaporation", "algae")), \
         f"GET /assessment/all returns all three domains: " \
         f"{ {k: (v is not None) for k, v in allbody.items()} }"
 
 
 def test_forecast_endpoints_compute_from_live_state(store, client):
-    r = client.get(f"/forecast/evaporation/{USER}?horizon_days=14")
+    r = client.get(f"/v1/ponds/{USER}/forecasts/evaporation?horizon_days=14")
     assert r.status_code == 200, f"GET /forecast/evaporation -> 200: {r.status_code}"
     fe = r.get_json()
     assert len(fe.get("trajectory", [])) == 14, \
@@ -202,7 +202,7 @@ def test_forecast_endpoints_compute_from_live_state(store, client):
         f"forecast starts from the post-top-up state (zero loss): {fe['starting_loss_litres']}"
     assert "tds_cross_check" in fe, "TDS cross-check present"
 
-    r = client.get(f"/forecast/algae/{USER}?horizon_days=21")
+    r = client.get(f"/v1/ponds/{USER}/forecasts/algae?horizon_days=21")
     assert r.status_code == 200, f"GET /forecast/algae -> 200: {r.status_code}"
     fa = r.get_json()
     assert len(fa.get("trajectory", [])) == 21, \
@@ -210,13 +210,13 @@ def test_forecast_endpoints_compute_from_live_state(store, client):
     assert "scrub_benefit" in fa, "scrub benefit present"
     assert fa.get("latest_image_url") is not None, "latest image url surfaced"
 
-    r = client.get(f"/forecast/{USER}?horizon_days=21")
+    r = client.get(f"/v1/ponds/{USER}/forecasts/chemistry?horizon_days=21")
     assert r.status_code == 200, f"GET /forecast (chemistry) -> 200: {r.status_code}"
 
     # Read-only forecasts must not have changed persisted state.
     snap_before = store.rows("pond_chemistry_state")
-    client.get(f"/forecast/evaporation/{USER}")
-    client.get(f"/forecast/{USER}")
+    client.get(f"/v1/ponds/{USER}/forecasts/evaporation")
+    client.get(f"/v1/ponds/{USER}/forecasts/chemistry")
     assert store.rows("pond_chemistry_state") == snap_before, \
         "evaporation/chemistry forecasts did not rewrite the snapshot"
 
@@ -242,14 +242,14 @@ def test_new_camera_frame_corrects_model_through_poller(store, registry):
 
 
 def test_validation_rejects_bad_event_bodies(client):
-    r = client.post("/events/top-up", json={"user_id": USER})
+    r = client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER})
     assert r.status_code == 400, f"top-up without a volume -> 400: {r.status_code}"
-    r = client.post("/events/feeding", json={"user_id": USER, "food_grams": 100})
+    r = client.post(f"/v1/ponds/{USER}/events/feeding", json={"user_id": USER, "food_grams": 100})
     assert r.status_code == 400, f"feeding without protein -> 400: {r.status_code}"
-    r = client.post("/events/feeding",
+    r = client.post(f"/v1/ponds/{USER}/events/feeding",
                     json={"user_id": USER, "food_grams": 100, "protein_percent": 400})
     assert r.status_code == 400, f"feeding with impossible protein % -> 400: {r.status_code}"
-    r = client.post("/events/feeding",
+    r = client.post(f"/v1/ponds/{USER}/events/feeding",
                     json={"user_id": USER, "food_grams": 150, "protein_percent": 40,
                           "timestamp": "not-a-timestamp"})
     assert r.status_code == 400, f"malformed timestamp is rejected, not replaced: {r.status_code}"
@@ -296,7 +296,7 @@ def test_optional_evaluation_logs_do_not_stop_a_poll(store, registry):
 def test_snapshot_write_failure_reaches_the_caller(store, client, registry):
     store.failing.add("save_engine_snapshot")
     try:
-        r = client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+        r = client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
         assert r.status_code == 503, f"lost snapshot write -> 503: {r.status_code}"
         error = r.get_json()["error"]
         assert (error["code"], error["details"]["operation"]) == ("storage_unavailable", "save_engine_snapshot")
@@ -310,8 +310,8 @@ def test_missing_evaluation_tables_read_as_no_assessment(store, client):
     """Reads the old state_store swallowed still come back empty, not 500."""
     store.failing.add("fetch_latest_algae_evaluation")
     try:
-        r = client.get(f"/assessment/algae/{USER}")
-        allbody = client.get(f"/assessment/all/{USER}").get_json()
+        r = client.get(f"/v1/ponds/{USER}/assessments/algae")
+        allbody = client.get(f"/v1/ponds/{USER}/assessments").get_json()
     finally:
         store.failing.discard("fetch_latest_algae_evaluation")
     assert r.status_code == 404, f"failed algae read -> 404 no assessment: {r.status_code}"
@@ -321,7 +321,7 @@ def test_missing_evaluation_tables_read_as_no_assessment(store, client):
 def test_severity_rating_endpoint_corrects_the_model(store, client, carried):
     before = persisted_green(store)
     latest_img = frames(store)[-1]
-    r = client.post("/events/algae-rating", json={
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating", json={
         "user_id": USER, "severity": "none",
         "image_id": latest_img["id"], "green_ratio": latest_img["green_ratio"],
     })
@@ -344,14 +344,14 @@ def test_severity_rating_endpoint_corrects_the_model(store, client, carried):
 
 def test_undo_restores_through_the_endpoint(store, client, carried):
     before = carried["green_before_rating"]
-    r = client.post("/events/algae-rating/undo",
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating/undo",
                     json={"user_id": USER, "rating_id": carried["rating_id"]})
     assert r.status_code == 200, f"undo returns 200: {r.status_code}"
     restored = persisted_green(store)
     assert abs(restored - before) < 1e-9, \
         f"level restored to pre-rating value: {restored} vs {before}"
     assert len(ratings(store)) == 0, f"rating row deleted: {len(ratings(store))}"
-    r = client.post("/events/algae-rating/undo", json={"user_id": USER})
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating/undo", json={"user_id": USER})
     assert r.status_code == 409, f"second undo is refused with 409: {r.status_code}"
 
 
@@ -365,7 +365,7 @@ def test_obstruction_rating_discards_the_frame(store, client, carried, registry)
     rewind(registry, USER, 1)
     poll(store, registry)
     poisoned = persisted_green(store)
-    r = client.post("/events/algae-rating", json={
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating", json={
         "user_id": USER, "severity": "obstruction",
         "image_id": 500, "green_ratio": 0.72,
     })
@@ -379,7 +379,7 @@ def test_obstruction_rating_discards_the_frame(store, client, carried, registry)
 
 
 def test_rating_context_endpoint_feeds_the_card(client):
-    r = client.get(f"/ratings/algae/{USER}")
+    r = client.get(f"/v1/ponds/{USER}/ratings/algae")
     assert r.status_code == 200, f"GET /ratings/algae -> 200: {r.status_code}"
     ctxb = r.get_json()
     for key in ("ratings", "latest_rating", "calibration", "latest_image", "severity_levels"):
@@ -406,12 +406,12 @@ def test_calibration_reached_after_enough_labels(store, client, carried):
             "green_ratio": g, "current_state": ["base", g],
             "imageURL": f"https://example/c{i}.jpg",
         }])
-        rr = client.post("/events/algae-rating", json={
+        rr = client.post(f"/v1/ponds/{USER}/events/algae-rating", json={
             "user_id": USER, "severity": sev, "image_id": iid, "green_ratio": g,
         })
         assert rr.status_code == 200, rr.get_json()
 
-    cal = client.get(f"/ratings/algae/{USER}").get_json()["calibration"]
+    cal = client.get(f"/v1/ponds/{USER}/ratings/algae").get_json()["calibration"]
     assert cal["thresholds"]["mode"] == "label_calibrated", \
         f"thresholds became label-calibrated: {cal['thresholds']['mode']}"
     assert sum(cal["labels_needed"].values()) == 0, \
@@ -433,7 +433,7 @@ def test_calibration_reached_after_enough_labels(store, client, carried):
 def test_calibration_survives_a_registry_eviction(client, carried, registry):
     cal = carried["calibration"]
     registry.evict(USER)
-    cal2 = client.get(f"/ratings/algae/{USER}").get_json()["calibration"]
+    cal2 = client.get(f"/v1/ponds/{USER}/ratings/algae").get_json()["calibration"]
     assert cal2["thresholds"]["mode"] == "label_calibrated", \
         f"thresholds reload from the ratings table: {cal2['thresholds']['mode']}"
     assert cal2["label_counts"] == cal["label_counts"], \
@@ -441,7 +441,7 @@ def test_calibration_survives_a_registry_eviction(client, carried, registry):
 
 
 def test_bad_rating_bodies_rejected(client):
-    r = client.post("/events/algae-rating", json={"user_id": USER, "severity": "apocalyptic"})
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating", json={"user_id": USER, "severity": "apocalyptic"})
     assert r.status_code == 400, f"invalid severity -> 400: {r.status_code}"
-    r = client.post("/events/algae-rating", json={"user_id": USER})
+    r = client.post(f"/v1/ponds/{USER}/events/algae-rating", json={"user_id": USER})
     assert r.status_code == 400, f"missing severity -> 400: {r.status_code}"

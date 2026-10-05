@@ -6,37 +6,27 @@
 // screen. Fetches GET /assessment/<user_id> via DigitalTwinApi.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
 
-class WaterBufferStatusCard extends StatefulWidget {
+class WaterBufferStatusCard extends ConsumerStatefulWidget {
   final int userId;
 
   const WaterBufferStatusCard({super.key, required this.userId});
 
   @override
-  State<WaterBufferStatusCard> createState() => _WaterBufferStatusCardState();
+  ConsumerState<WaterBufferStatusCard> createState() =>
+      _WaterBufferStatusCardState();
 }
 
-class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
-  late Future<WaterChemistryAssessment?> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
-  }
-
-  void _retry() {
-    setState(() {
-      _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
-    });
-  }
+class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
+  void _retry() => ref.invalidate(assessmentProvider(widget.userId));
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<WaterChemistryAssessment?>(
-      future: _future,
+      future: ref.watch(assessmentProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(child: _loadingState());
@@ -146,7 +136,11 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
               const Expanded(
                 child: Row(
                   children: [
-                    Icon(Icons.science_outlined, color: Colors.cyanAccent, size: 18),
+                    Icon(
+                      Icons.science_outlined,
+                      color: Colors.cyanAccent,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -273,7 +267,9 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
               decoration: BoxDecoration(
                 color: Colors.amberAccent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: Colors.amberAccent.withValues(alpha: 0.4),
+                ),
               ),
               child: const Row(
                 children: [
@@ -327,7 +323,12 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
     );
   }
 
-  Widget _metricBox(String label, String value, Color valueColor, {bool isHighlight = false}) {
+  Widget _metricBox(
+    String label,
+    String value,
+    Color valueColor, {
+    bool isHighlight = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       decoration: BoxDecoration(
@@ -393,7 +394,11 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.white38, size: 11),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.white38,
+            size: 11,
+          ),
           const SizedBox(width: 4),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
@@ -425,7 +430,11 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
     }
   }
 
-  Color _levelColor(double value, {required double watch, required double danger}) {
+  Color _levelColor(
+    double value, {
+    required double watch,
+    required double danger,
+  }) {
     if (value > danger) return Colors.redAccent;
     if (value > watch) return Colors.amberAccent;
     return Colors.greenAccent;

@@ -107,7 +107,7 @@ def test_logging_level_comes_from_settings():
 
 def test_logging_request_id_is_taken_from_the_header_and_returned():
     client = api_client(create_app(make_settings(), storage=make_storage()))
-    resp = client.get(f"/assessment/{USER}", headers={"X-Request-ID": "abc-123"})
+    resp = client.get(f"/v1/ponds/{USER}/assessments/chemistry", headers={"X-Request-ID": "abc-123"})
     assert resp.headers["X-Request-ID"] == "abc-123"
     generated = client.get("/health").headers["X-Request-ID"]
     assert len(generated) == 32
@@ -122,13 +122,16 @@ def test_logging_request_lines_carry_request_and_pond_ids():
     buf = io.StringIO()
     handler = configure_logging(make_settings(log_level="DEBUG"), "api", stream=buf)
     try:
-        resp = api_client(app).get(f"/assessment/{USER}", headers={"X-Request-ID": "req-1"})
+        resp = api_client(app).get(f"/v1/ponds/{USER}/assessments/chemistry", headers={"X-Request-ID": "req-1"})
     finally:
         logging.getLogger().removeHandler(handler)
     lines = [json.loads(line) for line in buf.getvalue().splitlines()]
     [request_line] = [e for e in lines if e["event"] == "request"]
     assert request_line["request_id"] == "req-1" and request_line["pond_id"] == str(USER)
-    assert request_line["route"] == "/assessment/<int:user_id>" and request_line["status"] == resp.status_code
+    assert (
+        request_line["route"] == "/v1/ponds/<int:user_id>/assessments/chemistry"
+        and request_line["status"] == resp.status_code
+    )
     assert all(FIELDS <= set(e) for e in lines)
 
 
