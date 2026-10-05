@@ -33,6 +33,57 @@ class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class KitValues(_Closed):
+    ammonia_mg_l: Optional[float] = Field(description="Total ammonia (TAN), mg/L.")
+    nitrite_mg_l: Optional[float] = Field(description="Nitrite, mg/L.")
+    nitrate_mg_l: Optional[float] = Field(description="Nitrate, mg/L.")
+    ph: Optional[float]
+    kh_dkh: Optional[float] = Field(description="Carbonate hardness, dKH.")
+
+
+class KitComparison(_Closed):
+    source: Literal["evaluation", "rebuild", "unavailable"]
+    model_version: Optional[str]
+    evaluation_id: Optional[int]
+    estimated_at: Optional[datetime]
+    rebuild_weather: Optional[dict[str, Any]]
+
+
+class KitReading(KitValues):
+    id: int
+    pond: int
+    taken_at: Optional[datetime]
+    kit: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    estimates: Optional[KitValues]
+    differences: Optional[KitValues] = Field(description="Model estimate minus kit measurement, in analyte units.")
+    comparison: Optional[KitComparison]
+
+
+class KitReadings(_Closed):
+    readings: list[KitReading]
+
+
+class ValidationPair(_Closed):
+    reading_id: int
+    taken_at: Optional[datetime]
+    measured: float
+    estimated: float
+    error: float = Field(description="Model estimate minus kit measurement, in analyte units.")
+
+
+class AnalyteValidation(_Closed):
+    count: int
+    mean_error: Optional[float]
+    mean_absolute_error: Optional[float]
+    pairs: list[ValidationPair]
+
+
+class KitValidation(_Closed):
+    analytes: dict[str, AnalyteValidation]
+
+
 # ---------------------------------------------------------------------
 # Errors (koi/errors.py)
 # ---------------------------------------------------------------------

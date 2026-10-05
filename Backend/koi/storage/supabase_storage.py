@@ -241,6 +241,29 @@ class SupabaseStorage:
             res = self._db().table("pond_chemistry_state").select("user_id, updated_at").execute()
             return {str(r["user_id"]): r["updated_at"] for r in res.data or [] if r.get("updated_at")}
 
+    # --- owner test-kit measurements ----------------------------------
+    def insert_kit_reading(self, user_id: int, reading: dict) -> dict:
+        with _operation("insert_kit_reading"):
+            return self._db().table("kit_readings").insert({**reading, "pond": user_id}).execute().data[0]
+
+    def fetch_kit_readings(self, user_id: int) -> list[dict]:
+        with _operation("fetch_kit_readings"):
+            rows: list[dict] = []
+            # PostgREST caps a response; page to keep validation counts complete.
+            while True:
+                page = (self._db().table("kit_readings").select("*").eq("pond", user_id)
+                        .order("taken_at", nullsfirst=True).order("id")
+                        .range(len(rows), len(rows) + 999).execute().data or [])
+                rows.extend(page)
+                if len(page) < 1000:
+                    return rows
+
+    def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
+        with _operation("fetch_chemistry_evaluation_at"):
+            rows = (self._db().table("pond_chemistry_evaluations").select("*").eq("userid", user_id)
+                    .eq("evaluated_at", at.isoformat()).order("id", desc=True).limit(1).execute().data)
+            return with_provenance(rows[0]) if rows else None
+
     # --- evaluation logs (append-only time series) ---------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:
         with _operation("push_evaluation"):

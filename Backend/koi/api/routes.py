@@ -65,6 +65,7 @@ from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
+from koi import kit_readings
 from koi.api import responses as res
 from koi.api import schemas
 from koi.api.auth import authenticate, require_pond
@@ -312,6 +313,39 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         return {**_recompute_and_push(user_id, twin, ctx, "event", events=applied), "event": outcome}
 
     return registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id))
+
+
+# ===================================================================
+# Owner test-kit measurements
+# ===================================================================
+@route(bp, "POST", "/v1/ponds/<int:user_id>/kit-readings", summary="Record a test-kit measurement",
+       tag="validation", body=schemas.on_pond_path(schemas.KitReadingBody), response=res.KitReading,
+       status=201, errors=(400, *POND_ERRORS))
+def post_kit_reading(user_id: int):
+    """Store the kit result and an immutable model comparison at taken_at. Does not calibrate the twin."""
+    body = _parse_body(schemas.KitReadingBody, user_id)
+    _require_pond(user_id)
+    return jsonify(kit_readings.record(_storage(), current_app.config["KOI_SETTINGS"], user_id,
+                                      body.model_dump(mode="json", exclude={"user_id"}), body.taken_at)), 201
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/kit-readings", summary="List test-kit measurements",
+       tag="validation", response=res.KitReadings, errors=POND_ERRORS)
+def get_kit_readings(user_id: int):
+    _require_pond(user_id)
+    return jsonify({"readings": _storage().fetch_kit_readings(user_id)})
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/validation", summary="Compare model estimates with test kits",
+       tag="validation", response=res.KitValidation, errors=POND_ERRORS)
+def get_kit_validation(user_id: int):
+    """Per-analyte paired counts, signed mean error, mean absolute error and measured/estimated pairs.
+
+    Error is model minus measurement. Missing measurements or estimates are excluded;
+    an empty analyte has count zero and null means. pH and KH have no model estimate.
+    """
+    _require_pond(user_id)
+    return jsonify(kit_readings.validation(_storage().fetch_kit_readings(user_id)))
 
 
 # ===================================================================

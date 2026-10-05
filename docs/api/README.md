@@ -202,3 +202,39 @@ with stable `event_id` in intervention history and derives the boolean
 the next 24 hours after filter cleaning. Other channels are false. RPC
 signatures and access rules are unchanged. The app shows maintenance in
 chart tooltips. See [model assumptions](../models.md).
+
+## Owner test-kit readings (issue #30)
+
+`POST /v1/ponds/{pond}/kit-readings` returns 201 with the stored reading.
+It accepts nullable `taken_at` (an ISO 8601 instant with a time zone),
+`kit`, `ammonia_mg_l`, `nitrite_mg_l`, `nitrate_mg_l`, `ph`, `kh_dkh` and
+`notes`. Concentrations are mg/L and carbonate hardness is dKH. Ammonia
+means total ammonia (TAN), the quantity the chemistry engine estimates;
+a free NH3 badge result is not the same measurement. Numbers must be
+finite and nonnegative; pH must be in 0..14. Future sample times are
+rejected. There is no past-age limit. A null sample time stays unknown.
+
+The response stores `estimates`, `differences` (model minus measurement)
+and `comparison` provenance with the reading. An evaluation at exactly
+the sample instant is used, choosing the higher row ID on a tie.
+Otherwise the existing rebuild runs in memory up to that instant using
+ingested sensors, logged events and retained weather history. Its model
+version and missing-weather intervals are recorded. No current snapshot
+or later evaluation is substituted for a historical estimate. With no
+sample time or replayable sensors, estimates and differences stay null.
+The model has no pH or KH estimate, so those comparisons always stay null.
+Kit entries never change snapshots, evaluations or the ingest ledger.
+
+`GET /v1/ponds/{pond}/kit-readings` returns `readings`, ordered by sample
+time then ID, unknown times first. Stored comparisons remain unchanged
+when later model runs occur. `GET /v1/ponds/{pond}/validation` returns
+`analytes`, keyed by the five measurement names. Each has `count`,
+`mean_error`, `mean_absolute_error` and `pairs` containing the reading
+ID, sample time, measured value, estimated value and signed error in the
+analyte's units. Only measured/estimated pairs count; zero is a value.
+An analyte without pairs has count 0, null means and an empty list.
+Both GETs use the usual authentication, pond access and ETag rules.
+
+Apply migration `0020_kit_readings.sql` before redeploying the API.
+It adds a backend-only table with nullable measurement and comparison
+fields; existing engine state and model constants are unchanged.

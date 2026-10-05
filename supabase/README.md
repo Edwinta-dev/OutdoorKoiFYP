@@ -1,5 +1,13 @@
 # Supabase schema
 
+Migration `0020_kit_readings.sql` (issue #30) adds the backend-only
+`kit_readings` table, indexed by pond, sample time and ID. Test-kit
+measurements and immutable model estimates, differences and provenance
+are nullable. Values are finite and nonnegative, with pH in 0..14.
+RLS is enabled; table and identity-sequence access is revoked from
+`anon` and `authenticated` and granted to `service_role`. Existing tables
+are unchanged. Apply before redeploying the API.
+
 `migrations/` contains the repository's numbered schema changes. Every schema
 change belongs in a migration; do not make an unrecorded live-only change.
 

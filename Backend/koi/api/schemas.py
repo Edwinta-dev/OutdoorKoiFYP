@@ -42,6 +42,34 @@ class _Query(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class KitReadingBody(_Body):
+    user_id: int = Field(gt=0)
+    taken_at: Optional[datetime] = Field(default=None, description="Sample time; null means unknown, no comparison.")
+    kit: Optional[str] = Field(default=None, max_length=200)
+    ammonia_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False,
+                                         description="Total ammonia (TAN), mg/L; not free NH3.")
+    nitrite_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Nitrite, mg/L.")
+    nitrate_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Nitrate, mg/L.")
+    ph: Optional[float] = Field(default=None, ge=0, le=14, allow_inf_nan=False)
+    kh_dkh: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Carbonate hardness, dKH.")
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+    @field_validator("taken_at", mode="before")
+    @classmethod
+    def _taken_at(cls, value: object) -> Optional[datetime]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("taken_at must be an ISO 8601 string")
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            raise ValueError("taken_at must include a time zone")
+        dt = dt.astimezone(timezone.utc)
+        if dt > utc_now():
+            raise ValueError("taken_at cannot be in the future")
+        return dt
+
+
 class EventBody(_Body):
     """Fields every /events/* body shares. Fish type and count are not
     taken from a request: they come from the pond's profile

@@ -1025,7 +1025,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id055
+              schema: &id057
                 $ref: '#/components/schemas/AlgaeRatingContext'
           headers:
             ETag:
@@ -1081,7 +1081,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id057
+              schema: &id060
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -2224,6 +2224,113 @@ paths:
           content: *id051
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/kit-readings:
+    post:
+      operationId: post_kit_reading
+      summary: Record a test-kit measurement
+      tags:
+      - validation
+      description: Store the kit result and an immutable model comparison at taken_at. Does not calibrate
+        the twin.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KitReadingBodyOnPond'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitReading'
+        '400':
+          description: Invalid request
+          content: &id052
+            application/json:
+              schema: *id002
+        '401':
+          description: Not signed in
+          content: *id052
+        '403':
+          description: Another account's pond
+          content: *id052
+        '404':
+          description: Pond or assessment not found
+          content: *id052
+        '500':
+          description: Unexpected server error
+          content: *id052
+        '503':
+          description: Storage or service not available
+          content: *id052
+      security:
+      - bearerAuth: []
+    get:
+      operationId: get_kit_readings
+      summary: List test-kit measurements
+      tags:
+      - validation
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitReadings'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id053
+            application/json:
+              schema: *id002
+        '403':
+          description: Another account's pond
+          content: *id053
+        '404':
+          description: Pond or assessment not found
+          content: *id053
+        '500':
+          description: Unexpected server error
+          content: *id053
+        '503':
+          description: Storage or service not available
+          content: *id053
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/profile:
     get:
       operationId: get_pond_profile
@@ -2251,7 +2358,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id053
+              schema: &id055
                 $ref: '#/components/schemas/PondProfileResponse'
           headers:
             ETag:
@@ -2266,21 +2373,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id052
+          content: &id054
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id052
+          content: *id054
         '404':
           description: Pond or assessment not found
-          content: *id052
+          content: *id054
         '500':
           description: Unexpected server error
-          content: *id052
+          content: *id054
         '503':
           description: Storage or service not available
-          content: *id052
+          content: *id054
       security:
       - bearerAuth: []
     put:
@@ -2309,30 +2416,30 @@ paths:
           description: Created
           content:
             application/json:
-              schema: *id053
+              schema: *id055
         '400':
           description: Invalid request
-          content: &id054
+          content: &id056
             application/json:
               schema: *id002
         '401':
           description: Not signed in
-          content: *id054
+          content: *id056
         '403':
           description: Another account's pond
-          content: *id054
+          content: *id056
         '404':
           description: Pond or assessment not found
-          content: *id054
+          content: *id056
         '409':
           description: Conflict
-          content: *id054
+          content: *id056
         '500':
           description: Unexpected server error
-          content: *id054
+          content: *id056
         '503':
           description: Storage or service not available
-          content: *id054
+          content: *id056
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/ratings/algae:
@@ -2362,7 +2469,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id055
+              schema: *id057
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2376,21 +2483,81 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id056
+          content: &id058
             application/json:
               schema: *id002
         '403':
           description: Another account's pond
-          content: *id056
+          content: *id058
         '404':
           description: Pond or assessment not found
-          content: *id056
+          content: *id058
         '500':
           description: Unexpected server error
-          content: *id056
+          content: *id058
         '503':
           description: Storage or service not available
-          content: *id056
+          content: *id058
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/validation:
+    get:
+      operationId: get_kit_validation
+      summary: Compare model estimates with test kits
+      tags:
+      - validation
+      description: Per-analyte paired counts, signed mean error, mean absolute error and measured/estimated
+        pairs. Error is model minus measurement. Missing measurements or estimates are excluded; an empty
+        analyte has count zero and null means. pH and KH have no model estimate.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitValidation'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id059
+            application/json:
+              schema: *id002
+        '403':
+          description: Another account's pond
+          content: *id059
+        '404':
+          description: Pond or assessment not found
+          content: *id059
+        '500':
+          description: Unexpected server error
+          content: *id059
+        '503':
+          description: Storage or service not available
+          content: *id059
       security:
       - bearerAuth: []
   /v1/ready:
@@ -2413,7 +2580,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id057
+              schema: *id060
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2427,12 +2594,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id058
+          content: &id061
             application/json:
               schema: *id002
         '503':
           description: Storage or service not available
-          content: *id058
+          content: *id061
       security: []
 components:
   schemas:
@@ -3236,6 +3403,34 @@ components:
       - algae
       - hypoxia
       title: AllAssessments
+      type: object
+    AnalyteValidation:
+      additionalProperties: false
+      properties:
+        count:
+          title: Count
+          type: integer
+        mean_error:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mean Error
+        mean_absolute_error:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mean Absolute Error
+        pairs:
+          items:
+            $ref: '#/components/schemas/ValidationPair'
+          title: Pairs
+          type: array
+      required:
+      - count
+      - mean_error
+      - mean_absolute_error
+      - pairs
+      title: AnalyteValidation
       type: object
     BatteryTrend:
       additionalProperties: false
@@ -4681,6 +4876,272 @@ components:
       - created_at
       title: ImageRow
       type: object
+    KitComparison:
+      additionalProperties: false
+      properties:
+        source:
+          enum:
+          - evaluation
+          - rebuild
+          - unavailable
+          title: Source
+          type: string
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        evaluation_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Evaluation Id
+        estimated_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Estimated At
+        rebuild_weather:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Rebuild Weather
+      required:
+      - source
+      - model_version
+      - evaluation_id
+      - estimated_at
+      - rebuild_weather
+      title: KitComparison
+      type: object
+    KitReading:
+      additionalProperties: false
+      properties:
+        ammonia_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Total ammonia (TAN), mg/L.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+        id:
+          title: Id
+          type: integer
+        pond:
+          title: Pond
+          type: integer
+        taken_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Taken At
+        kit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kit
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        estimates:
+          anyOf:
+          - $ref: '#/components/schemas/KitValues'
+          - type: 'null'
+        differences:
+          anyOf:
+          - $ref: '#/components/schemas/KitValues'
+          - type: 'null'
+          description: Model estimate minus kit measurement, in analyte units.
+        comparison:
+          anyOf:
+          - $ref: '#/components/schemas/KitComparison'
+          - type: 'null'
+      required:
+      - ammonia_mg_l
+      - nitrite_mg_l
+      - nitrate_mg_l
+      - ph
+      - kh_dkh
+      - id
+      - pond
+      - taken_at
+      - kit
+      - notes
+      - created_at
+      - estimates
+      - differences
+      - comparison
+      title: KitReading
+      type: object
+    KitReadingBodyOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        taken_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Sample time; null means unknown, no comparison.
+          title: Taken At
+        kit:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          default: null
+          title: Kit
+        ammonia_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Total ammonia (TAN), mg/L; not free NH3.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - maximum: 14
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      title: KitReadingBodyOnPond
+      type: object
+    KitReadings:
+      additionalProperties: false
+      properties:
+        readings:
+          items:
+            $ref: '#/components/schemas/KitReading'
+          title: Readings
+          type: array
+      required:
+      - readings
+      title: KitReadings
+      type: object
+    KitValidation:
+      additionalProperties: false
+      properties:
+        analytes:
+          additionalProperties:
+            $ref: '#/components/schemas/AnalyteValidation'
+          title: Analytes
+          type: object
+      required:
+      - analytes
+      title: KitValidation
+      type: object
+    KitValues:
+      additionalProperties: false
+      properties:
+        ammonia_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Total ammonia (TAN), mg/L.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+      required:
+      - ammonia_mg_l
+      - nitrite_mg_l
+      - nitrate_mg_l
+      - ph
+      - kh_dkh
+      title: KitValues
+      type: object
     OutlookDay:
       additionalProperties: false
       description: One day of NEA's 4-day outlook, from today (Singapore) onward.
@@ -5362,6 +5823,36 @@ components:
       - daylight
       - ingested_at
       title: UvIndex
+      type: object
+    ValidationPair:
+      additionalProperties: false
+      properties:
+        reading_id:
+          title: Reading Id
+          type: integer
+        taken_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Taken At
+        measured:
+          title: Measured
+          type: number
+        estimated:
+          title: Estimated
+          type: number
+        error:
+          description: Model estimate minus kit measurement, in analyte units.
+          title: Error
+          type: number
+      required:
+      - reading_id
+      - taken_at
+      - measured
+      - estimated
+      - error
+      title: ValidationPair
       type: object
     VolumeEvent:
       description: 'Water change or top-up: at least one of the two volumes.'

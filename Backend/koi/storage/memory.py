@@ -61,6 +61,8 @@ from koi.weather import history as weather_history
 
 # Columns of each table this store serves, from supabase/migrations/.
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "kit_readings": ("id", "pond", "taken_at", "kit", "ammonia_mg_l", "nitrite_mg_l", "nitrate_mg_l",
+                     "ph", "kh_dkh", "notes", "estimates", "differences", "comparison", "created_at"),
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
     # Sensor ingestion progress (migration 0014).
     "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
@@ -126,6 +128,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 
 # The user column of each table (three spellings coexist in the schema).
 USER_COLUMN = {
+    "kit_readings": "pond",
     "pond_chemistry_state": "user_id",
     "sensor_ingest_cursor": "pond_id",
     "sensor_ingest_ledger": "pond_id",
@@ -156,6 +159,7 @@ OBSERVATION_AS_OF_COLUMNS = ("id", "source", "station_id", "metric", "value", "u
 
 # Table timestamps filled in on insert when the row does not carry one.
 _STAMPED = {
+    "kit_readings": "created_at",
     "pond_chemistry_evaluations": "evaluated_at",
     "pond_evaporation_evaluations": "evaluated_at",
     "pond_algae_evaluations": "evaluated_at",
@@ -471,6 +475,23 @@ class MemoryStorage:
         with self._lock:
             return {str(r["user_id"]): r["updated_at"] for r in self._tables["pond_chemistry_state"]
                     if r.get("updated_at")}
+
+    # --- owner test-kit measurements ----------------------------------
+    def insert_kit_reading(self, user_id: int, reading: dict) -> dict:
+        self._check("insert_kit_reading")
+        return self._insert("insert_kit_reading", "kit_readings", [{**reading, "pond": user_id}])[0]
+
+    def fetch_kit_readings(self, user_id: int) -> list[dict]:
+        self._check("fetch_kit_readings")
+        rows = self._select("kit_readings", user_id)
+        rows.sort(key=lambda r: (r.get("taken_at") is not None,
+                                parse_timestamp(r["taken_at"]) if r.get("taken_at") else _EPOCH, r["id"]))
+        return [self._project(r, TABLE_COLUMNS["kit_readings"]) for r in rows]
+
+    def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
+        self._check("fetch_chemistry_evaluation_at")
+        rows = sorted(self._select("pond_chemistry_evaluations", user_id), key=lambda r: r["id"], reverse=True)
+        return next((with_provenance(r) for r in rows if parse_timestamp(r["evaluated_at"]) == at), None)
 
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None:
