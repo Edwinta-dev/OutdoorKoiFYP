@@ -122,6 +122,15 @@ class VolumeEvent(EventBody):
         return self
 
 
+class SaltEvent(EventBody):
+    salt_grams: float = Field(gt=0, allow_inf_nan=False, description="Added salt mass in grams.")
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class FilterCleanEvent(EventBody):
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
 class AlgalScrubEvent(EventBody):
     scrub_type: str = Field(default="unspecified", min_length=1, max_length=64)
 

@@ -1047,6 +1047,32 @@ class DigitalTwinApi {
     }
   }
 
+  static Future<WaterChemistryAssessment?> logSalt({
+    required int userId,
+    required double saltGrams,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  }) => _postEvent('/events/salt', {
+    'user_id': userId,
+    'salt_grams': saltGrams,
+    'notes': ?notes,
+    if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+    'event_id': ?eventId,
+  });
+
+  static Future<WaterChemistryAssessment?> logFilterClean({
+    required int userId,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  }) => _postEvent('/events/filter-clean', {
+    'user_id': userId,
+    'notes': ?notes,
+    if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+    'event_id': ?eventId,
+  });
+
   static Future<WaterChemistryAssessment?> logFeeding({
     required int userId,
     required double foodGrams,

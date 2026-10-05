@@ -38,7 +38,8 @@ _WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 
 # pondInterventions.event_type -> the engine's event kind.
 EVENT_KINDS = {"FEEDING": EventKind.FEEDING, "WATER_CHANGE": EventKind.WATER_CHANGE,
-               "WATER_TOPUP": EventKind.TOP_UP, "ALGAE_SCRUB": EventKind.ALGAL_SCRUB}
+               "WATER_TOPUP": EventKind.TOP_UP, "ALGAE_SCRUB": EventKind.ALGAL_SCRUB,
+               "SALT": EventKind.SALT, "FILTER_CLEAN": EventKind.FILTER_CLEAN}
 FEEDING_COLUMNS = ("food_grams", "protein_percentage", "event_timestamp")
 
 
@@ -152,7 +153,8 @@ class SeedHistory:
                 kind=kind, time=parse_timestamp(r["event_timestamp"]),
                 volume_percent=r.get("volume_percentage"), volume_litres=r.get("volume_litres"),
                 scrub_type=r.get("algae_method"), food_grams=r.get("food_grams"),
-                protein_percent=r.get("protein_percentage")))
+                protein_percent=r.get("protein_percentage"),
+                salt_grams=r.get("salt_grams"), notes=r.get("notes")))
         return sorted(events, key=lambda e: e.time)
 
     def interventions(self, pond: int, at: datetime, since: Optional[datetime] = None) -> list[dict]:

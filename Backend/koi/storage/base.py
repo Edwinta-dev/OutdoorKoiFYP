@@ -353,7 +353,7 @@ CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
 
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
-                        "food_grams", "protein_percentage", "algae_method", "created_at")
+                        "food_grams", "protein_percentage", "algae_method", "created_at", "salt_grams", "notes")
 
 # Provenance columns of the three evaluation tables (migration 0016).
 # Every evaluation push carries all four (koi/provenance.py); rows written

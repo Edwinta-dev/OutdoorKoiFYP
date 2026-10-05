@@ -228,6 +228,8 @@ class EventKind(str, Enum):
     TOP_UP = "top_up"
     ALGAL_SCRUB = "algal_scrub"
     FEEDING = "feeding"
+    SALT = "salt"
+    FILTER_CLEAN = "filter_clean"
 
 
 @dataclass
@@ -239,6 +241,8 @@ class PondEvent:
     scrub_type: Optional[str] = None
     food_grams: Optional[float] = None
     protein_percent: Optional[float] = None
+    salt_grams: Optional[float] = None
+    notes: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = dict(self.__dict__)
@@ -252,6 +256,15 @@ class PondEvent:
         d["kind"] = EventKind(d["kind"])
         d["time"] = datetime.fromisoformat(d["time"])
         return cls(**d)
+
+
+def salt_tds_step(grams: Optional[float], volume_litres: float) -> float:
+    """Nominal dissolved mass in mg/L, an estimate of the meter's TDS step."""
+    if not math.isfinite(volume_litres) or volume_litres <= 0:
+        raise ValueError("Salt addition requires a finite positive pond volume in litres")
+    if grams is None or not math.isfinite(grams) or grams <= 0:
+        raise ValueError("salt_grams must be finite and positive")
+    return 1000.0 * grams / volume_litres
 
 
 @dataclass
@@ -289,7 +302,7 @@ LEGACY_KEY_PREFIX = "legacy:"
 
 # Version of the chemistry snapshot's "daily" representation. Absent in
 # snapshots written before local-day keys (treated as version 1).
-DAILY_SNAPSHOT_VERSION = 2
+DAILY_SNAPSHOT_VERSION = 3
 
 
 @dataclass
@@ -301,6 +314,8 @@ class DailyAggregate:
     # Per calendar day, so one night spans two entries. No model reads it.
     night_ph: list = field(default_factory=list)
     had_volume_event: bool = False
+    ph_after_maintenance: bool = False
+    tds_after_maintenance: bool = False
     basis: str = DAY_BASIS_LOCAL
     # The calendar date this bucket covers, in its basis. When None,
     # calendar_date() derives it from day.
@@ -337,6 +352,8 @@ class DailyAggregate:
             "trusted_tds": list(self.trusted_tds),
             "night_ph": list(self.night_ph),
             "had_volume_event": self.had_volume_event,
+            "ph_after_maintenance": self.ph_after_maintenance,
+            "tds_after_maintenance": self.tds_after_maintenance,
             "basis": self.basis,
             "calendar_day": self.calendar_day.isoformat() if self.calendar_day is not None else None,
         }
@@ -351,6 +368,8 @@ class DailyAggregate:
             trusted_tds=list(d.get("trusted_tds", [])),
             night_ph=list(d.get("night_ph", [])),
             had_volume_event=d.get("had_volume_event", False),
+            ph_after_maintenance=d.get("ph_after_maintenance", False),
+            tds_after_maintenance=d.get("tds_after_maintenance", False),
             basis=d.get("basis", DAY_BASIS_LOCAL),
             calendar_day=date.fromisoformat(stored_date) if stored_date else None,
         )
@@ -471,7 +490,7 @@ class WaterChemistryEngine:
 
     def _has_volume_event_within_6h(self, t: datetime) -> bool:
         return any(
-            e.kind in (EventKind.WATER_CHANGE, EventKind.TOP_UP)
+            e.kind in (EventKind.WATER_CHANGE, EventKind.TOP_UP, EventKind.SALT)
             and abs((t - e.time).total_seconds()) <= 6 * 3600
             for e in self._events
         )
@@ -522,7 +541,7 @@ class WaterChemistryEngine:
         "legacy:YYYY-MM-DD" key, marked legacy, and ages out of the window.
         """
         raw = snapshot.get("daily", {}) or {}
-        if snapshot.get("daily_version", 1) >= DAILY_SNAPSHOT_VERSION:
+        if snapshot.get("daily_version", 1) >= 2:
             return {k: DailyAggregate.from_dict(v) for k, v in raw.items()}
         daily = {}
         for key, value in raw.items():
@@ -534,6 +553,8 @@ class WaterChemistryEngine:
     # Event ingestion
     # --------------------------------------------------------
     def apply_event(self, event: PondEvent) -> None:
+        if event.kind == EventKind.SALT:
+            salt_tds_step(event.salt_grams, self.config.volume_litres)
         self._events.append(event)
         # Keep the event ledger bounded - only the "volume event nearby" check
         # and future analytics need recent history, not an unbounded log.
@@ -557,6 +578,10 @@ class WaterChemistryEngine:
             pct = self._resolve_percent(event.volume_percent, event.volume_litres)
             day.had_volume_event = True
             self._last_tds_ppm = self._last_tds_ppm * (1 - pct * 0.3)
+
+        elif event.kind == EventKind.SALT:
+            self._last_tds_ppm += salt_tds_step(event.salt_grams, self.config.volume_litres)
+            day.had_volume_event = True
 
         elif event.kind == EventKind.ALGAL_SCRUB:
             self._algae_suppression_days_remaining = 5
@@ -603,6 +628,13 @@ class WaterChemistryEngine:
         day = self._day_for(raw.time)
         # A trusted reading always carries its value.
         ph, lux, tds = gated.ph.value, gated.lux.value, gated.tds.value
+        after_maintenance = any(
+            e.kind == EventKind.FILTER_CLEAN and e.time <= raw.time < e.time + timedelta(hours=24)
+            for e in self._events
+        )
+        if after_maintenance:
+            day.ph_after_maintenance |= gated.ph.is_trusted and ph is not None
+            day.tds_after_maintenance |= gated.tds.is_trusted and tds is not None
         if gated.ph.is_trusted and gated.lux.is_trusted and ph is not None and lux is not None:
             day.trusted_ph.append(ph)
             day.trusted_lux.append(lux)
@@ -765,7 +797,8 @@ class WaterChemistryEngine:
         no3_ppm = self._no3_mg / self.config.volume_litres
 
         usable_days = sorted(
-            (d for d in self._daily.values() if d.has_enough_data and not d.had_volume_event),
+            (d for d in self._daily.values() if d.has_enough_data and not d.had_volume_event
+             and not d.ph_after_maintenance and not d.tds_after_maintenance),
             key=lambda d: d.day,
         )
 

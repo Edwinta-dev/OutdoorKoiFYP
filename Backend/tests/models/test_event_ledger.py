@@ -354,7 +354,7 @@ def test_reconcile_skips_rows_from_before_the_ledger_and_outside_the_window():
                               protein_percent=40.0), created_at=since - timedelta(minutes=1))
     ancient = row(2, PondEvent(kind=EventKind.FEEDING, time=since - timedelta(days=40), food_grams=9.0,
                                protein_percent=40.0), created_at=since + timedelta(minutes=1))
-    unknown = {**row(4, feed(1)), "event_type": "SALT"}
+    unknown = {**row(4, feed(1)), "event_type": "UNKNOWN_KIND"}
     report = twin.reconcile_events([before, ancient, unknown], now=since + timedelta(hours=1))
     assert report["applied"] == [] and len(report["skipped"]) == 2
     assert twin.ledger.entries == {}

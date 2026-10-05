@@ -99,7 +99,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
         "id", "created_at", "userID", "event_type", "event_timestamp", "volume_percentage",
-        "volume_litres", "food_grams", "protein_percentage", "algae_method", "event_id"),
+        "volume_litres", "food_grams", "protein_percentage", "algae_method", "event_id", "salt_grams", "notes"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
     # The sensor node's readings, read by fetch_dashboard_sources.

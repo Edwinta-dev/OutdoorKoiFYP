@@ -39,6 +39,22 @@ void showQuickActionSelector(BuildContext context) {
           const SizedBox(height: 12),
           _actionTile(
             ctx,
+            Icons.grain,
+            Colors.purpleAccent,
+            'Salt Addition',
+            'Logs added salt in grams',
+            'SALT',
+          ),
+          _actionTile(
+            ctx,
+            Icons.filter_alt_outlined,
+            Colors.amberAccent,
+            'Filter Cleaning',
+            'Marks pH and TDS after maintenance for 24 hours',
+            'FILTER_CLEAN',
+          ),
+          _actionTile(
+            ctx,
             Icons.water_drop,
             Colors.lightBlueAccent,
             'Water Change',
@@ -201,6 +217,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         'event_timestamp': timestamp.toIso8601String(),
       };
 
+      double? saltGrams;
+      String? notes;
       double? volumePercent;
       double? volumeLitres;
       double? foodGrams;
@@ -218,6 +236,12 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         proteinPercent = double.tryParse(_val2Ctrl.text.trim()) ?? 40.0;
         payload['food_grams'] = foodGrams;
         payload['protein_percentage'] = proteinPercent;
+      } else if (widget.eventType == 'SALT') {
+        saltGrams = double.parse(_val1Ctrl.text.trim());
+        payload['salt_grams'] = saltGrams;
+      } else if (widget.eventType == 'FILTER_CLEAN') {
+        notes = _val2Ctrl.text.trim().isEmpty ? null : _val2Ctrl.text.trim();
+        payload['notes'] = notes;
       } else if (widget.eventType == 'ALGAE_SCRUB') {
         payload['algae_method'] = _selectedOption;
       }
@@ -234,6 +258,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         userId: userId,
         timestamp: timestamp,
         eventId: eventId,
+        saltGrams: saltGrams,
+        notes: notes,
         volumePercent: volumePercent,
         volumeLitres: volumeLitres,
         foodGrams: foodGrams,
@@ -273,6 +299,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     required int userId,
     required DateTime timestamp,
     required String eventId,
+    double? saltGrams,
+    String? notes,
     double? volumePercent,
     double? volumeLitres,
     double? foodGrams,
@@ -281,6 +309,20 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     int? fishCount,
   }) {
     switch (widget.eventType) {
+      case 'SALT':
+        return source.logSalt(
+          userId: userId,
+          saltGrams: saltGrams!,
+          timestamp: timestamp,
+          eventId: eventId,
+        );
+      case 'FILTER_CLEAN':
+        return source.logFilterClean(
+          userId: userId,
+          notes: notes,
+          timestamp: timestamp,
+          eventId: eventId,
+        );
       case 'FEEDING':
         return source.logFeeding(
           userId: userId,
@@ -330,6 +372,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
     final isWater =
         widget.eventType == 'WATER_CHANGE' || widget.eventType == 'WATER_TOPUP';
+    final isSalt = widget.eventType == 'SALT';
+    final isFilter = widget.eventType == 'FILTER_CLEAN';
     final isFeed = widget.eventType == 'FEEDING';
     final isAlgae = widget.eventType == 'ALGAE_SCRUB';
 
@@ -369,15 +413,22 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
               const SizedBox(height: 16),
 
               // DYNAMIC FIELD 1 (Water % or Food Grams)
-              if (isWater || isFeed) ...[
+              if (isWater || isFeed || isSalt) ...[
                 _inputField(
                   ctrl: _val1Ctrl,
                   label: isWater
                       ? 'Volume Percentage (%)'
+                      : isSalt
+                      ? 'Salt added (g)'
                       : 'Food per session (g)',
                   suffix: isWater ? '%' : 'g',
                   color: widget.accentColor,
-                  validator: (v) => (v == null || double.tryParse(v) == null)
+                  validator: (v) =>
+                      (v == null ||
+                          double.tryParse(v) == null ||
+                          (isSalt &&
+                              (!double.parse(v).isFinite ||
+                                  double.parse(v) <= 0)))
                       ? 'Enter valid value'
                       : null,
                 ),
@@ -385,7 +436,17 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
               ],
 
               // DYNAMIC FIELD 2 (Litres or Protein %)
-              if (isWater)
+              if (isFilter)
+                TextFormField(
+                  controller: _val2Ctrl,
+                  maxLength: 1000,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _inputDeco(
+                    'Notes (optional)',
+                    widget.accentColor,
+                  ),
+                )
+              else if (isWater)
                 _inputField(
                   ctrl: _val2Ctrl,
                   label: 'Volume (Litres) [Optional]',

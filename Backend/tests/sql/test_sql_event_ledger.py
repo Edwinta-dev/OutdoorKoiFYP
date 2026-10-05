@@ -184,7 +184,7 @@ def test_sql_ledger_interventions_since_is_scoped_to_the_pond(db):
     rows = _storage(db).fetch_interventions(POND_A, since=T0 - timedelta(days=30))
     assert [r["id"] for r in rows] == [a1["id"], a2["id"]]
     assert set(rows[0]) == {"id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
-                            "food_grams", "protein_percentage", "algae_method", "created_at"}
+                            "food_grams", "protein_percentage", "algae_method", "created_at", "salt_grams", "notes"}
     assert rows[1]["event_id"] == str(a2["event_id"])
     event = event_from_row(rows[1])
     assert event is not None and event.food_grams == 10.0 and event.time == T0 + timedelta(hours=5)
@@ -232,5 +232,5 @@ def test_sql_ledger_historical_payload_adds_event_id_and_keeps_the_old_keys(db):
     db.execute("select public.get_historical_graph_payload(%s, %s) as p", (POND_A, 7))
     [item] = db.fetchone()["p"]["interventions"]
     assert set(item) == {"id", "event_id", "event_type", "timestamp", "pct", "litres", "food_grams",
-                         "is_major_reset"}
+                         "is_major_reset", "salt_grams", "notes"}
     assert item["id"] == row["id"] and item["event_id"] == str(row["event_id"])

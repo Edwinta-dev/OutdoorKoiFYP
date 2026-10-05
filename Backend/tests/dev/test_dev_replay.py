@@ -88,7 +88,8 @@ def test_pond_without_tds_is_advanced_with_tds_missing(replayed, tables):
     assert storage.fetch_snapshot_version(2) == 2
     old = next(r for r in tables["pond_chemistry_state"] if r["user_id"] == 2)["snapshot"]
     twin = PondTwin.from_snapshot(storage.load_engine_snapshot(2))
-    assert [e.to_dict() for e in twin.chemistry._events] == old["chemistry"]["events"]
+    assert [e.to_dict() for e in twin.chemistry._events] == [
+        {**e, "salt_grams": None, "notes": None} for e in old["chemistry"]["events"]]
     # TDS was not sent: no channel reading, and the gate keeps the last trusted value.
     assert set(twin.sensor_channels) == {"ph", "temp", "lux"}
     assert twin.chemistry._gate._last_trusted[SensorChannel.TDS] == old["chemistry"]["gate"]["last_trusted"]["tds"]

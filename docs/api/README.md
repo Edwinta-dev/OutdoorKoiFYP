@@ -36,7 +36,7 @@ mobile repositories issue, once the app calls `/v1`.
 | `GET /forecast/evaporation/{id}` | `GET /v1/ponds/{pond}/forecasts/evaporation` |
 | `GET /forecast/algae/{id}` | `GET /v1/ponds/{pond}/forecasts/algae` |
 | `GET /ratings/algae/{id}` | `GET /v1/ponds/{pond}/ratings/algae` |
-| `POST /events/{feeding,water-change,top-up,algal-scrub}` | `POST /v1/ponds/{pond}/events/{...}` |
+| `POST /events/{feeding,water-change,top-up,algal-scrub,salt,filter-clean}` | `POST /v1/ponds/{pond}/events/{...}` |
 | `POST /events/algae-rating`, `/events/algae-rating/undo` | `POST /v1/ponds/{pond}/events/algae-rating`, `.../undo` |
 | (new) | `GET /v1/ponds/{pond}/dashboard` |
 
@@ -92,7 +92,8 @@ be corrected from outside the function. `pond_dashboard_sources` returns
 the rows with their times instead.
 
 The two history RPCs (`get_pond_telemetry_history`,
-`get_historical_graph_payload`) are unchanged and not used by `/v1`.
+`get_historical_graph_payload`) are not used by `/v1`; migration 0019
+extends graph history with salt, notes and maintenance markers.
 `get_historical_graph_payload` runs `aggregate_daily_sensor_data()` on
 every call, for every pond, as security definer, and the app still calls
 it directly. A `/v1` history endpoint, with bounded windows and the
@@ -181,3 +182,23 @@ the dashboard) carries `data_confidence`: `level` `high`, `reduced` or
 falls while the node is silent although the stored assessment does not
 change. It is named apart from the algae assessment's own `confidence`,
 which describes its growth-rate fit.
+
+## Salt and filter cleaning events (issue #29)
+
+`POST /v1/ponds/{pond}/events/salt` requires positive finite `salt_grams`
+(grams), with optional `notes` (up to 1000 characters). `filter-clean`
+accepts optional `notes`. Both share `timestamp` and stable UUID `event_id`
+with other events; duplicate IDs are applied once and backdated events
+use the existing replay window. Their deprecated `/events/...` aliases
+require `user_id`. Responses contain all three assessments and the event
+outcome, including `event_id`.
+
+Migration 0019 adds nullable `salt_grams numeric` and `notes text` to
+`pondInterventions`. The app writes event types `SALT` and `FILTER_CLEAN`
+and posts the same UUID to the API. `pond_interventions_since` returns
+both fields, null on old rows. `get_historical_graph_payload` returns them
+with stable `event_id` in intervention history and derives the boolean
+`after_maintenance` on pH/TDS daily rows for Singapore days overlapping
+the next 24 hours after filter cleaning. Other channels are false. RPC
+signatures and access rules are unchanged. The app shows maintenance in
+chart tooltips. See [model assumptions](../models.md).

@@ -68,6 +68,21 @@ abstract class PondDataSource {
 
   Future<bool> undoAlgaeRating({required int userId, int? ratingId});
 
+  Future<WaterChemistryAssessment?> logSalt({
+    required int userId,
+    required double saltGrams,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  });
+
+  Future<WaterChemistryAssessment?> logFilterClean({
+    required int userId,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  });
+
   Future<WaterChemistryAssessment?> logFeeding({
     required int userId,
     required double foodGrams,
@@ -190,6 +205,34 @@ class LivePondDataSource extends PondDataSource {
   @override
   Future<bool> undoAlgaeRating({required int userId, int? ratingId}) =>
       DigitalTwinApi.undoAlgaeRating(userId: userId, ratingId: ratingId);
+
+  @override
+  Future<WaterChemistryAssessment?> logSalt({
+    required int userId,
+    required double saltGrams,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  }) => DigitalTwinApi.logSalt(
+    userId: userId,
+    saltGrams: saltGrams,
+    notes: notes,
+    timestamp: timestamp,
+    eventId: eventId,
+  );
+
+  @override
+  Future<WaterChemistryAssessment?> logFilterClean({
+    required int userId,
+    String? notes,
+    DateTime? timestamp,
+    String? eventId,
+  }) => DigitalTwinApi.logFilterClean(
+    userId: userId,
+    notes: notes,
+    timestamp: timestamp,
+    eventId: eventId,
+  );
 
   @override
   Future<WaterChemistryAssessment?> logFeeding({

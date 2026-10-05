@@ -92,7 +92,10 @@ class HistoricalLineChart extends StatelessWidget {
     final List<VerticalLine> verticalLines = [];
     for (var ev in interventions) {
       final String eType = ev['event_type'] ?? '';
-      final bool isPrimary = (eType == primaryDomainEvent);
+      final bool isPrimary =
+          (eType == primaryDomainEvent) ||
+          ((eType == 'SALT' || eType == 'FILTER_CLEAN') &&
+              ['tds', 'ph'].contains(primarySensorType.toLowerCase()));
       final bool isMajorReset = (ev['is_major_reset'] == true);
 
       final String rawTs = ev['timestamp'] ?? '';
@@ -123,6 +126,13 @@ class HistoricalLineChart extends StatelessWidget {
         verticalLines.add(
           VerticalLine(
             x: dayOffset,
+            label: VerticalLineLabel(
+              show: eType == 'SALT' || eType == 'FILTER_CLEAN',
+              style: const TextStyle(color: Colors.white70, fontSize: 10),
+              labelResolver: (_) => eType == 'SALT'
+                  ? 'Salt ${ev["salt_grams"] ?? "?"} g'
+                  : 'Filter cleaning${ev["notes"] == null ? "" : ": ${ev["notes"]}"}',
+            ),
             color: lineCol,
             strokeWidth: strokeW,
             dashArray: isPrimary || isMajorReset ? null : [4, 4],
@@ -162,7 +172,9 @@ class HistoricalLineChart extends StatelessWidget {
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (spot) =>
                   const Color(0xFF0F172A).withValues(alpha: 0.92),
-              tooltipBorder: BorderSide(color: lineColor.withValues(alpha: 0.5)),
+              tooltipBorder: BorderSide(
+                color: lineColor.withValues(alpha: 0.5),
+              ),
               tooltipPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 6,
@@ -171,7 +183,8 @@ class HistoricalLineChart extends StatelessWidget {
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
                   return LineTooltipItem(
-                    '${_formatValue(spot.y, isLuxOrAlgae)} ${_getMetricUnit(primarySensorType)}',
+                    '${_formatValue(spot.y, isLuxOrAlgae)} ${_getMetricUnit(primarySensorType)}'
+                    '${points[spot.x.toInt()]['after_maintenance'] == true ? '\nAfter maintenance' : ''}',
                     TextStyle(
                       color: lineColor,
                       fontWeight: FontWeight.bold,
@@ -209,8 +222,10 @@ class HistoricalLineChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) =>
-                FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1),
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: Colors.white.withValues(alpha: 0.03),
+              strokeWidth: 1,
+            ),
           ),
 
           // Titles & Axis Formatting
@@ -323,6 +338,10 @@ class HistoricalLineChart extends StatelessWidget {
         return Colors.cyanAccent;
       case 'ALGAE_SCRUB':
         return Colors.tealAccent;
+      case 'SALT':
+        return Colors.purpleAccent;
+      case 'FILTER_CLEAN':
+        return Colors.amberAccent;
       case 'FEEDING':
         return Colors.orangeAccent;
       default:

@@ -297,7 +297,7 @@ header. GET responses carry an `ETag` and answer `If-None-Match` with 304.
 | Method | Route | |
 |---|---|---|
 | `GET` | `/v1/ponds/{pond}/dashboard` | Everything the dashboard shows in one response: each channel's latest reading with its own times, the three assessments, next actions, weather now and the forecasts |
-| `POST` | `/v1/ponds/{pond}/events/{feeding,water-change,top-up,algal-scrub}` | Mutates state, re-assesses, returns the fresh assessments |
+| `POST` | `/v1/ponds/{pond}/events/{feeding,water-change,top-up,algal-scrub,salt,filter-clean}` | Mutates state, re-assesses, returns the fresh assessments |
 | `GET` | `/v1/ponds/{pond}/assessments[/chemistry,/evaporation,/algae]` | Current Green / Amber / Red + advisory text |
 | `GET` | `/v1/ponds/{pond}/forecasts/chemistry` | Chemistry: first-breach day + full trajectory |
 | `GET` | `/v1/ponds/{pond}/forecasts/evaporation` | Next top-up, feed-ration guidance |

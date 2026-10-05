@@ -31,6 +31,16 @@ class InterventionLegend extends StatelessWidget {
             runSpacing: 8,
             children: [
               _legendItem(
+                'Salt Addition',
+                Colors.purpleAccent,
+                isHighlighted: primaryEventType == 'SALT',
+              ),
+              _legendItem(
+                'Filter Cleaning',
+                Colors.amberAccent,
+                isHighlighted: primaryEventType == 'FILTER_CLEAN',
+              ),
+              _legendItem(
                 'Major Flush Reset',
                 Colors.greenAccent,
                 isHighlighted: true,

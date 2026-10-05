@@ -305,6 +305,9 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         outcome = twin.record_event(body.event_id, event, now=datetime.now(timezone.utc), history=history)
         log_event(log, "event_recorded", pond_id=user_id, event_id=outcome["event_id"], status=outcome["status"],
                   replayed=outcome["replayed"], placed_late=outcome["placed_late"])
+        entry = twin.ledger.get(outcome["event_id"])
+        if entry is not None and entry.event.kind in (EventKind.SALT, EventKind.FILTER_CLEAN):
+            outcome.update(salt_grams=entry.event.salt_grams, notes=entry.event.notes)
         applied = 1 if outcome["status"] == "applied" else 0
         return {**_recompute_and_push(user_id, twin, ctx, "event", events=applied), "event": outcome}
 
@@ -364,6 +367,20 @@ def log_top_up(user_id: Optional[int] = None):
     """Clears the evaporation engine's accrued loss, re-assesses and
     returns all three assessments."""
     return _log_volume_event(EventKind.TOP_UP, user_id)
+
+
+@_event_route("salt", "Log salt addition (grams)", schemas.SaltEvent)
+def log_salt(user_id: Optional[int] = None):
+    body = _parse_body(schemas.SaltEvent, user_id)
+    event = PondEvent(kind=EventKind.SALT, time=body.event_time(), salt_grams=body.salt_grams, notes=body.notes)
+    return jsonify(_handle_event(event, body)), 200
+
+
+@_event_route("filter-clean", "Log filter cleaning", schemas.FilterCleanEvent)
+def log_filter_clean(user_id: Optional[int] = None):
+    body = _parse_body(schemas.FilterCleanEvent, user_id)
+    event = PondEvent(kind=EventKind.FILTER_CLEAN, time=body.event_time(), notes=body.notes)
+    return jsonify(_handle_event(event, body)), 200
 
 
 @_event_route("algal-scrub", "Log an algae scrub", schemas.AlgalScrubEvent)
@@ -782,11 +799,11 @@ def get_evaporation_forecast(user_id):
         try:
             return twin.evaporation.project_forward(
                 daily_environment=env, horizon_days=query.horizon_days
-            ), twin.input_cutoff()
+            ), twin.input_cutoff(), list(twin.chemistry._events), twin.chemistry.config.time_zone
         finally:
             twin.evaporation.config = stored
 
-    result, cutoff = _registry().with_twin(
+    result, cutoff, events, time_zone = _registry().with_twin(
         user_id,
         run,
         profiles=_profiles_for(user_id),
@@ -798,6 +815,11 @@ def get_evaporation_forecast(user_id):
     # independent sources, so agreement is real corroboration.
     tds_series = _storage().fetch_daily_sensor_series(user_id, "TDS", days=30) or \
         _storage().fetch_daily_sensor_series(user_id, "tds", days=30)
+    from koi.models.event_ledger import event_from_row
+
+    stored_events = [event_from_row(r) for r in _storage().fetch_interventions(user_id, None)]
+    events.extend(e for e in stored_events if e is not None)
+    tds_series = forecast_utils.tds_series_after_events(tds_series, events, time_zone)
     observed_slope = forecast_utils.slope_per_day(tds_series)
     current_tds = ctx["now"].get("tds")
     result["tds_cross_check"] = ev.cross_check_against_tds(

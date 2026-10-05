@@ -3,6 +3,38 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Salt addition and filter cleaning (issue #29)
+
+`Backend/koi/models/engine.py`: SALT increases expected TDS by nominal
+added dissolved mass `1000 * salt_grams / volume_litres` mg/L. Old engine
+behaviour: no salt event, hence zero expected step. The issue amendment
+corrects the old example of 0.01 ppm for 1 g in 100 L to **10 mg/L**,
+a factor of 1000 larger. Grams become
+milligrams by multiplying by 1000. Pond volume and salt mass must be
+finite and positive. This is a model assumption: an EC-derived meter's
+TDS response varies with its calibration and the dissolved ions, so the
+nominal mass is not a guarantee of the measured step.
+
+SALT uses the existing six-hour volume-event rate-check allowance;
+plausible-range and stale-run checks remain in force. Its day is excluded
+from chemistry trends. The evaporation cross-check uses complete daily
+averages strictly after the latest salt event's local day, so a slope
+never spans added mass. It reports insufficient data until at least
+three post-salt days exist; subsequent concentration trends remain usable.
+Both logged rows and events already posted to the engine are considered.
+
+FILTER_CLEAN leaves model pools unchanged. For samples in the half-open
+interval `[event_time, event_time + 24 hours)`, chemistry daily snapshots
+persist `ph_after_maintenance` and `tds_after_maintenance` for the trusted
+channels actually read; those buckets are excluded from chemistry trends.
+Daily snapshot version 3 adds these flags; version 2 keeps its local-day
+loader and missing flags default to false, as do legacy snapshots.
+The SQL graph history derives `after_maintenance` for pH/TDS days whose
+Singapore midnight boundaries overlap that interval. This deliberately
+marks the whole daily average, survives sensor-row retention, and follows
+intervention edits/deletions. The evaporation cross-check omits the same
+maintenance days. No existing numeric rate or threshold changed.
+
 ## Device health and data confidence (issue #23)
 
 File: `Backend/koi/models/device_health.py`. New constants; no existing

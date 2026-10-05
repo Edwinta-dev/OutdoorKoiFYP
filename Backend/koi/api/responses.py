@@ -158,6 +158,9 @@ class HypoxiaFlag(_Open):
 class EventOutcome(_Open):
     """What the twin did with the event (koi/models/event_ledger.py)."""
 
+    salt_grams: Optional[float] = Field(default=None, description="Logged added salt mass in grams, for SALT.")
+    notes: Optional[str] = Field(default=None, description="Logged intervention notes, when provided.")
+
     event_id: str = Field(description="The event's UUID; legacy:<n> when the request had none.")
     status: Literal["applied", "duplicate", "deleted"] = Field(description=(
         "duplicate: this event_id was already applied, nothing changed. deleted: it was applied and later "
