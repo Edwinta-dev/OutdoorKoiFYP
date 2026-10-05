@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -231,11 +232,23 @@ def check_backend(r: Runner) -> None:
         r.skip("tools: pytest", "pytest")
 
 
+def host_test_exe() -> Path:
+    """A fresh output path for the firmware host-test binary. On Windows a
+    binary that has just run can stay open for a moment, so linking over
+    the previous one failed now and then ("cannot open output file:
+    Permission denied"). Each run builds into its own directory; earlier
+    ones are removed when nothing holds them any more."""
+    BUILD.mkdir(exist_ok=True)
+    for old in BUILD.glob("fw_tests-*"):
+        shutil.rmtree(old, ignore_errors=True)
+    out = Path(tempfile.mkdtemp(prefix="fw_tests-", dir=BUILD))
+    return out / ("fw_tests.exe" if sys.platform == "win32" else "fw_tests")
+
+
 def check_firmware(r: Runner) -> None:
     gxx = shutil.which("g++")
     if gxx:
-        BUILD.mkdir(exist_ok=True)
-        exe = BUILD / ("fw_tests.exe" if sys.platform == "win32" else "fw_tests")
+        exe = host_test_exe()
         src = EMBEDDED / "tests" / "test_all.cpp"
         inc = EMBEDDED / "libraries" / "koi_sensing" / "src"
         build = r.run("firmware: host tests build",
