@@ -1,2 +1,5 @@
 schema.sql -text
 supabase/migrations/0001_baseline.sql -text
+# Docker reads these in a Linux container: keep LF line endings so `\`
+# continuations work in a Windows checkout (core.autocrlf=true).
+tools/*.Dockerfile text eol=lf
