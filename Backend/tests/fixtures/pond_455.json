@@ -34,6 +34,12 @@
    {"userid": 455, "sensor_type": "TDS", "avg_value": 224.9, "min_value": null, "max_value": null, "record_date": "2026-08-08"},
    {"userid": 455, "sensor_type": "TDS", "avg_value": 225.6, "min_value": null, "max_value": null, "record_date": "2026-08-09"},
    {"userid": 455, "sensor_type": "TDS", "avg_value": 226.3, "min_value": null, "max_value": null, "record_date": "2026-08-10"}
+  ],
+  "SensorData": [
+   {"id": 1, "created_at": "2026-08-19T23:59:00+00:00", "userID": 455, "sensor_type": "temp", "data1": 29.2},
+   {"id": 2, "created_at": "2026-08-19T23:59:00+00:00", "userID": 455, "sensor_type": "TDS", "data1": 220},
+   {"id": 3, "created_at": "2026-08-19T23:59:00+00:00", "userID": 455, "sensor_type": "pH", "data1": 7.64},
+   {"id": 4, "created_at": "2026-08-19T23:59:00+00:00", "userID": 455, "sensor_type": "LUX", "data1": 22755}
   ]
  },
  "dashboard_payloads": {

@@ -24,6 +24,7 @@ from dashboard_scenarios import NOW, SCENARIOS, dashboard_for, memory_storage
 
 from conftest import (
     ALGAE_ASSESSMENT,
+    PROVENANCE,
     USER,
     USER_AUTH_UID,
     api_client,
@@ -190,8 +191,8 @@ def test_dashboard_night_uv_is_derived_not_measured():
 
 def test_dashboard_assessments_are_the_stored_evaluations(scenario_app, clock):
     _, storage, client = scenario_app
-    storage.push_evaluation(9101, CHEMISTRY)
-    storage.push_algae_evaluation(9101, ALGAE_ASSESSMENT)
+    storage.push_evaluation(9101, {**CHEMISTRY, **PROVENANCE})
+    storage.push_algae_evaluation(9101, {**ALGAE_ASSESSMENT, **PROVENANCE})
     body = client.get("/v1/ponds/9101/dashboard").get_json()
     assert body["assessments"]["chemistry"]["category"] == "Watch"
     assert body["assessments"]["algae"]["green_ratio"] == 0.03
@@ -254,7 +255,7 @@ def test_dashboard_etag_changes_with_each_source(scenario_app, clock, change):
         storage.add_rows("SensorData", [{"userID": 9101, "sensor_type": "pH", "data1": 7.0,
                                          "created_at": (NOW - timedelta(minutes=1)).isoformat()}])
     elif change == "evaluation":
-        storage.push_evaluation(9101, CHEMISTRY)
+        storage.push_evaluation(9101, {**CHEMISTRY, **PROVENANCE})
     elif change == "forecast":
         row = next(r for r in storage._tables["weather_forecasts"] if r["slot_id"] == "Serangoon")
         row.update(data={"forecast": "Showers"}, source_issued_at="2026-10-03T12:10:00+08:00")

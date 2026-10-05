@@ -258,13 +258,12 @@ def test_validation_rejects_bad_event_bodies(client):
 
 def test_poll_loop_survives_one_broken_user(store, registry):
     pushed = len(chem_evals(store))
-    payload = store.fetch_dashboard_payload(USER)
-    store.set_dashboard_payload(USER, None)
+    store.failing.add("fetch_pending_sensor_rows")
     try:
         poller._poll_once(registry)   # must not raise
     finally:
-        store.set_dashboard_payload(USER, payload)
-    assert len(chem_evals(store)) == pushed, "a user with no payload is skipped"
+        store.failing.discard("fetch_pending_sensor_rows")
+    assert len(chem_evals(store)) == pushed, "a user whose sensor rows cannot be read is not advanced"
 
 
 def test_poll_loop_survives_a_storage_failure(store, registry):

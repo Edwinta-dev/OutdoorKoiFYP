@@ -1,0 +1,18 @@
+# Image for the local development stack (docker-compose.yml, docs/dev.md).
+# Build context: the repository root. Only the backend package, the demo
+# seed and the migrations are copied (see .dockerignore); no .env or other
+# credentials go into the image.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /repo
+
+COPY Backend/pyproject.toml Backend/gunicorn.conf.py Backend/
+COPY Backend/koi Backend/koi
+RUN pip install -e "Backend[dev,wsgi]"
+COPY Backend/fixtures Backend/fixtures
+COPY supabase/migrations supabase/migrations
+
+WORKDIR /repo/Backend
+EXPOSE 8080 5000
+CMD ["python", "-m", "koi.dev"]

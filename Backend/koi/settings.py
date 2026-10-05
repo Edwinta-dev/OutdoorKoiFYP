@@ -18,6 +18,7 @@ from pydantic import AliasChoices, Field, SecretStr, field_validator, model_vali
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from koi.models.hypoxia import HypoxiaThresholds
+from koi.models.sensor_inputs import IngestConfig
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -59,6 +60,29 @@ class Settings(BaseSettings):
     # lock per pond).
     worker_threads: int = Field(
         default=4, gt=0, validation_alias=AliasChoices("KOI_WORKER_THREADS", "worker_threads"))
+
+    # Sensor ingestion (koi/models/sensor_inputs.py, migration 0014).
+    # Expected minutes between the sensor node's uploads; a channel's
+    # newest reading counts as fresh for two of them.
+    sensor_cadence_minutes: int = Field(
+        default=15, gt=0, validation_alias=AliasChoices("KOI_SENSOR_CADENCE_MINUTES", "sensor_cadence_minutes"))
+    # How far before the newest ingested insert time each scan starts, to
+    # find a row committed after a newer one.
+    sensor_ingest_overlap_minutes: int = Field(
+        default=60, gt=0,
+        validation_alias=AliasChoices("KOI_SENSOR_INGEST_OVERLAP_MINUTES", "sensor_ingest_overlap_minutes"))
+    # Most SensorData rows one pond ingests per cycle; the rest wait for
+    # the next cycle.
+    sensor_ingest_batch_rows: int = Field(
+        default=2000, gt=0,
+        validation_alias=AliasChoices("KOI_SENSOR_INGEST_BATCH_ROWS", "sensor_ingest_batch_rows"))
+
+    # Evaluation retention (koi/worker/retention.py, migration 0017): the
+    # worker's daily job folds the detailed evaluation rows of every local
+    # day older than this many days into evaluation_daily and deletes them.
+    evaluation_retention_days: int = Field(
+        default=30, gt=0,
+        validation_alias=AliasChoices("KOI_EVALUATION_RETENTION_DAYS", "evaluation_retention_days"))
 
     # Origins allowed to call either Flask app from a browser. Comma
     # separated in the environment; "*" allows any origin.
@@ -154,6 +178,17 @@ class Settings(BaseSettings):
     sentry_release: str = Field(
         default="", validation_alias=AliasChoices("SENTRY_RELEASE", "sentry_release"))
 
+    # Local development stack, local database profile (python -m koi.dev
+    # --profile supabase, docs/dev.md): the local Supabase stack's API URL,
+    # service-role key and database URL. Empty: taken from `supabase status
+    # -o env`. Anything not on this machine is refused.
+    dev_supabase_url: str = Field(
+        default="", validation_alias=AliasChoices("KOI_DEV_SUPABASE_URL", "dev_supabase_url"))
+    dev_supabase_service_role_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("KOI_DEV_SUPABASE_SERVICE_ROLE_KEY", "dev_supabase_service_role_key"))
+    dev_db_url: str = Field(default="", validation_alias=AliasChoices("KOI_DEV_DB_URL", "dev_db_url"))
+
     # Lowest level written to the JSON log on stderr.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias=AliasChoices("KOI_LOG_LEVEL", "log_level"))
@@ -216,6 +251,11 @@ class Settings(BaseSettings):
     @property
     def hypoxia_thresholds(self) -> HypoxiaThresholds:
         return HypoxiaThresholds(self.hypoxia_watch_temp_c, self.hypoxia_high_temp_c)
+
+    @property
+    def sensor_ingest(self) -> IngestConfig:
+        return IngestConfig(self.sensor_cadence_minutes, self.sensor_ingest_overlap_minutes,
+                            self.sensor_ingest_batch_rows)
 
     @property
     def tz(self) -> ZoneInfo:

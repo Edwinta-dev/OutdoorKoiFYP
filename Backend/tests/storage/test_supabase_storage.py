@@ -2,8 +2,9 @@
 supabase client. No network: the client is injected."""
 import pytest
 
-from conftest import ALGAE_ASSESSMENT, make_settings
+from conftest import ALGAE_ASSESSMENT, PROVENANCE, make_settings
 from koi.storage import DuplicateProfileError, StaleSnapshotError, StorageError, SupabaseStorage
+from koi.storage.base import PROVENANCE_COLUMNS
 
 
 class _Query:
@@ -125,7 +126,7 @@ def test_lease_take_and_release():
 
 def test_algae_evaluation_insert_keeps_only_table_columns():
     storage, client = _storage()
-    storage.push_algae_evaluation(4, ALGAE_ASSESSMENT)
+    storage.push_algae_evaluation(4, {**ALGAE_ASSESSMENT, **PROVENANCE})
     [(method, (row,), _)] = client.queries[-1].calls
     assert method == "insert" and row["userid"] == 4
     assert "label_count" not in row
@@ -246,3 +247,53 @@ def test_profile_supabase_unique_violation_is_a_duplicate_profile_error():
     with pytest.raises(StorageError, match="insert_pond_profile") as info:
         other.insert_pond_profile(4, PROFILE_ROW)
     assert not isinstance(info.value, DuplicateProfileError)
+
+
+def test_provenance_supabase_inserts_carry_the_four_columns():
+    storage, client = _storage()
+    chemistry = {"status": "Green", "category": "Normal", "tan_ppm": 0.1, "no2_ppm": 0.0, "no3_ppm": 5.0,
+                 "ph_reactivity": None, "reactivity_trend": None, "tds_trend": None, "sensor_warnings": [],
+                 "advisory": "", "add_hardener_now": False}
+    evaporation = {"status": "Green", "category": "Normal", "loss_litres": 1.0, "loss_pct": 0.1,
+                   "evaporation_mm_per_day": 4.0, "loss_litres_per_day": 1.0, "water_temp_c": 29.0,
+                   "feed_cap_grams": 60.0, "feed_note": "", "days_to_topup": 5, "advisory": "", "topup_now": False}
+    for push, assessment in ((storage.push_evaluation, chemistry), (storage.push_evaporation_evaluation, evaporation),
+                             (storage.push_algae_evaluation, ALGAE_ASSESSMENT)):
+        push(4, {**assessment, **PROVENANCE})
+        [(method, (row,), _)] = client.queries[-1].calls
+        assert method == "insert" and {c: row[c] for c in PROVENANCE_COLUMNS} == PROVENANCE
+        with pytest.raises(StorageError):
+            push(4, assessment)
+
+
+def test_provenance_supabase_reads_give_old_rows_null_provenance():
+    storage, _ = _storage(data={"pond_chemistry_evaluations": [{"id": 1, "status": "Green"}]})
+    row = storage.fetch_latest_evaluation(4)
+    assert row["status"] == "Green" and {c: row[c] for c in PROVENANCE_COLUMNS} == dict.fromkeys(PROVENANCE_COLUMNS)
+
+
+def test_retention_supabase_calls_the_rpc_with_the_cutoff():
+    from datetime import date
+
+    result = {"days": ["2026-08-01"], "rows": 3, "summaries": 1}
+    storage, client = _storage(data={"rpc:summarize_evaluation_days": result})
+    assert storage.summarize_evaluation_days(date(2026, 9, 4), "Asia/Singapore", 7) == result
+    assert client.queries[-1].calls == [("rpc", ("summarize_evaluation_days", {
+        "p_before": "2026-09-04", "p_time_zone": "Asia/Singapore", "p_max_days": 7}), {})]
+
+
+def test_retention_supabase_unexpected_result_is_a_storage_error():
+    from datetime import date
+
+    storage, _ = _storage(data={"rpc:summarize_evaluation_days": None})
+    with pytest.raises(StorageError, match="summarize_evaluation_days"):
+        storage.summarize_evaluation_days(date(2026, 9, 4), "Asia/Singapore", 7)
+
+
+def test_retention_supabase_reads_daily_summaries_by_pond_and_domain():
+    rows = [{"pond_id": 1, "domain": "algae", "local_date": "2026-08-01"}]
+    storage, client = _storage(data={"evaluation_daily": rows})
+    assert storage.fetch_evaluation_daily(1, domain="algae") == rows
+    calls = [(m, a) for m, a, _ in client.queries[-1].calls]
+    assert ("eq", ("pond_id", 1)) in calls and ("eq", ("domain", "algae")) in calls
+    assert calls[-2:] == [("order", ("local_date",)), ("order", ("domain",))]

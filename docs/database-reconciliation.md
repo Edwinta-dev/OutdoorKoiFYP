@@ -162,7 +162,8 @@ No code reads it. Every other column matches.
 |---|---|---|---|---|
 | Numeric columns | `numeric` | `double precision` | E | #5 |
 | PK and sequence names | `pondinterventions_pkey`, `pondinterventions_id_seq` (lower case) | defaults | E | #5 |
-| Index on `("userID", event_type, event_timestamp desc)` | absent | present | R. Wanted for the graph RPC; re-add as N. | #19 |
+| Index on `("userID", event_type, event_timestamp desc)` | absent | present | R. Wanted for the graph RPC; re-added as N by `0015` (`idx_pondinterventions_user_type_time`). | #19 |
+| `event_id uuid` | absent | absent | N (`0015`): nullable, unique, default `gen_random_uuid()`; existing rows backfilled with `intervention_event_id(id)`. | #19 |
 
 ### 5.7 `imageTable`
 
@@ -254,7 +255,7 @@ separate migration owned by the named issue.
 | D4 | Dashboard history substitutes 7.4 pH, 180 ppm TDS, 26 °C and 500 lx for missing values. | Charts show readings that were never measured. | #50 |
 | D5 | Graph RPC recomputes every day of aggregates on each call. | Cost grows with table size; a read RPC writes rows. | #22 |
 | D6 | Two `UserData` triggers do the same station lookup, and one makes a blocking OneMap HTTP request inside the write. | Onboarding writes are slow and fail or hang when OneMap is slow. | #53 |
-| D7 | `raw_sensor` has no `recorded_at`. | The poller's `sensor_recorded_at`, `/metrics` sensor age and stale-reading checks get null against live. | #13 or #18 |
+| D7 | `raw_sensor` has no `recorded_at`. | The poller's `sensor_recorded_at`, `/metrics` sensor age and stale-reading checks get null against live. | #13 (dashboard, `0012`); #18: the poller no longer reads `raw_sensor` and reports each channel's `SensorData.created_at` (`0014`) |
 | D8 | Duplicate index on `pond_chemistry_evaluations (userid, evaluated_at desc)`. | Extra write cost. | #22 |
 | D9 | `get_pond_telemetry_history` returns `date_trunc('hour', created_at at time zone 'UTC')`, a `timestamp`, as `timestamptz`. | Correct only while the session time zone is UTC (the Supabase default). | #15: fixed by `0006_hourly_history_utc_instants.sql` (tested under UTC and Asia/Singapore sessions) |
 | D10 | The app uploads and reads species photos in a `pond-images` bucket (`fish_image_helper.dart`, `image_controller.dart`, `fish_tips_view.dart`); live has no such bucket (it has `FishImages`, whose policies also require a `public/` folder). | Species photo uploads fail on live. Listed in `KNOWN_UNDEFINED` in `test_schema.py`. | Owner decision: point the app at `FishImages` or add a `pond-images` bucket with policies (not yet assigned) |

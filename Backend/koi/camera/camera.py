@@ -54,10 +54,17 @@ Storage failures, in upload order:
                           reply is 503, so no frame is left without a row.
                           If that delete fails too, a frame_orphaned event
                           names the bucket and paths for manual removal.
+
+Device contact (issue #23, migration 0018): once the frame's row is
+stored, the upload is recorded as a contact of the pond's camera with the
+reply's next_at as the time it is expected next, which moves
+devices.last_seen_at forward. It is skipped when X-User-ID is not a pond
+number, and a storage failure is logged and skipped: the reply is the
+same either way.
 """
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import cv2
 
@@ -218,6 +225,17 @@ def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
                             baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path)
 
 
+def record_contact(user_id: str, wake: imageSchedule.NextWake) -> None:
+    """Records this upload as a contact of the pond's camera, expected
+    again at the reply's next_at. Never raises."""
+    try:
+        pond = int(user_id)
+    except (TypeError, ValueError):
+        return
+    contact = {"received_at": datetime.now(timezone.utc).isoformat(), "expected_next_at": wake.next_at.isoformat()}
+    fail_soft(lambda: _storage().record_device_contacts(pond, "camera", [contact]), None)
+
+
 @bp.route('/', methods=['GET'])
 def health():
     return "OutdoorKoi camera API OK"
@@ -327,6 +345,8 @@ def upload_image():
         except StorageError:
             discard_objects(bucket, [filename] + ([thumb_path] if thumb_path else []))
             raise
+
+        record_contact(user_id, wake)
 
         # 7. Return payload to ESP32
         uploads.inc(result="stored")

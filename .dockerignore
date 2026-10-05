@@ -1,0 +1,10 @@
+# Build context of Backend/Dockerfile.dev: only what the image copies.
+*
+!Backend/pyproject.toml
+!Backend/gunicorn.conf.py
+!Backend/koi
+!Backend/fixtures
+!supabase/migrations
+**/__pycache__
+**/*.pyc
+**/*.egg-info

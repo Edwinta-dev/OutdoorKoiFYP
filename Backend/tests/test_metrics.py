@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import DASHBOARD_PAYLOAD, POND_FIXTURE, USER, api_client, make_settings, make_storage
+from conftest import DASHBOARD_PAYLOAD, POND_FIXTURE, USER, add_upload, api_client, make_settings, make_storage
 from koi.api import create_app
 from koi.metrics import CONTENT_TYPE, Metrics
 from koi.registry import EngineRegistry
@@ -66,9 +66,7 @@ def test_metrics_endpoint_counts_requests_by_route_pattern():
 
 def test_metrics_endpoint_reports_the_poller_from_storage():
     storage = MemoryStorage.from_json(POND_FIXTURE)  # real clock
-    recorded = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
-    storage.set_dashboard_payload(USER, {**DASHBOARD_PAYLOAD,
-                                         "raw_sensor": {**DASHBOARD_PAYLOAD["raw_sensor"], "recorded_at": recorded}})
+    add_upload(storage, DASHBOARD_PAYLOAD["raw_sensor"], at=datetime.now(timezone.utc) - timedelta(minutes=10))
     assert poller.Worker(make_settings(), EngineRegistry(storage), holder="w1").run_cycle() is True
 
     text = create_app(make_settings(), storage=storage).test_client().get("/metrics").get_data(as_text=True)

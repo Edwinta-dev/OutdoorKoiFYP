@@ -15,19 +15,29 @@ Table notes (schema in supabase/migrations/):
 - The evaluation inserts copy only the columns the tables have: for
   example the chemistry assessment's risk_score and the algae
   assessment's label_count are not stored. Add a migration first to keep
-  them in the log.
+  them in the log. Each insert also carries the four provenance columns
+  of migration 0016 (koi/provenance.py), and the latest-row reads give a
+  row from before 0016 those keys as null.
 - Snapshot saves and the worker lease go through the save_pond_snapshot
   and take_worker_lease functions (migration 0002), which compare and set
-  in one statement.
+  in one statement. A save that also records ingested sensor rows goes
+  through save_pond_snapshot_with_ingest (migration 0014), one
+  transaction for the snapshot, the ledger and the cursor.
+- The event ledger's reads and the event_id backfill go through
+  pond_interventions_since, sensor_ingest_history and
+  backfill_intervention_event_ids (migration 0015), each for one pond.
 - Weather ingestion writes only through ingest_weather_batch, and the
   as-of weather reads are the database functions of migration 0009.
+- Evaluation retention goes through summarize_evaluation_days (migration
+  0017): the summaries and the deletes of the rows they replace are one
+  transaction in the database.
 """
 from __future__ import annotations
 
 import json
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
@@ -41,7 +51,9 @@ from koi.storage.base import (
     StorageError,
     daily_stats,
     pond_config_from_userdata_row,
+    with_provenance,
 )
+from koi.storage.evaluation_daily import EVALUATION_DAILY_COLUMNS
 
 if TYPE_CHECKING:
     from supabase import Client
@@ -125,15 +137,56 @@ class SupabaseStorage:
             )
             return int(res.data[0].get("snapshot_version") or 1) if res.data else 0
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         with _operation("save_engine_snapshot"):
-            res = self._db().rpc(
-                "save_pond_snapshot",
-                {"p_user_id": user_id, "p_snapshot": snapshot, "p_base_version": base_version},
-            ).execute()
+            params = {"p_user_id": user_id, "p_snapshot": snapshot, "p_base_version": base_version}
+            if ingest is None:
+                res = self._db().rpc("save_pond_snapshot", params).execute()
+            else:
+                res = self._db().rpc("save_pond_snapshot_with_ingest", {**params, "p_ingest": ingest}).execute()
             if res.data is None:
                 raise StaleSnapshotError(user_id, base_version or 0)
             return int(res.data)
+
+    # --- sensor ingestion (migration 0014) ----------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        with _operation("fetch_pending_sensor_rows"):
+            res = self._db().rpc("sensor_ingest_pending", {
+                "p_pond_id": user_id, "p_sensor_types": list(sensor_types),
+                "p_start": start.isoformat() if start is not None else None,
+                "p_until": until.isoformat() if until is not None else None,
+                "p_overlap_seconds": overlap_seconds, "p_limit": limit,
+            }).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or {"cursor": None, "scan_from": None, "rows": []}
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        with _operation("fetch_ingested_sensor_rows"):
+            res = self._db().rpc("sensor_ingest_history", {
+                "p_pond_id": user_id, "p_sensor_types": list(sensor_types),
+                "p_after": after.isoformat() if after is not None else None, "p_until": until.isoformat(),
+            }).execute()
+            data = res.data
+            return list((json.loads(data) if isinstance(data, str) else data) or [])
+
+    # --- interventions (migration 0015) -------------------------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        with _operation("fetch_interventions"):
+            res = self._db().rpc("pond_interventions_since", {
+                "p_pond_id": user_id, "p_since": since.isoformat() if since is not None else None,
+            }).execute()
+            data = res.data
+            return list((json.loads(data) if isinstance(data, str) else data) or [])
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        with _operation("backfill_intervention_event_ids"):
+            res = self._db().rpc("backfill_intervention_event_ids", {"p_pond_id": user_id}).execute()
+            return int(res.data or 0)
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
@@ -205,6 +258,10 @@ class SupabaseStorage:
                     "sensor_warnings": assessment["sensor_warnings"],
                     "advisory": assessment["advisory"],
                     "add_hardener_now": assessment["add_hardener_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -225,6 +282,10 @@ class SupabaseStorage:
                     "days_to_topup": assessment["days_to_topup"],
                     "advisory": assessment["advisory"],
                     "topup_now": assessment["topup_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -247,6 +308,10 @@ class SupabaseStorage:
                     "days_to_scrub": assessment["days_to_scrub"],
                     "advisory": assessment["advisory"],
                     "scrub_now": assessment["scrub_now"],
+                    "model_version": assessment["model_version"],
+                    "input_cutoff": assessment["input_cutoff"],
+                    "forecast_issued_at": assessment["forecast_issued_at"],
+                    "inputs": assessment["inputs"],
                 }
             ).execute()
 
@@ -260,7 +325,7 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
 
     def fetch_latest_evaporation_evaluation(self, user_id: int) -> Optional[dict]:
         with _operation("fetch_latest_evaporation_evaluation"):
@@ -272,7 +337,7 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]:
         with _operation("fetch_latest_algae_evaluation"):
@@ -284,7 +349,26 @@ class SupabaseStorage:
                 .limit(1)
                 .execute()
             )
-            return res.data[0] if res.data else None
+            return with_provenance(res.data[0]) if res.data else None
+
+    # --- evaluation retention (migration 0017) --------------------------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        with _operation("summarize_evaluation_days"):
+            res = self._db().rpc("summarize_evaluation_days", {
+                "p_before": before.isoformat(), "p_time_zone": time_zone, "p_max_days": max_days}).execute()
+            result = res.data
+            if not isinstance(result, dict):
+                raise StorageError("summarize_evaluation_days", f"unexpected result {result!r}")
+            return result
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        with _operation("fetch_evaluation_daily"):
+            query = (self._db().table("evaluation_daily").select(", ".join(EVALUATION_DAILY_COLUMNS))
+                     .eq("pond_id", user_id))
+            if domain is not None:
+                query = query.eq("domain", domain)
+            res = query.order("local_date").order("domain").execute()
+            return list(res.data or [])
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(
@@ -426,6 +510,25 @@ class SupabaseStorage:
         with _operation("save_camera_mask"):
             res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
             return res.data[0]
+
+    # --- device health (migration 0018) ----------------------------------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        with _operation("record_device_contacts"):
+            res = self._db().rpc("record_device_contacts", {
+                "p_pond_id": user_id, "p_kind": kind, "p_contacts": contacts}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or None
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        with _operation("fetch_device_activity"):
+            res = self._db().rpc("pond_device_activity", {
+                "p_pond_id": user_id, "p_since": since.isoformat()}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or {"devices": [], "contacts": [], "battery": [], "reset": None}
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

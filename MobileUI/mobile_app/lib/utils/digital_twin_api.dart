@@ -1019,7 +1019,10 @@ class DigitalTwinApi {
   /// throwing) on any network/server error so a slow or unreachable
   /// DigitalTwin host never blocks the caller's own success path - the
   /// event's historical record (pondInterventions table) is written
-  /// separately and is the source of truth for "was this logged".
+  /// separately and is the source of truth for "was this logged". The
+  /// same event_id goes in that row and in this post: the twin applies an
+  /// event_id once, and its poller applies any row whose post never
+  /// arrived.
   static Future<WaterChemistryAssessment?> _postEvent(
     String path,
     Map<String, dynamic> body,
@@ -1049,6 +1052,7 @@ class DigitalTwinApi {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) {
@@ -1057,6 +1061,7 @@ class DigitalTwinApi {
       'food_grams': foodGrams,
       'protein_percent': proteinPercent,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+      'event_id': ?eventId,
       'fish_type': ?fishType,
       'fish_count': ?fishCount,
     });
@@ -1067,6 +1072,7 @@ class DigitalTwinApi {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) {
@@ -1075,6 +1081,7 @@ class DigitalTwinApi {
       'volume_percent': ?volumePercent,
       'volume_litres': ?volumeLitres,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+      'event_id': ?eventId,
       'fish_type': ?fishType,
       'fish_count': ?fishCount,
     });
@@ -1085,6 +1092,7 @@ class DigitalTwinApi {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) {
@@ -1093,6 +1101,7 @@ class DigitalTwinApi {
       'volume_percent': ?volumePercent,
       'volume_litres': ?volumeLitres,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+      'event_id': ?eventId,
       'fish_type': ?fishType,
       'fish_count': ?fishCount,
     });
@@ -1102,6 +1111,7 @@ class DigitalTwinApi {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) {
@@ -1109,6 +1119,7 @@ class DigitalTwinApi {
       'user_id': userId,
       'scrub_type': ?scrubType,
       if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
+      'event_id': ?eventId,
       'fish_type': ?fishType,
       'fish_count': ?fishCount,
     });

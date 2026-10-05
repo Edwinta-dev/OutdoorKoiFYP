@@ -19,10 +19,12 @@ from pydantic_core import PydanticCustomError
 
 from koi.camera import mask as camera_mask
 from koi.models import algae_engine as ae
+from koi.models import event_ledger
 
 # An event timestamp outside this window is rejected. The past limit is
-# relaxed once backdated replay exists (the event ledger issue).
-MAX_EVENT_AGE = timedelta(days=7)
+# the event ledger's checkpoint window: an event within it is replayed
+# into its place (koi/models/event_ledger.py).
+MAX_EVENT_AGE = event_ledger.WINDOW
 MAX_EVENT_LEAD = timedelta(minutes=5)
 
 MAX_HORIZON_DAYS = 60
@@ -48,6 +50,22 @@ class EventBody(_Body):
 
     user_id: int = Field(gt=0)
     timestamp: Optional[datetime] = None
+    event_id: Optional[str] = Field(default=None, description=(
+        "The event's UUID, the same value the app writes to pondInterventions.event_id. An event_id the pond "
+        "has already applied is not applied again. Optional for older app builds."))
+
+    @field_validator("event_id", mode="before")
+    @classmethod
+    def _parse_event_id(cls, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            if not isinstance(value, str):
+                raise ValueError
+            return event_ledger.normalise_event_id(value)
+        except ValueError:
+            raise PydanticCustomError("event_id_format", "event_id must be a UUID, for example "
+                                      "3f2b8c1e-7d4a-4e5b-9c6d-0a1b2c3d4e5f") from None
 
     @field_validator("timestamp", mode="before")
     @classmethod
@@ -77,8 +95,8 @@ def parse_event_time(value: str) -> datetime:
     now = utc_now()
     if dt < now - MAX_EVENT_AGE:
         raise PydanticCustomError(
-            "timestamp_too_old", "timestamp is more than {days} days in the past; events older than "
-            "that cannot be logged yet", {"days": MAX_EVENT_AGE.days})
+            "timestamp_too_old", "timestamp is more than {days} days in the past; the model keeps "
+            "{days} days of history to place an event in", {"days": MAX_EVENT_AGE.days})
     if dt > now + MAX_EVENT_LEAD:
         raise PydanticCustomError(
             "timestamp_in_future", "timestamp is more than {minutes} minutes in the future; check the "

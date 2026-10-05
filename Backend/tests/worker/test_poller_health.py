@@ -1,6 +1,8 @@
 """The poller's cycle report (worker_status), which the API's /ready and
 /metrics read (issue #10)."""
-from conftest import DASHBOARD_PAYLOAD, USER, make_settings, make_storage
+from datetime import datetime, timezone
+
+from conftest import DASHBOARD_PAYLOAD, USER, add_upload, make_settings, make_storage
 from koi.registry import EngineRegistry
 from koi.worker import poller
 
@@ -15,28 +17,43 @@ def _add_pond(storage, user_id):
 
 def test_health_report_records_each_pond_result():
     storage = make_storage()
-    payload = {**DASHBOARD_PAYLOAD, "raw_sensor": {**DASHBOARD_PAYLOAD["raw_sensor"],
-                                                   "recorded_at": "2026-08-20T00:00:00+00:00"}}
-    storage.set_dashboard_payload(USER, payload)
-    _add_pond(storage, 500)  # no dashboard payload: skipped
+    # The fixture's upload (2026-08-19T23:59) and one more without TDS.
+    reading = {k: v for k, v in DASHBOARD_PAYLOAD["raw_sensor"].items() if k != "TDS"}
+    add_upload(storage, reading, at=datetime(2026, 8, 20, tzinfo=timezone.utc))
+    _add_pond(storage, 500)  # no SensorData rows: skipped
     assert _worker(storage).run_cycle() is True
 
     status = storage.fetch_worker_status("poller")
     assert status["holder"] == "w1" and status["cycle_duration_sec"] >= 0
     assert status["last_success_at"] == status["cycle_finished_at"]
-    assert status["ponds"][str(USER)] == {"result": "ok", "reason": None, "failures_total": 0,
-                                          "sensor_recorded_at": "2026-08-20T00:00:00+00:00"}
+    pond = status["ponds"][str(USER)]
+    sensor = pond.pop("sensor")
+    events = pond.pop("events")
+    assert events["reconciled"] is True and events["applied"] == 0 and events["replayed"] is False
+    assert pond == {"result": "ok", "reason": None, "failures_total": 0,
+                    "sensor_recorded_at": "2026-08-20T00:00:00+00:00"}
+    assert (sensor["inputs"], sensor["late_inputs"], sensor["rows"]) == (2, 0, 7)
+    assert sensor["time_basis"] == ["ingestion"] and sensor["newest_input_at"] == "2026-08-20T00:00:00+00:00"
+    # Each channel keeps its own reading time; TDS was not in the newer upload.
+    assert sensor["channels"]["tds"]["reading_at"] == "2026-08-19T23:59:00+00:00"
+    assert sensor["channels"]["ph"]["reading_at"] == "2026-08-20T00:00:00+00:00"
+    assert all(c["time_basis"] == "ingestion" and c["fresh"] is False for c in sensor["channels"].values())
     assert status["ponds"]["500"]["result"] == "skipped"
-    assert status["ponds"]["500"]["reason"] == "no sensor reading in the dashboard payload"
+    assert status["ponds"]["500"]["reason"] == "no sensor reading for this pond yet"
 
 
-def test_health_report_skips_a_pond_with_an_unusable_reading():
+def test_health_report_passes_an_unusable_value_as_missing():
     storage = make_storage()
-    storage.set_dashboard_payload(USER, {**DASHBOARD_PAYLOAD, "raw_sensor": {"pH": "n/a", "recorded_at": "t"}})
+    _add_pond(storage, 500)
+    [ph, tds] = add_upload(storage, {"pH": float("nan"), "TDS": 230.0}, user_id=500)
     _worker(storage).run_cycle()
-    pond = storage.fetch_worker_status("poller")["ponds"][str(USER)]
-    assert pond["result"] == "skipped" and pond["sensor_recorded_at"] == "t"
-    assert pond["reason"].startswith("unusable sensor reading")
+    pond = storage.fetch_worker_status("poller")["ponds"]["500"]
+    assert pond["result"] == "ok" and pond["sensor_recorded_at"] == tds["created_at"]
+    assert pond["sensor"]["channels"]["ph"]["reading_at"] is None
+    assert pond["sensor"]["channels"]["tds"]["fresh"] is True
+    ledger = {r["sensor_row_id"]: r["disposition"] for r in storage.rows("sensor_ingest_ledger")
+              if r["pond_id"] == 500}
+    assert ledger == {ph["id"]: "unusable", tds["id"]: "applied"}
 
 
 def test_health_report_counts_failures_and_keeps_last_success_when_every_pond_fails(monkeypatch):

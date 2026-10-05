@@ -27,6 +27,13 @@ The retry re-runs the whole callback, so a callback's side effects (the
 event endpoints push evaluation rows) can happen twice when a save races.
 The evaluation logs are append-only and the later row reflects the saved
 state, so that is harmless.
+
+A call that fails for any other reason (the callback raised, or the save
+failed) drops the in-memory twin as well: it may hold changes that were
+never saved, and the next access must start again from the stored
+snapshot. The poller relies on this for sensor ingestion: readings
+applied to a twin whose save failed are not in the ledger, so the next
+cycle finds them again and applies them once to the stored state.
 """
 import logging
 import threading
@@ -39,8 +46,9 @@ from koi.logs import log_event
 from koi.models import evaporation_engine as ev
 from koi.models.engine import PondConfig
 from koi.models.hypoxia import HypoxiaThresholds
-from koi.models.pond_twin import PondTwin
+from koi.models.pond_twin import PondTwin, SensorHistory
 from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
+from koi.models.sensor_inputs import SENSOR_TYPES, IngestConfig, group_rows
 from koi.storage import StaleSnapshotError, Storage
 
 log = logging.getLogger(__name__)
@@ -56,11 +64,14 @@ class EngineRegistry:
     """One per process, shared by the API routes and the poller when both
     run in it (see koi.api.create_app and koi.worker)."""
 
-    def __init__(self, storage: Storage, hypoxia_thresholds: Optional[HypoxiaThresholds] = None):
+    def __init__(self, storage: Storage, hypoxia_thresholds: Optional[HypoxiaThresholds] = None,
+                 sensor_ingest: Optional[IngestConfig] = None):
         self.storage = storage
         # Temperature levels for the night-time hypoxia flag (Settings),
         # read by the poller and /assessment/all.
         self.hypoxia_thresholds = hypoxia_thresholds or HypoxiaThresholds()
+        # The poller's sensor ingestion settings (Settings.sensor_ingest).
+        self.sensor_ingest = sensor_ingest or IngestConfig()
         self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above
@@ -80,6 +91,15 @@ class EngineRegistry:
             return ProfileHistory([profile_from_row(r) for r in rows])
         config = self.storage.fetch_pond_config(user_id)
         return ProfileHistory([profile_from_userdata_config(config)]) if config is not None else None
+
+    def sensor_history(self, user_id: int) -> SensorHistory:
+        """What the twin reads back to replay (PondTwin._replay): the
+        pond's ledgered sensor rows with an effective sample time in
+        (after, until], grouped into inputs as the poller groups them."""
+        def history(after: Optional[datetime], until: datetime) -> list:
+            rows = self.storage.fetch_ingested_sensor_rows(user_id, SENSOR_TYPES, after, until)
+            return group_rows(rows).inputs
+        return history
 
     def _load_or_create(
         self,
@@ -132,6 +152,7 @@ class EngineRegistry:
         pond_depth_m: float = ev.DEFAULT_POND_DEPTH_M,
         persist: bool = True,
         profiles: Optional[ProfileHistory] = None,
+        ingest: Optional[Callable[[], Optional[dict]]] = None,
     ):
         """Runs fn(twin) under this user's lock, then persists the snapshot.
 
@@ -152,32 +173,44 @@ class EngineRegistry:
         taken, because reading a twin mid-mutation from the poller thread
         would produce a torn view.
 
+        ingest, called after fn, returns the sensor rows fn applied
+        (Discovery.commit()) or None; they are saved with the snapshot in
+        one transaction (Storage.save_engine_snapshot).
+
         If another process saved this pond between the load and the save,
         the in-memory twin is dropped, reloaded and fn runs once more (see
-        the module docstring); a second StaleSnapshotError is raised.
+        the module docstring); a second StaleSnapshotError is raised. Any
+        other failure drops the in-memory twin and is raised.
         """
         lock = self._lock_for(user_id)
         with lock:
-            try:
-                return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles)
-            except StaleSnapshotError as exc:
-                log_event(log, "stale_snapshot_retry", level=logging.WARNING, pond_id=user_id, error=str(exc))
-                self._twins.pop(user_id, None)
-            try:
-                return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles)
-            except StaleSnapshotError:
-                self._twins.pop(user_id, None)
-                raise
+            for attempt in (1, 2):
+                try:
+                    return self._run(user_id, fn, default_config, pond_depth_m, persist, profiles, ingest)
+                except StaleSnapshotError as exc:
+                    self._twins.pop(user_id, None)
+                    if attempt == 2:
+                        raise
+                    log_event(log, "stale_snapshot_retry", level=logging.WARNING, pond_id=user_id, error=str(exc))
+                except BaseException:
+                    self._twins.pop(user_id, None)
+                    raise
+            raise AssertionError("unreachable")
 
-    def _run(self, user_id, fn, default_config, pond_depth_m, persist, profiles=None):
+    def _run(self, user_id, fn, default_config, pond_depth_m, persist, profiles=None, ingest=None):
         loaded = self._load_or_create(user_id, default_config, pond_depth_m, profiles)
         loaded.twin.profiles = profiles
         if profiles is not None:
             loaded.twin.use_profile(profiles.at(datetime.now(timezone.utc)))
         result = fn(loaded.twin)
         if persist:
-            loaded.version = self.storage.save_engine_snapshot(
-                user_id, loaded.twin.to_snapshot(), base_version=loaded.version)
+            commit = ingest() if ingest is not None else None
+            if commit is None:
+                loaded.version = self.storage.save_engine_snapshot(
+                    user_id, loaded.twin.to_snapshot(), base_version=loaded.version)
+            else:
+                loaded.version = self.storage.save_engine_snapshot(
+                    user_id, loaded.twin.to_snapshot(), base_version=loaded.version, ingest=commit)
         return result
 
     # Backwards-compatible alias. Older call sites passed a callback

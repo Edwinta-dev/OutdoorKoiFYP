@@ -22,7 +22,7 @@ the as-of reads over weather history (migration 0009).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional, Protocol, TypeVar
 
 from koi.logs import log_event
@@ -87,10 +87,49 @@ class Storage(Protocol):
         """The stored snapshot_version, 0 when there is no row."""
         ...
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         """Stores the snapshot and returns its new version. With base_version
         set, raises StaleSnapshotError unless the stored version equals it
-        (0: no row may exist yet). None saves unconditionally."""
+        (0: no row may exist yet). None saves unconditionally.
+
+        ingest (Discovery.commit(), koi/models/sensor_inputs.py) records
+        the sensor rows the snapshot has applied in sensor_ingest_ledger
+        and moves the pond's sensor_ingest_cursor watermark forward, in the
+        same transaction as the save (save_pond_snapshot_with_ingest,
+        migration 0014). A row already in the ledger fails the whole save
+        with StorageError."""
+        ...
+
+    # --- sensor ingestion (migration 0014) ----------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        """The pond's SensorData rows not yet in the ingest ledger
+        (sensor_ingest_pending): {cursor, scan_from, rows: [{id,
+        sensor_type, value, created_at}]}, rows ordered by created_at, id.
+        The scan starts overlap_seconds before the cursor's watermark, or
+        at start when the pond has no cursor (None: every row)."""
+        ...
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        """The pond's SensorData rows already in the ingest ledger with an
+        effective sample time in (after, until] (after None: no lower
+        bound), as [{id, sensor_type, value, created_at}] in that order
+        (sensor_ingest_history, migration 0015). What a replay reads back."""
+        ...
+
+    # --- interventions (pondInterventions, migration 0015) -------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        """The pond's rows with event_timestamp at or after since (None:
+        all), INTERVENTION_COLUMNS, ordered by event_timestamp, id
+        (pond_interventions_since). Only this pond's rows."""
+        ...
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        """Gives the pond's rows with a null event_id the UUID derived from
+        their id (backfill_intervention_event_ids); returns how many.
+        Deterministic, so a retry gives the same UUIDs."""
         ...
 
     # --- worker lease (worker_lease) ----------------------------------
@@ -132,6 +171,21 @@ class Storage(Protocol):
     def fetch_latest_evaporation_evaluation(self, user_id: int) -> Optional[dict]: ...
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]: ...
+
+    # --- evaluation retention (evaluation_daily, migration 0017) -------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        """Folds the detailed evaluation rows of every pond and domain on
+        local dates before `before` (oldest max_days dates first, never a
+        pond's newest date) into evaluation_daily and deletes them, in one
+        transaction (summarize_evaluation_days). Returns {"days": [ISO
+        dates], "rows": n, "summaries": n}; no days means nothing was left.
+        Raises StorageError when before is after today in time_zone."""
+        ...
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        """The pond's evaluation_daily rows (EVALUATION_DAILY_COLUMNS),
+        oldest local_date first, then by domain."""
+        ...
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(
@@ -184,6 +238,22 @@ class Storage(Protocol):
         """Stores mask (a validated polygon, koi/camera/mask.py) as the
         pond's next mask version and makes it the one in force, in one
         step (save_camera_mask). Returns the new camera_config row."""
+        ...
+
+    # --- device health (devices, device_contact, migration 0018) -------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        """Records contacts ([{received_at, expected_next_at}], ISO 8601)
+        from the pond's sensor node or camera (kind), ignoring any already
+        recorded, moves devices.last_seen_at forward and returns the
+        devices row (record_device_contacts)."""
+        ...
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        """{devices, contacts, battery, reset} for the pond
+        (pond_device_activity): its devices rows, its contacts since
+        since plus each kind's newest one before it, its battery_mv rows
+        since since ([{at, mv}]) and its newest reset_reason row ({at,
+        code} or None)."""
         ...
 
     # --- pond config (UserData) ---------------------------------------
@@ -280,6 +350,22 @@ IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL",
 # camera_config and camera_mask_version columns (migration 0010).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
+
+# pondInterventions columns the ledger reads (event_id: migration 0015).
+INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
+                        "food_grams", "protein_percentage", "algae_method", "created_at")
+
+# Provenance columns of the three evaluation tables (migration 0016).
+# Every evaluation push carries all four (koi/provenance.py); rows written
+# before 0016 read them as null.
+PROVENANCE_COLUMNS = ("model_version", "input_cutoff", "forecast_issued_at", "inputs")
+
+
+def with_provenance(row: Optional[dict]) -> Optional[dict]:
+    """A stored evaluation row with every provenance column present: a row
+    written before migration 0016 (or read before it is applied) has
+    null, meaning unknown, in each."""
+    return None if row is None else {**{c: None for c in PROVENANCE_COLUMNS}, **row}
 
 # pond_profile's columns (migration 0008).
 PROFILE_COLUMNS = ("id", "pond_id", "effective_from", "volume_l", "depth_m", "biomass_g", "fish_type",

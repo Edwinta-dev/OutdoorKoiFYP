@@ -28,21 +28,33 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+from koi.models.event_ledger import derived_event_id
+from koi.models.local_time import local_date
 from koi.storage.base import (
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
+    INTERVENTION_COLUMNS,
     PROFILE_COLUMNS,
+    PROVENANCE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
     StorageError,
     daily_stats,
     parse_timestamp,
     pond_config_from_userdata_row,
+    with_provenance,
+)
+from koi.storage.evaluation_daily import (
+    DOMAIN_TABLES,
+    EVALUATION_DAILY_COLUMNS,
+    merge_summary,
+    select_batch,
+    summarize_group,
 )
 from koi.weather import cache as weather_cache
 from koi.weather import history as weather_history
@@ -50,21 +62,32 @@ from koi.weather import history as weather_history
 # Columns of each table this store serves, from supabase/migrations/.
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
+    # Sensor ingestion progress (migration 0014).
+    "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
+    "sensor_ingest_ledger": ("pond_id", "sensor_row_id", "sensor_type", "effective_sample_time", "time_basis",
+                             "disposition", "snapshot_version", "ingested_at"),
+    # Device health (migration 0018).
+    "devices": ("pond_id", "kind", "expected_interval_seconds", "last_seen_at", "next_expected_at", "created_at",
+                "updated_at"),
+    "device_contact": ("pond_id", "kind", "received_at", "expected_next_at"),
     "worker_lease": ("name", "holder", "expires_at"),
     "worker_status": ("name", "holder", "cycle_started_at", "cycle_finished_at", "cycle_duration_sec",
                       "last_success_at", "ponds"),
     "pond_chemistry_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "tan_ppm", "no2_ppm", "no3_ppm",
         "ph_reactivity", "reactivity_trend", "tds_trend", "sensor_warnings", "advisory",
-        "add_hardener_now"),
+        "add_hardener_now", *PROVENANCE_COLUMNS),
     "pond_evaporation_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "loss_litres", "loss_pct",
         "evaporation_mm_per_day", "loss_litres_per_day", "water_temp_c", "feed_cap_grams",
-        "feed_note", "days_to_topup", "advisory", "topup_now"),
+        "feed_note", "days_to_topup", "advisory", "topup_now", *PROVENANCE_COLUMNS),
     "pond_algae_evaluations": (
         "id", "userid", "evaluated_at", "status", "category", "green_ratio", "watch_threshold",
         "action_threshold", "threshold_mode", "growth_rate_per_day", "intrinsic_rate_per_day",
-        "rate_source", "confidence", "sample_count", "days_to_scrub", "advisory", "scrub_now"),
+        "rate_source", "confidence", "sample_count", "days_to_scrub", "advisory", "scrub_now",
+        *PROVENANCE_COLUMNS),
+    # Daily summaries of the three evaluation tables (migration 0017).
+    "evaluation_daily": EVALUATION_DAILY_COLUMNS,
     "algae_severity_ratings": (
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
@@ -76,7 +99,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
         "id", "created_at", "userID", "event_type", "event_timestamp", "volume_percentage",
-        "volume_litres", "food_grams", "protein_percentage", "algae_method"),
+        "volume_litres", "food_grams", "protein_percentage", "algae_method", "event_id"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
                               "record_date"),
     # The sensor node's readings, read by fetch_dashboard_sources.
@@ -104,9 +127,14 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 # The user column of each table (three spellings coexist in the schema).
 USER_COLUMN = {
     "pond_chemistry_state": "user_id",
+    "sensor_ingest_cursor": "pond_id",
+    "sensor_ingest_ledger": "pond_id",
+    "devices": "pond_id",
+    "device_contact": "pond_id",
     "pond_chemistry_evaluations": "userid",
     "pond_evaporation_evaluations": "userid",
     "pond_algae_evaluations": "userid",
+    "evaluation_daily": "pond_id",
     "algae_severity_ratings": "userid",
     "imageTable": "user_ID",
     "UserData": "userID",
@@ -195,9 +223,22 @@ class MemoryStorage:
             stamp = _STAMPED.get(table)
             if stamp and new.get(stamp) is None:
                 new[stamp] = self._clock().isoformat()
+            if table == "pondInterventions":
+                self._event_id(new)
             self._tables[table].append(new)
             stored.append(_copy(new))
         return stored
+
+    def _event_id(self, row: dict) -> None:
+        """pondInterventions.event_id (0015): a row without the key gets
+        the UUID derived from its id, standing in for the column default
+        deterministically; an explicit None stays None until
+        backfill_intervention_event_ids. The column is unique."""
+        if "event_id" not in row:
+            row["event_id"] = derived_event_id(row["id"])
+        if row["event_id"] is not None and any(
+                r.get("event_id") == row["event_id"] for r in self._tables["pondInterventions"]):
+            raise ValueError(f"pondInterventions.event_id {row['event_id']} already exists")
 
     def rows(self, table: str) -> list[dict]:
         """A copy of every row in a table, in insertion order."""
@@ -239,7 +280,7 @@ class MemoryStorage:
     def _latest(self, operation: str, table: str, user_id: int) -> Optional[dict]:
         self._check(operation)
         rows = self._select(table, user_id, newest_first_by="evaluated_at", limit=1)
-        return rows[0] if rows else None
+        return with_provenance(rows[0]) if rows else None
 
     def _append(self, operation: str, table: str, user_id: int, assessment: dict) -> None:
         self._check(operation)
@@ -278,22 +319,104 @@ class MemoryStorage:
         self._check("fetch_snapshot_version")
         return self._version(self._snapshot_row(user_id))
 
-    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None) -> int:
+    def save_engine_snapshot(self, user_id: int, snapshot: dict, base_version: Optional[int] = None,
+                             ingest: Optional[dict] = None) -> int:
         self._check("save_engine_snapshot")
         with self._lock:
             current = self._version(self._snapshot_row(user_id))
             if base_version is not None and base_version != current:
                 raise StaleSnapshotError(user_id, base_version)
-            row = {"user_id": user_id, "snapshot": snapshot, "updated_at": self._clock().isoformat(),
+            now = self._clock().isoformat()
+            row = {"user_id": user_id, "snapshot": snapshot, "updated_at": now,
                    "snapshot_version": current + 1}
             try:
                 row = _copy(row)
             except (TypeError, ValueError) as exc:  # a value jsonb could not hold
                 raise StorageError("save_engine_snapshot", exc) from exc
+            ledger = self._tables["sensor_ingest_ledger"]
+            entries = (ingest or {}).get("rows") or []
+            # Checked before anything is written, as the transaction rolls
+            # the save back in save_pond_snapshot_with_ingest.
+            seen = {(str(r["pond_id"]), int(r["sensor_row_id"])) for r in ledger}
+            for e in entries:
+                if (str(user_id), int(e["sensor_row_id"])) in seen:
+                    raise StorageError("save_engine_snapshot",
+                                       f"SensorData row {e['sensor_row_id']} is already in the ingest ledger")
             table = self._tables["pond_chemistry_state"]
             table[:] = [r for r in table if not _same_user(r, "user_id", user_id)]
             table.append(row)
+            for e in entries:
+                ledger.append({"pond_id": user_id, "sensor_row_id": int(e["sensor_row_id"]),
+                               "sensor_type": e.get("sensor_type"),
+                               "effective_sample_time": e["effective_sample_time"],
+                               "time_basis": e["time_basis"], "disposition": e["disposition"],
+                               "snapshot_version": row["snapshot_version"], "ingested_at": now})
+            watermark = (ingest or {}).get("watermark")
+            if watermark is not None:
+                cursors = self._tables["sensor_ingest_cursor"]
+                old = next((c for c in cursors if _same_user(c, "pond_id", user_id)), None)
+                if old is None:
+                    cursors.append({"pond_id": user_id, "watermark": watermark, "updated_at": now})
+                else:
+                    if parse_timestamp(watermark) > parse_timestamp(old["watermark"]):
+                        old["watermark"] = watermark
+                    old["updated_at"] = now
             return row["snapshot_version"]
+
+    # --- sensor ingestion ---------------------------------------------
+    def fetch_pending_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], start: Optional[datetime],
+                                  until: Optional[datetime], overlap_seconds: int, limit: int) -> dict:
+        """The same rows sensor_ingest_pending (migration 0014) returns."""
+        self._check("fetch_pending_sensor_rows")
+        with self._lock:
+            cursor = next((c for c in self._tables["sensor_ingest_cursor"] if _same_user(c, "pond_id", user_id)),
+                          None)
+            scan_from = (parse_timestamp(cursor["watermark"]) - timedelta(seconds=overlap_seconds)
+                         if cursor is not None else start)
+            ingested = {int(r["sensor_row_id"]) for r in self._tables["sensor_ingest_ledger"]
+                        if _same_user(r, "pond_id", user_id)}
+            rows = [r for r in self._select("SensorData", user_id)
+                    if r.get("sensor_type") in sensor_types and int(r["id"]) not in ingested
+                    and (scan_from is None or parse_timestamp(r["created_at"]) >= scan_from)
+                    and (until is None or parse_timestamp(r["created_at"]) <= until)]
+        rows.sort(key=self._reading_key)
+        return {"cursor": cursor["watermark"] if cursor is not None else None,
+                "scan_from": scan_from.isoformat() if scan_from is not None else None,
+                "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                          "created_at": r["created_at"]} for r in rows[:limit]]}
+
+    def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
+                                   until: datetime) -> list[dict]:
+        """The same rows sensor_ingest_history (migration 0015) returns."""
+        self._check("fetch_ingested_sensor_rows")
+        with self._lock:
+            times = {int(r["sensor_row_id"]): parse_timestamp(r["effective_sample_time"])
+                     for r in self._tables["sensor_ingest_ledger"] if _same_user(r, "pond_id", user_id)}
+            rows = [(times[int(r["id"])], r) for r in self._select("SensorData", user_id)
+                    if int(r["id"]) in times and r.get("sensor_type") in sensor_types
+                    and (after is None or times[int(r["id"])] > after) and times[int(r["id"])] <= until]
+        rows.sort(key=lambda item: (item[0], int(item[1]["id"])))
+        return [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
+                 "created_at": r["created_at"]} for _, r in rows]
+
+    # --- interventions ------------------------------------------------
+    def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
+        """The same rows pond_interventions_since (migration 0015) returns."""
+        self._check("fetch_interventions")
+        rows = [r for r in self._select("pondInterventions", user_id)
+                if since is None or parse_timestamp(r["event_timestamp"]) >= since]
+        rows.sort(key=lambda r: (parse_timestamp(r["event_timestamp"]), int(r["id"])))
+        return [self._project(r, INTERVENTION_COLUMNS) for r in rows]
+
+    def backfill_intervention_event_ids(self, user_id: int) -> int:
+        self._check("backfill_intervention_event_ids")
+        with self._lock:
+            filled = 0
+            for r in self._tables["pondInterventions"]:
+                if _same_user(r, "userID", user_id) and r.get("event_id") is None:
+                    r["event_id"] = derived_event_id(r["id"])
+                    filled += 1
+            return filled
 
     # --- worker lease -------------------------------------------------
     def take_lease(self, name: str, holder: str, ttl_seconds: int) -> bool:
@@ -367,6 +490,54 @@ class MemoryStorage:
 
     def fetch_latest_algae_evaluation(self, user_id: int) -> Optional[dict]:
         return self._latest("fetch_latest_algae_evaluation", "pond_algae_evaluations", user_id)
+
+    # --- evaluation retention -----------------------------------------
+    def summarize_evaluation_days(self, before: date, time_zone: str, max_days: int) -> dict:
+        """The same summaries and deletes summarize_evaluation_days
+        (migration 0017) makes, all or nothing under the lock."""
+        self._check("summarize_evaluation_days")
+        if max_days < 1:
+            raise StorageError("summarize_evaluation_days", "max_days must be at least 1")
+        with self._lock:
+            now = self._clock()
+            if before > local_date(now, time_zone):
+                raise StorageError("summarize_evaluation_days", f"{before} is after today in {time_zone}")
+            groups = select_batch({d: self._tables[t] for d, t in DOMAIN_TABLES.items()}, before, time_zone,
+                                  max_days)
+            if not groups:
+                return {"days": [], "rows": 0, "summaries": 0}
+            daily = self._tables["evaluation_daily"]
+            written: list[tuple[Optional[int], dict]] = []
+            for (pond, domain, day), rows in sorted(groups.items()):
+                new = summarize_group(domain, rows)
+                index = next((i for i, r in enumerate(daily) if _same_user(r, "pond_id", pond)
+                              and r["domain"] == domain and r["local_date"] == day.isoformat()), None)
+                if index is None:
+                    written.append((None, {"pond_id": pond, "domain": domain, "local_date": day.isoformat(),
+                                           "time_zone": time_zone, **new, "summarized_at": now.isoformat(),
+                                           "updated_at": now.isoformat()}))
+                else:
+                    written.append((index, {**merge_summary(daily[index], new), "updated_at": now.isoformat()}))
+            try:
+                written = [(i, _copy(row)) for i, row in written]
+            except (TypeError, ValueError) as exc:  # a value jsonb could not hold; nothing written yet
+                raise StorageError("summarize_evaluation_days", exc) from exc
+            for index, row in written:
+                if index is None:
+                    daily.append(row)
+                else:
+                    daily[index] = row
+            for domain, table in DOMAIN_TABLES.items():
+                ids = {int(r["id"]) for (_, d, _), rows in groups.items() if d == domain for r in rows}
+                self._tables[table][:] = [r for r in self._tables[table] if int(r["id"]) not in ids]
+            return {"days": sorted({day.isoformat() for _, _, day in groups}),
+                    "rows": sum(len(rows) for rows in groups.values()), "summaries": len(groups)}
+
+    def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
+        self._check("fetch_evaluation_daily")
+        rows = [r for r in self._select("evaluation_daily", user_id) if domain is None or r["domain"] == domain]
+        rows.sort(key=lambda r: (r["local_date"], r["domain"]))
+        return [self._project(r, EVALUATION_DAILY_COLUMNS) for r in rows]
 
     # --- algae severity ratings ---------------------------------------
     def insert_algae_rating(
@@ -454,6 +625,69 @@ class MemoryStorage:
             return self._insert("save_camera_mask", "camera_config", [{
                 "pond_id": user_id, "mask": mask, "mask_version": version,
                 "updated_at": self._clock().isoformat()}])[0]
+
+    # --- device health --------------------------------------------------
+    def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
+        """The same as record_device_contacts (migration 0018)."""
+        self._check("record_device_contacts")
+        if kind not in ("sensor", "camera"):
+            raise StorageError("record_device_contacts", f"unknown device kind {kind!r}")
+        with self._lock:
+            now = self._clock()
+            keep_from = now - timedelta(days=30)
+            table = self._tables["device_contact"]
+            mine = {parse_timestamp(r["received_at"]): r for r in table
+                    if _same_user(r, "pond_id", user_id) and r["kind"] == kind}
+            newest = None
+            for c in contacts:
+                received = parse_timestamp(c["received_at"])
+                newest = received if newest is None or received > newest else newest
+                if received < keep_from or received in mine:
+                    continue
+                expected = c.get("expected_next_at")
+                expected = expected if expected is not None and parse_timestamp(expected) > received else None
+                row = {"pond_id": user_id, "kind": kind, "received_at": received.isoformat(),
+                       "expected_next_at": parse_timestamp(expected).isoformat() if expected else None}
+                table.append(row)
+                mine[received] = row
+            if newest is not None:
+                next_at = (mine.get(newest) or {}).get("expected_next_at")
+                devices = self._tables["devices"]
+                device = next((d for d in devices if _same_user(d, "pond_id", user_id) and d["kind"] == kind), None)
+                if device is None:
+                    devices.append({"pond_id": user_id, "kind": kind, "expected_interval_seconds": None,
+                                    "last_seen_at": newest.isoformat(), "next_expected_at": next_at,
+                                    "created_at": now.isoformat(), "updated_at": now.isoformat()})
+                else:
+                    old = device.get("last_seen_at")
+                    if old is None or newest >= parse_timestamp(old):
+                        device["last_seen_at"] = newest.isoformat()
+                        device["next_expected_at"] = next_at
+                    device["updated_at"] = now.isoformat()
+            table[:] = [r for r in table if not (_same_user(r, "pond_id", user_id) and r["kind"] == kind
+                                                 and parse_timestamp(r["received_at"]) < keep_from)]
+            rows = self._select("devices", user_id, kind=kind)
+            return rows[0] if rows else None
+
+    def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
+        """The same as pond_device_activity (migration 0018)."""
+        self._check("fetch_device_activity")
+        with self._lock:
+            devices = sorted(self._select("devices", user_id), key=lambda d: d["kind"])
+            contacts = []
+            for kind in ("camera", "sensor"):
+                mine = sorted((r for r in self._select("device_contact", user_id) if r["kind"] == kind),
+                              key=lambda r: parse_timestamp(r["received_at"]))
+                before = [r for r in mine if parse_timestamp(r["received_at"]) < since]
+                contacts += before[-1:] + [r for r in mine if parse_timestamp(r["received_at"]) >= since]
+            sensor = sorted(self._select("SensorData", user_id), key=self._reading_key)
+            battery = [{"at": r["created_at"], "mv": r.get("data1")} for r in sensor
+                       if r.get("sensor_type") == "battery_mv" and parse_timestamp(r["created_at"]) >= since]
+            resets = [r for r in sensor if r.get("sensor_type") == "reset_reason"]
+        return {"devices": devices,
+                "contacts": [self._project(c, ("kind", "received_at", "expected_next_at")) for c in contacts],
+                "battery": battery,
+                "reset": {"at": resets[-1]["created_at"], "code": resets[-1].get("data1")} if resets else None}
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

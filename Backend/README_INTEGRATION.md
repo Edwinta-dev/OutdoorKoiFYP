@@ -21,6 +21,7 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/registry.py` | `DigitalTwin/registry.py` | One locked `PondTwin` per user, reloaded when another process saved a newer snapshot |
 | `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes, all under `/v1` (route table in `spec.py`, response models in `responses.py`, the dashboard in `dashboard.py`); `python -m koi.api.openapi` regenerates `docs/api/openapi.yaml` |
 | `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll, lease-gated `Worker`, pond thread pool |
+| `koi/worker/retention.py` | | Daily evaluation retention job (summaries in `evaluation_daily`) |
 | `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
 
 `koi/models/` does no I/O. The API, the worker and the camera service each
@@ -48,6 +49,10 @@ name in `.env`. Both services read the same file.
 | `KOI_TIMEZONE` | `Asia/Singapore` | camera daylight slots |
 | `KOI_POLL_INTERVAL_MINUTES` | `15` | poller |
 | `KOI_WORKER_THREADS` | `4` | poller; ponds polled at the same time |
+| `KOI_SENSOR_CADENCE_MINUTES` | `15` | poller; expected minutes between sensor node uploads; a channel's newest reading is used while it is at most two of these old |
+| `KOI_SENSOR_INGEST_OVERLAP_MINUTES` | `60` | poller; how far before the newest ingested insert time each sensor scan starts, to find rows committed out of id order |
+| `KOI_SENSOR_INGEST_BATCH_ROWS` | `2000` | poller; most `SensorData` rows one pond ingests per cycle (whole uploads only); the rest wait for the next cycle |
+| `KOI_EVALUATION_RETENTION_DAYS` | `30` | worker; local days older than this have their evaluation rows summarised into `evaluation_daily` and deleted, once a day |
 | `KOI_HYPOXIA_WATCH_TEMP_C` | `30` | poller and API; water temperature (C) at which a dark pond's hypoxia flag is `watch` |
 | `KOI_HYPOXIA_HIGH_TEMP_C` | `32` | poller and API; the same for `high`; must be above the watch level |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
@@ -125,6 +130,137 @@ twins. They stay consistent through the stored snapshot:
   next cycle if it is stopped with Ctrl+C.
 - Within the active worker, ponds are polled `KOI_WORKER_THREADS` at a
   time, each under its own pond lock.
+
+### Sensor ingestion (issue #18, migration 0014)
+
+The worker applies every `SensorData` row of a pond once, in
+`(effective_sample_time, id)` order, rather than the newest value of each
+sensor type per poll:
+
+- Discovery: `sensor_ingest_pending` returns the pond's rows not in
+  `sensor_ingest_ledger`, from `KOI_SENSOR_INGEST_OVERLAP_MINUTES` before
+  the pond's `sensor_ingest_cursor.watermark` (the newest `created_at`
+  ingested). The overlap finds a row committed after a row with a higher
+  id; the ledger keeps it from being applied twice. The ordering key is
+  not the scan position.
+- Inputs: rows with the same time are one upload; a channel the node did
+  not send, or sent as a non-number, is passed as missing and the others
+  are used (`koi/models/sensor_inputs.py`). An input older than the last
+  one applied is applied at the last input's time and reported as late
+  (placing it by its sample time is #82).
+- Atomic progress: the snapshot, the ledger rows and the watermark are
+  saved in one transaction (`save_pond_snapshot_with_ingest`). A cycle that
+  fails before the save records nothing and drops the in-memory twin, so
+  the next cycle applies the same rows to the stored snapshot.
+- Time basis: until the node sends a sample time (#17), a reading's time
+  is the database insert time. The twin's channel readings, the ledger
+  and the cycle report (`worker_status.ponds.<pond>.sensor`) label it
+  `ingestion`.
+- With no new rows the chemistry engine sees no input; evaporation and
+  algae still advance on the weather. Water temperature and light are
+  used while fresh (`KOI_SENSOR_CADENCE_MINUTES`); otherwise the air
+  temperature stands in for the algae and nitrate terms and the hypoxia
+  flag reports unknown.
+
+### Event ledger (issue #19, migration 0015)
+
+Each logged intervention has a UUID, `event_id`, that the app writes to
+`pondInterventions.event_id` and posts to `/v1/ponds/{pond}/events/...`
+(body field `event_id`). The twin keeps a ledger of the event_ids it has
+applied in its snapshot (`koi/models/event_ledger.py`, snapshot version 4):
+
+- Idempotent: a post whose event_id is already in the ledger changes
+  nothing and returns the current assessments with `event.status`
+  `duplicate` (or `deleted` for a deleted event). A post without one (an
+  older app build) is recorded as `legacy:<n>`, and the first table row
+  with the same kind and amounts within 14 hours takes it over instead of
+  being applied again.
+- Time-ordered: an event older than the newest input applied rewinds the
+  chemistry engine to the last daily checkpoint before it and replays
+  every ingested sensor reading (`sensor_ingest_history`) and event after
+  it, in order; a reading at or before the newest event applied is
+  replayed in the same way. Checkpoints cover 30 days, which is also how
+  far back the event endpoints accept a timestamp. An event older than
+  every checkpoint is applied at the current state (`event.placed_late`).
+  Evaporation and algae are not rewound: they receive each new event
+  once, at their current state.
+- Reconciled: each poll cycle gives any row without an event_id the UUID
+  derived from its id (`backfill_intervention_event_ids`, deterministic),
+  reads the last 30 days of rows (`pond_interventions_since`) and applies
+  rows not in the ledger, re-applies edited rows and removes deleted ones,
+  with one replay. A deleted event leaves a tombstone, so a retried post
+  cannot bring it back; the row reappearing applies it again. Rows created
+  before a pond's ledger existed (the stored v3 snapshot's `saved_at`)
+  count as applied. The cycle report has `worker_status.ponds.<pond>.events`.
+- Per pond: rows are read and ledgers kept per pond; the same event_id
+  posted to another pond is that pond's own event.
+
+### Evaluation provenance (issue #21, migration 0016)
+
+Every row the poller and the event endpoints write to the three evaluation
+tables carries four values (`koi/provenance.py`):
+
+- `model_version`: `koi.__version__` plus `+g<commit>` when the backend
+  runs from a git checkout (`.dirty` when tracked files have uncommitted
+  changes); the package version alone otherwise.
+- `input_cutoff`: the newest sensor sample, event or camera frame time the
+  twin had consumed. `evaluated_at` stays the time the row was computed.
+- `forecast_issued_at`: NEA's issue time of the forecast used
+  (`weather_forecasts.source_issued_at`), only when every forecast record
+  the assessment used has that same time. Chemistry uses the 2-hour
+  nowcast and the 4-day outlook, evaporation the 24-hour general forecast
+  and the 4-day outlook, algae the 4-day outlook, so chemistry and
+  evaporation rows usually have null here and the per-record times in
+  `inputs.forecasts`.
+- `inputs`: the run (`poll`, `event`, `rating`, `rating_undo`), the sensor
+  groups, events, camera frames and ratings it applied, and per forecast
+  product the cache records read with their issue times. A record whose
+  cache row no longer holds the data the run read has an unknown issue
+  time.
+
+The assessment, dashboard and event responses include all four; the
+forecast responses include `model_version` and `input_cutoff`. Rows
+written before migration 0016 read null in each (unknown); they are not
+backfilled.
+
+### Evaluation retention (issue #22, migration 0017)
+
+Each poll adds one row per pond to each evaluation table, about 290 a day
+per pond. Once a day, at 03:30 Singapore time, the worker
+(`koi/worker/retention.py`, under its own `evaluation_retention` lease)
+calls `summarize_evaluation_days`: for every pond and domain, each local
+day older than `KOI_EVALUATION_RETENTION_DAYS` (default 30) becomes one
+`evaluation_daily` row, and the detailed rows of that day are deleted.
+
+- One row per pond, domain (`chemistry`, `evaporation`, `algae`) and local
+  day (`(evaluated_at at time zone 'Asia/Singapore')::date`, the day of
+  `daily_sensor_averages` and `koi/models/local_time.py`).
+- Each holds the row count, first and last `evaluated_at`, counts per
+  status, and for each headline value (chemistry: TAN, nitrite, nitrate,
+  pH reactivity; evaporation: water lost in litres and percent, mm and
+  litres per day, water temperature, days to top-up; algae: green ratio,
+  growth rate, days to scrub) the number of rows with a value, the first
+  and last value with their times, and the minimum and maximum.
+- A value missing all day reads `n` 0 with nulls, and a domain with no rows
+  that day has no summary: missing stays missing, never zero.
+- `model_versions` lists each backend version that wrote rows that day
+  with its row count and time range, so a model change within a day is
+  kept. Rows written before migration 0016 appear as version null.
+- The summaries are written, exactly the summarised rows are deleted, and
+  the counts are checked, in one transaction; a mismatch or failure rolls
+  all of it back and the next run starts again. A second run changes
+  nothing. A row written later for a summarised day is merged into that
+  day's summary on the next run.
+- Each pond and domain keeps its newest local day as detailed rows, so the
+  latest assessment the API serves is never removed.
+- Only evaluation rows go. The inputs a rebuild or replay reads (sensor
+  rows and their ingest ledger, interventions, camera frames, ratings,
+  weather history, snapshots) are not touched.
+
+`evaluation_daily` holds model estimates and the status outcomes the model
+reported. Observed sensor values have their own daily summary,
+`daily_sensor_averages`, which this does not change. `MemoryStorage` does
+the same through `koi/storage/evaluation_daily.py`.
 
 ## Dependencies
 

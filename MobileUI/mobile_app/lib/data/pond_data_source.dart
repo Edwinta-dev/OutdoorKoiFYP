@@ -73,6 +73,7 @@ abstract class PondDataSource {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   });
@@ -82,6 +83,7 @@ abstract class PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   });
@@ -91,6 +93,7 @@ abstract class PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   });
@@ -99,6 +102,7 @@ abstract class PondDataSource {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   });
@@ -193,6 +197,7 @@ class LivePondDataSource extends PondDataSource {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => DigitalTwinApi.logFeeding(
@@ -200,6 +205,7 @@ class LivePondDataSource extends PondDataSource {
     foodGrams: foodGrams,
     proteinPercent: proteinPercent,
     timestamp: timestamp,
+    eventId: eventId,
     fishType: fishType,
     fishCount: fishCount,
   );
@@ -210,6 +216,7 @@ class LivePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => DigitalTwinApi.logWaterChange(
@@ -217,6 +224,7 @@ class LivePondDataSource extends PondDataSource {
     volumePercent: volumePercent,
     volumeLitres: volumeLitres,
     timestamp: timestamp,
+    eventId: eventId,
     fishType: fishType,
     fishCount: fishCount,
   );
@@ -227,6 +235,7 @@ class LivePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => DigitalTwinApi.logTopUp(
@@ -234,6 +243,7 @@ class LivePondDataSource extends PondDataSource {
     volumePercent: volumePercent,
     volumeLitres: volumeLitres,
     timestamp: timestamp,
+    eventId: eventId,
     fishType: fishType,
     fishCount: fishCount,
   );
@@ -243,12 +253,14 @@ class LivePondDataSource extends PondDataSource {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
+    String? eventId,
     String? fishType,
     int? fishCount,
   }) => DigitalTwinApi.logAlgalScrub(
     userId: userId,
     scrubType: scrubType,
     timestamp: timestamp,
+    eventId: eventId,
     fishType: fishType,
     fishCount: fishCount,
   );

@@ -147,6 +147,37 @@ caches.
 The newest row of a channel is the one with the latest `created_at`. When
 two rows have the same `created_at`, the higher `id` wins. SQL
 (`order by created_at desc, id desc`) and MemoryStorage apply the same
-rule. `SensorData` has no index for this read; it scans the pond's rows,
-as `get_bundled_dashboard_payload` already does. No index is added while
-the sensor sketch is live-tested.
+rule. Migration 0013 adds the index `idx_sensordata_user_type_latest`
+(`userID`, `sensor_type`, `created_at desc`, `id desc`) in that order, so
+the read does not scan the pond's rows.
+
+## GET /v1/ponds/{pond}/devices and data_confidence
+
+`GET /v1/ponds/{pond}/devices` lists the sensor node, then the camera
+(`Backend/koi/models/device_health.py`, migration 0018). It only reads.
+
+- `last_seen_at` is receipt time: the newest upload the poller has
+  ingested, or the newest frame the camera service stored. Each sensor
+  channel's `last_sample_at` is the time of its newest usable reading,
+  so a node that reconnects with old buffered readings shows as seen
+  while its channels stay `old`. `clock` says how far those sample
+  times can be trusted; until the node sends sample times (issue #17)
+  they are receipt times.
+- `expected_interval_seconds` comes from the `devices` row when set
+  (`interval_source` `device`), else the backend's sensor cadence
+  (`default`) or the camera's last wake (`schedule`).
+  `missed_24h` counts reports due in the last 24 hours that did not
+  arrive, each judged against the interval in force when the contact
+  before it was received.
+- `battery` is the trend of the node's `battery_mv` rows and
+  `last_reset` its newest `reset_reason` row; both are `unknown` or null
+  until the node sends them.
+- A channel that has never reported, such as TDS on a pond without the
+  probe, is `never_seen`.
+
+Every assessment the API returns (`/assessments*`, the event replies and
+the dashboard) carries `data_confidence`: `level` `high`, `reduced` or
+`low` and the `reasons`, worked out when the response is sent, so it
+falls while the node is silent although the stored assessment does not
+change. It is named apart from the algae assessment's own `confidence`,
+which describes its growth-rate fit.

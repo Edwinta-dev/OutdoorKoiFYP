@@ -74,6 +74,13 @@ ALGAE_ASSESSMENT = {
     "label_count": 3,  # in the API response, but no column in pond_algae_evaluations
 }
 
+# The provenance every evaluation push carries besides the assessment
+# (migration 0016, koi/provenance.py).
+PROVENANCE = {
+    "model_version": "0.1.0+g0123456789ab", "input_cutoff": "2026-08-20T00:00:00+00:00", "forecast_issued_at": None,
+    "inputs": {"run": "poll", "sensor_groups": 1, "events": 0, "camera_frames": 0, "ratings": 0, "forecasts": {}},
+}
+
 
 def ticking_clock(start=datetime(2026, 8, 20, tzinfo=timezone.utc)):
     """A clock that moves one second per reading, so every stored
@@ -119,6 +126,16 @@ def make_storage():
     storage = MemoryStorage.from_json(POND_FIXTURE, clock=ticking_clock())
     link_account(storage, USER, USER_AUTH_UID, USER_SESSION_ID)
     return storage
+
+
+def add_upload(storage, reading, at=None, user_id=USER):
+    """One upload of the sensor node: a SensorData row per sensor_type in
+    reading ({"pH": 7.6, ...}), all at one insert time (default: now), as
+    the node's single batched insert stores them. Returns the rows."""
+    at = at or datetime.now(timezone.utc)
+    return storage.add_rows("SensorData", [
+        {"userID": user_id, "sensor_type": sensor_type, "data1": value, "created_at": at.isoformat()}
+        for sensor_type, value in reading.items()])
 
 
 def api_client(app, token=None):

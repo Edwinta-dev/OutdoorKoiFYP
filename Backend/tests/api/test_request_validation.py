@@ -135,7 +135,7 @@ def iso(delta):
 @pytest.mark.parametrize("timestamp, message", [
     ("yesterday", "not an ISO 8601"),
     ("2026-13-45T00:00:00Z", "not an ISO 8601"),
-    (iso(-timedelta(days=7, minutes=1)), "more than 7 days in the past"),
+    (iso(-timedelta(days=30, minutes=1)), "more than 30 days in the past"),
     (iso(timedelta(minutes=6)), "more than 5 minutes in the future"),
 ])
 def test_timestamp_validation_rejects_instead_of_falling_back(client, timestamp, message):
@@ -146,7 +146,7 @@ def test_timestamp_validation_rejects_instead_of_falling_back(client, timestamp,
 
 
 @pytest.mark.parametrize("timestamp", [
-    iso(-timedelta(days=6, hours=23)),
+    iso(-timedelta(days=29, hours=23)),
     iso(timedelta(minutes=4)),
     (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     (datetime.now(timezone.utc) - timedelta(hours=1)).replace(tzinfo=None).isoformat(),  # no zone: UTC

@@ -1,0 +1,87 @@
+# Local development stack (docs/dev.md). Nothing here reaches the live
+# Supabase project, NEA or PythonAnywhere.
+#
+#   docker compose up --build
+#       The demo pond in memory (python -m koi.dev): digital twin API on
+#       :8080, camera service on :5000 and the worker. The three run in one
+#       container because in-memory data cannot be shared between
+#       processes; it is lost when the container stops.
+#
+#   docker compose --profile supabase up --build api worker camera
+#       The three services as separate containers on the local Supabase
+#       stack, after the one-shot `seed` service has written the demo seed
+#       into it and fast-forwarded the worker. Needs, from the repository
+#       root: `supabase start`, `supabase db reset`, and
+#       KOI_DEV_SUPABASE_SERVICE_ROLE_KEY set to SERVICE_ROLE_KEY from
+#       `supabase status -o env`. Stop the memory stack first; both use
+#       ports 8080 and 5000.
+#
+# Both run with KOI_ENV=development and KOI_AUTH=disabled: the pond in the
+# request path is trusted. Development network only.
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: Backend/Dockerfile.dev
+  image: outdoorkoi-dev
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+x-local-supabase: &local-supabase
+  KOI_ENV: development
+  KOI_AUTH: disabled
+  KOI_STORAGE: supabase
+  SENTRY_DSN: ""
+  SUPABASE_URL: http://host.docker.internal:54321
+  SUPABASE_SERVICEROLE_KEY: ${KOI_DEV_SUPABASE_SERVICE_ROLE_KEY:-}
+
+services:
+  stack:
+    <<: *backend
+    command: ["python", "-m", "koi.dev"]
+    ports:
+      - "8080:8080"
+      - "5000:5000"
+
+  seed:
+    <<: *backend
+    profiles: ["supabase"]
+    command: ["python", "-m", "koi.dev", "--profile", "supabase", "--seed-only"]
+    environment:
+      <<: *local-supabase
+      KOI_DEV_SUPABASE_URL: http://host.docker.internal:54321
+      KOI_DEV_DB_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      KOI_DEV_SUPABASE_SERVICE_ROLE_KEY: ${KOI_DEV_SUPABASE_SERVICE_ROLE_KEY:-}
+
+  api:
+    <<: *backend
+    profiles: ["supabase"]
+    # gunicorn, not python -m koi.api: with KOI_ENV=development that would
+    # also run a poller, and the worker service does the polling.
+    command: ["gunicorn", "-c", "gunicorn.conf.py"]
+    environment: *local-supabase
+    ports:
+      - "8080:8080"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend
+    profiles: ["supabase"]
+    command: ["python", "-m", "koi.worker"]
+    environment: *local-supabase
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  camera:
+    <<: *backend
+    profiles: ["supabase"]
+    command: ["python", "-m", "koi.camera"]
+    environment: *local-supabase
+    ports:
+      - "5000:5000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully

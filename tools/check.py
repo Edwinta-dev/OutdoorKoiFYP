@@ -2,6 +2,15 @@
 
 Usage, from anywhere:
     python tools/check.py backend|firmware|mobile|all [--strict]
+    python tools/check.py database [--strict]
+
+`all` runs backend, firmware and mobile. `database` is separate because it
+rebuilds the local Supabase database (Docker and `supabase start` needed):
+the dump-upgrade rehearsal (tools/db_rehearsal.py, schema.sql plus the
+migrations, then a fresh reset), the SQL tests in Backend/tests/sql, and
+the dev stack's local database profile (python -m koi.dev --profile
+supabase --check). Without a running local stack each step is SKIP, and
+the database gate stays open until it runs.
 
 Each step prints PASS, FAIL or SKIP with its run time. A step whose tool is
 not installed (including an arduino-cli board core) prints
@@ -35,6 +44,10 @@ BACKEND = ROOT / "Backend"
 EMBEDDED = ROOT / "Embedded"
 MOBILE = ROOT / "MobileUI" / "mobile_app"
 BUILD = ROOT / "build"
+
+# The local Supabase stack's database container (project_id in
+# supabase/config.toml), as tools/db_rehearsal.py names it.
+LOCAL_DB_CONTAINER = "supabase_db_OutdoorKoiFYP"
 
 # Sketch folder -> arduino-cli board (FQBN).
 SKETCHES = [
@@ -302,16 +315,51 @@ def check_mobile(r: Runner) -> None:
             return
 
 
+def local_stack_running() -> bool:
+    """True when the local Supabase database container is up."""
+    docker = shutil.which("docker")
+    if not docker:
+        return False
+    proc = subprocess.run([docker, "ps", "--format", "{{.Names}}"], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
+    return proc.returncode == 0 and LOCAL_DB_CONTAINER in proc.stdout.split()
+
+
+def check_database(r: Runner) -> None:
+    steps = ["database: migration rehearsal", "database: SQL tests", "database: dev stack, local database profile"]
+    pytest = python_tool("pytest")
+    for tool, found in (("docker", shutil.which("docker")), ("supabase", shutil.which("supabase")),
+                        ("pytest", pytest)):
+        if not found:
+            for step in steps:
+                r.skip(step, tool)
+            return
+    if not local_stack_running():
+        for step in steps:
+            r.skip(step, "local Supabase stack (run `supabase start`)")
+        return
+    assert pytest is not None
+    r.run(steps[0], [sys.executable, str(ROOT / "tools" / "db_rehearsal.py")], ROOT)
+    r.run(steps[1], pytest + ["-q", "tests/sql"], BACKEND,
+          summarise=lambda out: last_match(PYTEST_COUNTS, out))
+    r.run(steps[2], [sys.executable, "-m", "koi.dev", "--profile", "supabase", "--check"], BACKEND,
+          summarise=lambda out: last_match(r"\d+ passed, \d+ failed", out))
+
+
 SUITES: dict[str, Callable[[Runner], None]] = {
     "backend": check_backend,
     "firmware": check_firmware,
     "mobile": check_mobile,
 }
+# Run only when named: not part of `all`.
+SEPARATE_SUITES: dict[str, Callable[[Runner], None]] = {
+    "database": check_database,
+}
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run the repository checks.")
-    parser.add_argument("suite", choices=[*SUITES, "all"])
+    parser.add_argument("suite", choices=[*SUITES, *SEPARATE_SUITES, "all"])
     parser.add_argument("--strict", action="store_true",
                         help="treat a missing tool as a failure (used by CI)")
     args = parser.parse_args(argv)
@@ -324,8 +372,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             stream.reconfigure(errors="replace")
 
     runner = Runner(strict=args.strict)
+    suites = {**SUITES, **SEPARATE_SUITES}
     for name in (SUITES if args.suite == "all" else [args.suite]):
-        SUITES[name](runner)
+        suites[name](runner)
 
     print("\nSummary")
     for result in runner.results:

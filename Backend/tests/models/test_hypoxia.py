@@ -9,7 +9,16 @@ import itertools
 import pytest
 from pydantic import ValidationError
 
-from conftest import ALGAE_ASSESSMENT, DASHBOARD_PAYLOAD, USER, api_client, make_settings, make_storage
+from conftest import (
+    ALGAE_ASSESSMENT,
+    DASHBOARD_PAYLOAD,
+    PROVENANCE,
+    USER,
+    add_upload,
+    api_client,
+    make_settings,
+    make_storage,
+)
 from koi.api import create_app
 from koi.models.engine import NIGHT_LUX_THRESHOLD
 from koi.models.hypoxia import (
@@ -151,8 +160,12 @@ def test_hypoxia_settings_reject_watch_not_below_high():
 # --- poller and dashboard -----------------------------------------------------
 
 def _app(raw_sensor, **settings):
+    """The API over the fixture pond, with raw_sensor as both the payload's
+    newest values (read by /assessment/all) and a node upload stored now
+    (read by the poller)."""
     storage = make_storage()
     storage.set_dashboard_payload(USER, {**DASHBOARD_PAYLOAD, "raw_sensor": raw_sensor})
+    add_upload(storage, raw_sensor)
     app = create_app(make_settings(**settings), storage=storage)
     app.config["TESTING"] = True
     return app, storage
@@ -172,6 +185,7 @@ def test_hypoxia_computed_each_poll(caplog):
     assert record.koi_fields["hypoxia_raised_by"] == []
 
     storage.set_dashboard_payload(USER, {**DASHBOARD_PAYLOAD, "raw_sensor": _night_reading(27.0)})
+    add_upload(storage, _night_reading(27.0))
     caplog.clear()
     with caplog.at_level("INFO"):
         poller._poll_user(registry, USER, storage.fetch_active_pond_configs()[0])
@@ -207,7 +221,7 @@ def test_hypoxia_dashboard_reads_profile_and_cached_algae():
     app, storage = _app(_night_reading(30.5))
     client = api_client(app)
     client.put(f"/v1/ponds/{USER}/profile", json={"volume_l": 4000.0, "biomass_g": 12000.0, "aeration": True})
-    storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, "status": "Red", "scrub_now": True})
+    storage.push_algae_evaluation(USER, {**ALGAE_ASSESSMENT, **PROVENANCE, "status": "Red", "scrub_now": True})
     hypoxia = client.get(f"/assessment/all/{USER}").get_json()["hypoxia"]
     assert hypoxia["aeration"] is True and hypoxia["algae_high"] is True
     assert hypoxia["level"] == "high" and hypoxia["raised_by"] == ["high_algae"]

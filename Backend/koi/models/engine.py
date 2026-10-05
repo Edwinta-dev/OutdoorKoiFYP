@@ -47,12 +47,15 @@ class SampleVerdict(str, Enum):
     SUSPECT_RANGE = "suspect_range"
     SUSPECT_RATE = "suspect_rate"
     REJECTED = "rejected"
+    # The input carried no reading for the channel (koi/models/sensor_inputs.py).
+    MISSING = "missing"
 
 
 @dataclass
 class ChannelReading:
-    value: float
-    raw_value: float
+    # value is None only for a MISSING channel with no earlier trusted value.
+    value: Optional[float]
+    raw_value: Optional[float]
     verdict: SampleVerdict
     reason: Optional[str] = None
 
@@ -63,11 +66,13 @@ class ChannelReading:
 
 @dataclass
 class RawSample:
+    # None: the channel was not in this input. The other channels are
+    # still used.
     time: datetime
-    ph: float
-    tds: float
-    temp_c: float
-    lux: float
+    ph: Optional[float]
+    tds: Optional[float]
+    temp_c: Optional[float]
+    lux: Optional[float]
 
 
 @dataclass
@@ -132,7 +137,17 @@ class SensorGate:
         self._last_sample_time = raw.time
         return GatedSample(raw.time, channels)
 
-    def _validate_tds(self, value: float, hours, time: datetime) -> ChannelReading:
+    def _missing(self, channel) -> ChannelReading:
+        """No reading for the channel: not trusted, the last trusted value
+        (if any) stands in, and the stale-run count is left as it was."""
+        return ChannelReading(
+            self._last_trusted.get(channel), None, SampleVerdict.MISSING,
+            f"{channel.value} missing from this reading - last trusted value kept.",
+        )
+
+    def _validate_tds(self, value: Optional[float], hours, time: datetime) -> ChannelReading:
+        if value is None:
+            return self._missing(SensorChannel.TDS)
         if value < _TDS_OUT_OF_WATER_THRESHOLD:
             return ChannelReading(
                 self._last_trusted.get(SensorChannel.TDS, value),
@@ -143,7 +158,9 @@ class SensorGate:
             )
         return self._validate_channel(SensorChannel.TDS, value, hours, time)
 
-    def _validate_channel(self, channel, value: float, hours, time: datetime) -> ChannelReading:
+    def _validate_channel(self, channel, value: Optional[float], hours, time: datetime) -> ChannelReading:
+        if value is None:
+            return self._missing(channel)
         lo, hi, max_rate = _BOUNDS[channel]
 
         if value < lo or value > hi:
@@ -563,26 +580,35 @@ class WaterChemistryEngine:
         gated = self._gate.validate(raw)
         warnings = [c.reason for c in gated.channels.values() if c.reason]
 
-        if self._last_ingest_time is not None:
-            hours = (raw.time - self._last_ingest_time).total_seconds() / 3600.0
-            if hours > 0:
-                self._advance_pools(
-                    hours,
-                    gated.temp.value,
-                    gated.lux.value if gated.lux.is_trusted else None,
-                )
-        self._last_ingest_time = raw.time
+        temp_c = gated.temp.value
+        if temp_c is None and self._last_ingest_time is not None:
+            # No water temperature has ever been read, so the pools cannot
+            # be stepped; the interval is stepped by the first input that
+            # brings one.
+            warnings.append("No water temperature yet - nitrogen pools not advanced.")
+        else:
+            if self._last_ingest_time is not None and temp_c is not None:
+                hours = (raw.time - self._last_ingest_time).total_seconds() / 3600.0
+                if hours > 0:
+                    self._advance_pools(
+                        hours,
+                        temp_c,
+                        gated.lux.value if gated.lux.is_trusted else None,
+                    )
+            self._last_ingest_time = raw.time
         self._prune_daily(raw.time)
 
         day = self._day_for(raw.time)
-        if gated.ph.is_trusted and gated.lux.is_trusted:
-            day.trusted_ph.append(gated.ph.value)
-            day.trusted_lux.append(gated.lux.value)
-            if gated.lux.value < NIGHT_LUX_THRESHOLD:
-                day.night_ph.append(gated.ph.value)
-        if gated.tds.is_trusted:
-            day.trusted_tds.append(gated.tds.value)
-            self._last_tds_ppm = gated.tds.value
+        # A trusted reading always carries its value.
+        ph, lux, tds = gated.ph.value, gated.lux.value, gated.tds.value
+        if gated.ph.is_trusted and gated.lux.is_trusted and ph is not None and lux is not None:
+            day.trusted_ph.append(ph)
+            day.trusted_lux.append(lux)
+            if lux < NIGHT_LUX_THRESHOLD:
+                day.night_ph.append(ph)
+        if gated.tds.is_trusted and tds is not None:
+            day.trusted_tds.append(tds)
+            self._last_tds_ppm = tds
 
         return warnings
 
