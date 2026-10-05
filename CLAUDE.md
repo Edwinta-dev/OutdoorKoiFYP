@@ -9,6 +9,9 @@ the working rules for agents.
   firmware compile SKIPs are expected; CI runs them with --strict. After
   pushing, confirm with `gh run list`.
 - One issue per commit (or a small series), message `issue #N: <summary>`.
+- Mobile goldens are Linux-only and `check.py` skips them on Windows: after
+  a visual change run `python tools/update_goldens.py` (Docker), review the
+  PNGs, and never commit Windows-rendered or per-platform goldens.
 
 ## Git
 - Work on `automation/outdoor-koi`. Never push to `main`, never force-push.

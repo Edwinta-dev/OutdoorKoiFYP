@@ -179,3 +179,33 @@ reset`), the SQL tests in `Backend/tests/sql`, and `python -m koi.dev
 rebuilds the local database. Without Docker, the Supabase CLI or a running
 local stack every step is SKIP, and the database checks remain to be run.
 CI runs it in the `database` job (`.github/workflows/ci.yml`).
+
+## Mobile golden images
+
+`MobileUI/mobile_app/test/goldens_test.dart` compares widgets with the PNGs
+in `MobileUI/mobile_app/test/goldens/`: the three dashboard outcome cards,
+the feeding log sheet, and the shared design-system components in light and
+dark themes at text scale 1.0 and 1.6. The comparison allows 0.5 % of pixels
+to differ (`test/flutter_test_config.dart`).
+
+The images are recorded and checked on Linux only, because CI runs on
+Linux and Windows draws text differently by 3-6 % of pixels. On Windows the
+golden file is skipped, so `python tools/check.py mobile` passes there even
+when the goldens are out of date; CI and the command below are what check
+them. After an intended visual change, from the repository root with Docker
+running:
+
+```
+python tools/update_goldens.py            # re-record test/goldens/*.png
+python tools/update_goldens.py --check    # compare only, as CI does
+git diff --stat MobileUI/mobile_app/test/goldens
+```
+
+The script reads the Flutter version from the `flutter-version` pin in
+`.github/workflows/ci.yml` and runs the golden tests in a Linux container
+with exactly that version (image `koi-flutter:<version>`, built on first use
+from `tools/flutter-linux.Dockerfile`; the first build takes a few minutes
+and the image is about 4 GB). The container sees the app read-only and works on a copy without
+`build/` and `.dart_tool/`, so re-recording changes only the PNGs. Look at
+each changed image before committing it. To move to a new Flutter version,
+change the pin in `ci.yml` and re-record; the next run builds the new image.
