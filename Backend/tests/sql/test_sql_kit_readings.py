@@ -49,6 +49,23 @@ def test_kit_sql_rejects_invalid_values(db, field, value):
         db.execute(f"insert into public.kit_readings (pond, {field}) values (9430, %s)", (value,))
 
 
+def test_kit_sql_readings_follow_a_renumbered_pond_and_block_its_deletion(db):
+    """As pond_profile and camera_config: on update cascade, on delete no action."""
+    from psycopg.errors import ForeignKeyViolation
+
+    db.execute("insert into public.kit_readings (pond, ammonia_mg_l) values (9430, 0.25) returning id")
+    reading = db.fetchone()["id"]
+    db.execute('update public."UserData" set "userID" = 9431 where "userID" = 9430')
+    db.execute("select pond from public.kit_readings where id = %s", (reading,))
+    assert db.fetchone()["pond"] == 9431
+    db.execute("savepoint before_delete")
+    with pytest.raises(ForeignKeyViolation):
+        db.execute('delete from public."UserData" where "userID" = 9431')
+    db.execute("rollback to savepoint before_delete")
+    db.execute("select count(*) as n from public.kit_readings where id = %s", (reading,))
+    assert db.fetchone()["n"] == 1
+
+
 def test_kit_sql_backend_only_access_and_index(db):
     db.execute("select relrowsecurity from pg_class where oid = 'public.kit_readings'::regclass")
     assert db.fetchone()["relrowsecurity"]
