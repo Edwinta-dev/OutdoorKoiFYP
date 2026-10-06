@@ -31,7 +31,7 @@ baseline_reset = "mask_changed". The decision uses only stored rows, so
 it holds across service restarts. If the mask cannot be read the frame
 is analysed over the whole frame and stored without a mask_version.
 
-Quality gate (issue #40, migration 0011, koi/camera/quality.py): every
+Quality gate (issues #40/#90, migrations 0011/0021, koi/camera/quality.py): every
 frame is measured (V mean and spread, clipped fraction, variance of the
 Laplacian) and the versioned result is stored in imageTable.quality. A
 failed frame is stored and shown, but the state machine skips it: its row
@@ -219,10 +219,12 @@ def discard_objects(bucket: str, paths: list[str]) -> None:
 # Helper Function: Insert Current Reading Record
 def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
                       mask_version: int | None = None, baseline_reset: str | None = None,
-                      frame_quality: dict | None = None, thumbnail_path: str | None = None):
+                      frame_quality: dict | None = None, thumbnail_path: str | None = None,
+                      gcc: float | None = None, colour: dict | None = None):
     """Raises StorageError when the row cannot be written."""
     _storage().insert_image(user_id, green_ratio, state, public_url, mask_version=mask_version,
-                            baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path)
+                            baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path,
+                            gcc=gcc, colour=colour)
 
 
 def record_contact(user_id: str, wake: imageSchedule.NextWake) -> None:
@@ -268,7 +270,12 @@ def upload_image():
     try:
         green_ratio = hsvEngine.analyze_image_bytes(file_bytes, polygon=polygon)
         img = quality.decode(file_bytes)
-        frame_quality = quality.assess(img, polygon)
+        gcc, colour = quality.colour_metrics(img, polygon, rows=settings.camera_colour_grid_rows,
+                                             cols=settings.camera_colour_grid_cols)
+        frame_quality = quality.assess(img, polygon, gcc_min=settings.camera_gcc_min,
+                                       gcc_max=settings.camera_gcc_max,
+                                       s_mean_min=settings.camera_s_mean_min,
+                                       s_mean_max=settings.camera_s_mean_max)
     except Exception as e:
         return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
     analysis_time = time.perf_counter() - started
@@ -341,7 +348,7 @@ def upload_image():
         # just stored are removed again.
         try:
             push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset,
-                              frame_quality, thumb_path)
+                              frame_quality, thumb_path, gcc, colour)
         except StorageError:
             discard_objects(bucket, [filename] + ([thumb_path] if thumb_path else []))
             raise

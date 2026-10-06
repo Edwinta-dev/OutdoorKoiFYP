@@ -45,6 +45,7 @@ def test_quality_supabase_insert_sends_quality_and_thumbnail_path():
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u")
     [(_, (row,), _)] = client.queries[-1].calls
     assert "quality" not in row and "thumbnail_path" not in row
+    assert "gcc" not in row and "colour" not in row
 
 
 def test_quality_supabase_image_history_selects_quality_and_thumbnail():
@@ -62,3 +63,31 @@ def test_thumbnail_supabase_delete_removes_from_the_bucket():
     with pytest.raises(StorageError) as exc:
         failing.delete_images("frames", ["15/1_photo.jpg"])
     assert exc.value.operation == "delete_images"
+
+
+@pytest.mark.parametrize("adapter", ["memory", "supabase"])
+def test_colour_insert_sends_optional_observations(adapter):
+    storage, client = (MemoryStorage(), None) if adapter == "memory" else supabase_storage()
+    colour = {"version": 1, "exg": 0.5, "r": 0.4, "g": 0.4, "b": 0.4,
+              "grid": {"rows": 1, "cols": 1, "gcc": [1 / 3]}}
+    storage.insert_image(15, 0.1, ["base", 0.1], "new", gcc=1 / 3, colour=colour)
+    if isinstance(storage, MemoryStorage):
+        row = storage.fetch_image_history(15)[0]
+    else:
+        [(_, (row,), _)] = client.queries[-1].calls
+    assert row["gcc"] == 1 / 3 and row["colour"] == colour
+
+
+def test_colour_memory_legacy_rows_load_with_null_observations():
+    storage = MemoryStorage()
+    storage.insert_image(15, 0.1, "base", "old")
+    assert storage.fetch_image_history(15)[0]["gcc"] is None
+    assert storage.fetch_image_history(15)[0]["colour"] is None
+
+
+def test_colour_supabase_history_and_latest_select_observations():
+    storage, client = supabase_storage(data={"imageTable": []})
+    for read in (lambda: storage.fetch_image_by_id(15, 1), lambda: storage.fetch_image_history(15)):
+        read()
+        [select] = [args[0] for method, args, _ in client.queries[-1].calls if method == "select"]
+        assert "gcc" in select and "colour" in select

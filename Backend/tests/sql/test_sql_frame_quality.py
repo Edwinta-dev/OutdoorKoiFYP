@@ -42,12 +42,20 @@ def _connect() -> Any:
 def conn() -> Iterator[Any]:
     c = _connect()
     with c.cursor() as cur:
-        cur.execute("select to_regprocedure('public.image_quality_status(jsonb)') is not null as ok")
+        cur.execute("""
+            select to_regprocedure('public.image_quality_status(jsonb)') is not null
+                   and exists (select 1 from information_schema.columns
+                               where table_schema = 'public' and table_name = 'imageTable'
+                                 and column_name in ('gcc', 'colour')
+                               having count(distinct column_name) = 2)
+                   and public.image_quality_status('{"version":2,"status":"pass"}'::jsonb) = 'pass'
+                   as ok
+        """)
         row = cur.fetchone()
     c.rollback()
     if not row["ok"]:
         c.close()
-        pytest.skip("local database is not at the current migrations; run `supabase db reset`")
+        pytest.skip("local database is not at migration 0021; run `supabase db reset`")
     yield c
     c.close()
 
@@ -96,6 +104,8 @@ def test_quality_sql_stores_the_backend_result_and_thumbnail_path(db):
     None,
     {},
     {"version": 2, "status": "pass"},
+    {"version": 2, "status": "fail", "reasons": ["colour_cast"]},
+    {"version": 3, "status": "pass"},
     {"version": 1, "status": "unknown"},
     {"version": 1, "status": "pass"},
     {"version": 1, "status": "fail", "reasons": ["blurred"]},
@@ -147,3 +157,22 @@ def test_quality_sql_adds_no_index(db):
     db.execute("select indexname from pg_indexes where schemaname = 'public' and tablename = 'imageTable' "
                "order by indexname")
     assert [r["indexname"] for r in db.fetchall()] == ["idx_imagetable_user_time", "imageTable_pkey"]
+
+
+def test_colour_sql_legacy_insert_has_null_observations(db):
+    db.execute(INSERT + ") values (%s, 0.2, 'base', 'old') returning gcc, colour", (POND,))
+    assert db.fetchone() == {"gcc": None, "colour": None}
+
+
+def test_colour_sql_stores_valid_backend_metrics(db):
+    img = np.full((12, 12, 3), 120, dtype=np.uint8)
+    gcc, colour = quality.colour_metrics(img)
+    result = quality.assess(img)
+    db.execute(INSERT + ", gcc, colour, quality) values (%s, 0.1, 'base', 'new', %s, %s, %s) "
+               "returning gcc, colour, public.image_quality_status(quality) as status",
+               (POND, gcc, Jsonb(colour), Jsonb(result)))
+    row = db.fetchone()
+    assert row["gcc"] == pytest.approx(1 / 3)
+    assert row["colour"] == colour and row["status"] == "pass"
+    rows = _as_role(db, "anon", 'select gcc, colour from public."imageTable" where "user_ID" = %s', (POND,))
+    assert any(r["colour"] == colour for r in rows)

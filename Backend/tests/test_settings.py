@@ -9,6 +9,35 @@ from koi.settings import Settings
 ENV_NAMES = ["KOI_ENV", "SUPABASE_URL", "SUPABASE_SERVICEROLE_KEY", "KOI_TIMEZONE",
              "KOI_POLL_INTERVAL_MINUTES", "KOI_CORS_ORIGINS", "POND_IMAGE_BUCKET",
              "DEVICE_TOKEN", "TEST_MODE", "KOI_STORAGE", "KOI_WORKER_THREADS"]
+ENV_NAMES += ["CAMERA_COLOUR_GRID_ROWS", "CAMERA_COLOUR_GRID_COLS", "CAMERA_GCC_MIN", "CAMERA_GCC_MAX",
+              "CAMERA_S_MEAN_MIN", "CAMERA_S_MEAN_MAX"]
+
+
+def test_camera_colour_settings_defaults_and_environment(clean_env):
+    s = Settings(_env_file=None)
+    assert (s.camera_colour_grid_rows, s.camera_colour_grid_cols) == (3, 3)
+    assert (s.camera_gcc_min, s.camera_gcc_max) == (0.30, 0.45)
+    assert (s.camera_s_mean_min, s.camera_s_mean_max) == (0, 200)
+    for name, value in {"CAMERA_COLOUR_GRID_ROWS": "2", "CAMERA_COLOUR_GRID_COLS": "4",
+                        "CAMERA_GCC_MIN": "0.2", "CAMERA_GCC_MAX": "0.6",
+                        "CAMERA_S_MEAN_MIN": "10", "CAMERA_S_MEAN_MAX": "240"}.items():
+        clean_env.setenv(name, value)
+    s = Settings(_env_file=None)
+    assert (s.camera_colour_grid_rows, s.camera_colour_grid_cols) == (2, 4)
+    assert (s.camera_gcc_min, s.camera_gcc_max) == (0.2, 0.6)
+    assert (s.camera_s_mean_min, s.camera_s_mean_max) == (10, 240)
+
+
+@pytest.mark.parametrize("values", [
+    {"camera_colour_grid_rows": 0}, {"camera_colour_grid_cols": -1},
+    {"camera_gcc_min": -0.1}, {"camera_gcc_max": 1.1},
+    {"camera_gcc_min": 0.6}, {"camera_gcc_max": float("nan")},
+    {"camera_s_mean_min": -1}, {"camera_s_mean_max": 256},
+    {"camera_s_mean_min": 201}, {"camera_s_mean_max": float("inf")},
+])
+def test_camera_colour_settings_reject_invalid_bands_and_grid(clean_env, values):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **values)
 
 
 @pytest.fixture

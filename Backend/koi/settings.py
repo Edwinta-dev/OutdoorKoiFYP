@@ -112,6 +112,30 @@ class Settings(BaseSettings):
     # Feature flag: short fixed camera sleep times for bench testing.
     test_mode: bool = Field(default=False, validation_alias=AliasChoices("TEST_MODE", "test_mode"))
 
+    # Colour metrics and provisional colour-cast band (issue #90).
+    camera_colour_grid_rows: int = Field(
+        default=3, gt=0, validation_alias=AliasChoices("CAMERA_COLOUR_GRID_ROWS", "camera_colour_grid_rows"))
+    camera_colour_grid_cols: int = Field(
+        default=3, gt=0, validation_alias=AliasChoices("CAMERA_COLOUR_GRID_COLS", "camera_colour_grid_cols"))
+    camera_gcc_min: float = Field(
+        default=0.30, ge=0, le=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("CAMERA_GCC_MIN", "camera_gcc_min"))
+    camera_gcc_max: float = Field(
+        default=0.45, ge=0, le=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("CAMERA_GCC_MAX", "camera_gcc_max"))
+    camera_s_mean_min: float = Field(
+        default=0.0, ge=0, le=255, allow_inf_nan=False,
+        validation_alias=AliasChoices("CAMERA_S_MEAN_MIN", "camera_s_mean_min"))
+    camera_s_mean_max: float = Field(
+        default=200.0, ge=0, le=255, allow_inf_nan=False,
+        validation_alias=AliasChoices("CAMERA_S_MEAN_MAX", "camera_s_mean_max"))
+
+    @model_validator(mode="after")
+    def ordered_colour_bands(self) -> Settings:
+        if self.camera_gcc_min > self.camera_gcc_max or self.camera_s_mean_min > self.camera_s_mean_max:
+            raise ValueError("Camera colour bands must have minimum <= maximum")
+        return self
+
     # Camera state machine (issue #38): consecutive frames with a green-ratio
     # rise above 0.05 to enter the dynamic schedule, consecutive stable
     # frames to leave it, and the rise levels (comma separated, ascending)

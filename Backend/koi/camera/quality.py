@@ -1,8 +1,8 @@
 """
 koi.camera.quality
 
-Frame quality gate and thumbnails for the camera service (issue #40,
-migration 0011).
+Frame quality gate, colour observations and thumbnails (issues #40/#90,
+migrations 0011/0021).
 
 Every uploaded frame is measured over the pixels the green ratio is
 computed over (the pond's water mask, or the whole frame):
@@ -23,6 +23,7 @@ A frame fails, with one reason code per rule it breaks, when:
   too_bright   v_mean > V_MEAN_MAX
   clipped      clipped_fraction > CLIPPED_FRACTION_MAX
   blurred      blur_judged and laplacian_var < BLUR_LAPLACIAN_MIN
+  colour_cast  unclipped mean GCC or mean HSV saturation outside its band
 
 The thresholds are starting values chosen against synthetic frames, not
 yet checked against real ESP32-CAM frames from the pond; the measured
@@ -31,10 +32,10 @@ can be re-judged later.
 
 The stored result (imageTable.quality, jsonb) is versioned:
 
-  {"version": 1, "status": "pass" | "fail", "reasons": [...],
+  {"version": 2, "status": "pass" | "fail", "reasons": [...],
    "metrics": {...above...}, "thresholds": {...}}
 
-Readers go through status_of(): a null column (every row stored before
+Readers accept versions 1 and 2 through status_of(): a null column (every row stored before
 migration 0011), a malformed value or an unknown version is "unknown",
 never "pass". A failed frame is stored and shown, but does not move the
 camera's baseline or state counters and is left out of the algae fit;
@@ -50,7 +51,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-QUALITY_VERSION = 1
+QUALITY_VERSION = 2
 
 PASS = "pass"
 FAIL = "fail"
@@ -61,7 +62,8 @@ TOO_DARK = "too_dark"
 TOO_BRIGHT = "too_bright"
 CLIPPED = "clipped"
 BLURRED = "blurred"
-REASONS = (TOO_DARK, TOO_BRIGHT, CLIPPED, BLURRED)
+COLOUR_CAST = "colour_cast"
+REASONS = (TOO_DARK, TOO_BRIGHT, CLIPPED, BLURRED, COLOUR_CAST)
 
 # Thresholds (V is 0..255)
 V_MEAN_MIN = 40.0
@@ -71,17 +73,24 @@ CLIP_HIGH_V = 250
 CLIPPED_FRACTION_MAX = 0.25
 DETAIL_MIN_V_STD = 8.0
 BLUR_LAPLACIAN_MIN = 5.0
+GCC_MIN = 0.30
+GCC_MAX = 0.45
+S_MEAN_MIN = 0.0
+S_MEAN_MAX = 200.0
 
 THUMBNAIL_WIDTH = 320
 THUMBNAIL_JPEG_QUALITY = 80
 
 
-def thresholds() -> dict:
+def thresholds(gcc_min: float = GCC_MIN, gcc_max: float = GCC_MAX,
+               s_mean_min: float = S_MEAN_MIN, s_mean_max: float = S_MEAN_MAX) -> dict:
     return {
         "v_mean_min": V_MEAN_MIN, "v_mean_max": V_MEAN_MAX,
         "clip_low_v": CLIP_LOW_V, "clip_high_v": CLIP_HIGH_V,
         "clipped_fraction_max": CLIPPED_FRACTION_MAX,
         "detail_min_v_std": DETAIL_MIN_V_STD, "blur_laplacian_min": BLUR_LAPLACIAN_MIN,
+        "gcc_min": gcc_min, "gcc_max": gcc_max,
+        "s_mean_min": s_mean_min, "s_mean_max": s_mean_max,
     }
 
 
@@ -105,14 +114,55 @@ def _region(shape: tuple, polygon: list | None) -> np.ndarray | None:
     return region > 0
 
 
-def assess(img: np.ndarray, polygon: list | None = None) -> dict:
+def colour_means(img: np.ndarray, polygon: list | None = None) -> dict:
+    """Means over unclipped mask pixels. RGB is scaled by 255; ExG maps
+    its theoretical -2..2 range to 0..1. No usable pixels yields nulls."""
+    v = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[..., 2]
+    usable = (v > CLIP_LOW_V) & (v < CLIP_HIGH_V)
+    inside = _region(img.shape, polygon)
+    if inside is not None:
+        usable &= inside
+    rgb = img[..., ::-1][usable].astype(np.float64) / 255.0
+    if not rgb.size:
+        return dict.fromkeys(("gcc", "exg", "r", "g", "b"))
+    r, g, b = rgb.T
+    return {"gcc": float((g / (r + g + b)).mean()),
+            "exg": float(((2 * g - r - b + 2) / 4).mean()),
+            "r": float(r.mean()), "g": float(g.mean()), "b": float(b.mean())}
+
+
+def colour_metrics(img: np.ndarray, polygon: list | None = None,
+                   rows: int = 3, cols: int = 3) -> tuple[float | None, dict]:
+    """Frame means and an unmasked row-major GCC grid, including rim/floor.
+    Empty or entirely clipped cells have null GCC, never an invented zero."""
+    if rows < 1 or cols < 1:
+        raise ValueError("Colour grid dimensions must be positive.")
+    means = colour_means(img, polygon)
+    height, width = img.shape[:2]
+    grid = []
+    for row in range(rows):
+        for col in range(cols):
+            cell = img[row * height // rows:(row + 1) * height // rows,
+                       col * width // cols:(col + 1) * width // cols]
+            grid.append(colour_means(cell)["gcc"] if cell.size else None)
+    gcc = means.pop("gcc")
+    return gcc, {"version": 1, **means, "grid": {"rows": rows, "cols": cols, "gcc": grid}}
+
+
+def assess(img: np.ndarray, polygon: list | None = None, *,
+           gcc_min: float = GCC_MIN, gcc_max: float = GCC_MAX,
+           s_mean_min: float = S_MEAN_MIN, s_mean_max: float = S_MEAN_MAX) -> dict:
     """The versioned quality result for a decoded BGR frame, measured over
     polygon (the water mask, fractions of the frame) or the whole frame."""
-    v = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[..., 2]
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    s, v = hsv[..., 1], hsv[..., 2]
     lap = cv2.Laplacian(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.CV_64F)
     inside = _region(img.shape, polygon)
     if inside is not None:
-        v, lap = v[inside], lap[inside]
+        s, v, lap = s[inside], v[inside], lap[inside]
+    # Saturation is a colour mean too: ignore crushed and blown pixels just
+    # as colour_means() does for GCC, ExG and RGB.
+    usable_s = s[(v > CLIP_LOW_V) & (v < CLIP_HIGH_V)]
     v = v.astype(np.float64).ravel()
     lap = lap.ravel()
 
@@ -123,6 +173,8 @@ def assess(img: np.ndarray, polygon: list | None = None) -> dict:
     clipped_fraction = clipped_low + clipped_high
     laplacian_var = float(lap.var())
     blur_judged = v_std >= DETAIL_MIN_V_STD
+    gcc = colour_means(img, polygon)["gcc"]
+    s_mean = float(usable_s.mean()) if usable_s.size else None
 
     reasons = []
     if v_mean < V_MEAN_MIN:
@@ -133,6 +185,9 @@ def assess(img: np.ndarray, polygon: list | None = None) -> dict:
         reasons.append(CLIPPED)
     if blur_judged and laplacian_var < BLUR_LAPLACIAN_MIN:
         reasons.append(BLURRED)
+    if ((gcc is not None and not gcc_min <= gcc <= gcc_max)
+            or (s_mean is not None and not s_mean_min <= s_mean <= s_mean_max)):
+        reasons.append(COLOUR_CAST)
 
     height, width = img.shape[:2]
     return {
@@ -150,8 +205,10 @@ def assess(img: np.ndarray, polygon: list | None = None) -> dict:
             "width": width,
             "height": height,
             "pixels": int(v.size),
+            "gcc": gcc,
+            "s_mean": round(s_mean, 2) if s_mean is not None else None,
         },
-        "thresholds": thresholds(),
+        "thresholds": thresholds(gcc_min, gcc_max, s_mean_min, s_mean_max),
     }
 
 
@@ -161,7 +218,8 @@ def status_of(row_or_quality: Any) -> str:
     quality = row_or_quality
     if isinstance(row_or_quality, dict) and "quality" in row_or_quality:
         quality = row_or_quality["quality"]
-    if not isinstance(quality, dict) or quality.get("version") != QUALITY_VERSION:
+    if not isinstance(quality, dict) or type(quality.get("version")) not in (int, float) \
+            or quality.get("version") not in (1, QUALITY_VERSION):
         return UNKNOWN
     status = quality.get("status")
     return status if status in (PASS, FAIL) else UNKNOWN

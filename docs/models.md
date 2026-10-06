@@ -98,6 +98,62 @@ against the newest frame that did not fail (searching the last 50 rows,
 0.15 as for a first frame). Failed frames are also left out of the algae
 fit (`algae_engine.parse_image_rows`).
 
+## Camera colour observations and cast gate (issue #90)
+
+Files: `Backend/koi/camera/quality.py`, `Backend/koi/settings.py`.
+Migration `0021_camera_colour.sql` adds nullable `imageTable.gcc real` and
+`colour jsonb`. Legacy rows load with null observations; no backfill is
+invented. The HSV band, `green_ratio` computation and camera state machine
+input remain unchanged, pending replay evidence in #92. The camera's
+upload request, authentication and reply schema remain unchanged.
+
+GCC (green chromatic coordinate) is the **mean of each pixel's
+G / (R + G + B)**, rather than the ratio of channel means. Neutral grey
+has GCC 1/3; uniformly scaling brightness preserves GCC. This reduces
+illumination sensitivity without removing sensitivity to white balance.
+The frame means use the same water-mask pixels as green_ratio, or the
+whole frame when there is no mask, excluding pixels with HSV V <= 5 or
+V >= 250 (`CLIP_LOW_V` / `CLIP_HIGH_V`, unchanged).
+
+The version 1 `colour` object holds mean `r`, `g`, `b` (channel intensities
+divided by 255) and mean normalised ExG. For those scaled channels,
+ExG = 2g - r - b spans -2..2, so the stored 0..1 value is
+**(2g - r - b + 2) / 4**. Neutral grey is 0.5. Means with no usable pixels
+are null, including GCC; no zero or NaN is substituted.
+
+`colour.grid = {"rows": 3, "cols": 3, "gcc": [nine values]}` records
+per-cell GCC over the **whole frame**, ignoring the water mask but excluding
+clipped pixels. Cells are row-major (top-left index 0, bottom-right index
+8), with integer boundaries `i * dimension // count` so odd frame sizes
+retain every pixel. Empty or entirely clipped cells store null. The grid
+includes floor and rim as potential neutral references for #92. Its size
+comes from `CAMERA_COLOUR_GRID_ROWS` / `CAMERA_COLOUR_GRID_COLS` (default 3
+each), and the actual dimensions are stored with every frame.
+
+Quality result version changes **1 -> 2** to add `colour_cast`; Python and
+SQL readers continue recognising version 1. A frame fails this rule when
+its unclipped mean GCC lies outside the inclusive configured band, or
+its mean HSV saturation over all mask pixels (including clipped pixels,
+as with the existing exposure metrics) lies outside its inclusive band.
+All-clipped frames have no GCC to judge and still fail the existing
+clipping rule. Metrics `gcc` and `s_mean`, plus the thresholds in force,
+are stored in every quality result. Rejected frames keep the previous
+trusted state and remain excluded from the algae fit.
+
+| Setting / new default | Starting value | Stored threshold |
+|---|---|---|
+| `CAMERA_GCC_MIN` / `GCC_MIN` | 0.30 | `gcc_min` |
+| `CAMERA_GCC_MAX` / `GCC_MAX` | 0.45 | `gcc_max` |
+| `CAMERA_S_MEAN_MIN` / `S_MEAN_MIN` | 0 (0..255 scale) | `s_mean_min` |
+| `CAMERA_S_MEAN_MAX` / `S_MEAN_MAX` | 200 | `s_mean_max` |
+
+These are wide, provisional bands, not thresholds fitted to the four
+normal pond frames in the issue. Their GCC was 0.360..0.366 despite large
+green_ratio changes; the dim green-cast frame's GCC was 0.546. The upper
+saturation bound initially catches highly saturated casts; the lower
+bound allows neutral grey. Per-pond replay in #92 must establish useful
+thresholds. No existing model numeric constant changed.
+
 ## Local calendar days in the chemistry engine (issue #15)
 
 No numeric constant changed. `DAILY_RETENTION_DAYS` is still 30, and the

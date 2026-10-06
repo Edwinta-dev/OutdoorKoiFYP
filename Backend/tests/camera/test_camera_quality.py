@@ -79,11 +79,11 @@ def _decode(data):
 
 def test_quality_good_frame_passes_with_its_metrics():
     result = quality.assess(_decode(good_frame()))
-    assert result["version"] == quality.QUALITY_VERSION == 1
+    assert result["version"] == quality.QUALITY_VERSION == 2
     assert result["status"] == "pass" and result["reasons"] == []
     m = result["metrics"]
     assert set(m) == {"v_mean", "v_std", "clipped_low", "clipped_high", "clipped_fraction", "laplacian_var",
-                      "blur_judged", "width", "height", "pixels"}
+                      "blur_judged", "width", "height", "pixels", "gcc", "s_mean"}
     assert 100 < m["v_mean"] < 140 and m["v_std"] > quality.DETAIL_MIN_V_STD
     assert m["clipped_fraction"] == 0
     assert m["laplacian_var"] > 10 * quality.BLUR_LAPLACIAN_MIN
@@ -141,7 +141,10 @@ def test_quality_is_measured_inside_the_water_mask():
     (None, "unknown"),
     ({}, "unknown"),
     ("pass", "unknown"),
-    ({"version": 2, "status": "pass"}, "unknown"),
+    ({"version": 3, "status": "pass"}, "unknown"),
+    ({"version": 2, "status": "pass"}, "pass"),
+    ({"version": 2, "status": "fail"}, "fail"),
+    ({"version": True, "status": "pass"}, "unknown"),
     ({"version": 1, "status": "maybe"}, "unknown"),
     ({"version": 1, "status": "unknown"}, "unknown"),
     ({"version": 1, "status": "pass"}, "pass"),
@@ -212,7 +215,7 @@ def test_quality_result_is_stored_on_every_frame():
     post(_client(storage), good_frame())
     post(_client(storage), dark_frame())
     good, dark = storage.rows("imageTable")
-    assert good["quality"]["status"] == "pass" and good["quality"]["version"] == 1
+    assert good["quality"]["status"] == "pass" and good["quality"]["version"] == 2
     assert dark["quality"]["status"] == "fail" and dark["quality"]["reasons"] == ["too_dark"]
     assert dark["quality"]["metrics"]["v_mean"] < quality.V_MEAN_MIN
     assert dark["imageURL"].startswith("memory://")  # stored and shown like any frame
@@ -421,7 +424,9 @@ def test_quality_failed_frames_are_left_out_of_the_algae_fit():
          "quality": {"version": 1, "status": "fail", "reasons": ["too_bright"]}},
         {"created_at": "2026-08-01T04:00:00+00:00", "green_ratio": 0.12, "current_state": ["base", 0.104],
          "quality": {"version": 1, "status": "pass", "reasons": []}},
+        {"created_at": "2026-08-01T05:00:00+00:00", "green_ratio": 0.95, "current_state": ["base", 0.104],
+         "quality": {"version": 2, "status": "fail", "reasons": ["colour_cast"]}},
         {"created_at": "2026-08-01T06:00:00+00:00", "green_ratio": 0.13, "current_state": ["base", 0.11],
-         "quality": {"version": 2, "status": "fail"}},  # unknown version: kept, as "unknown"
+         "quality": {"version": 3, "status": "fail"}},  # unknown version: kept, as "unknown"
     ]
     assert [s.green_ratio for s in ae.parse_image_rows(rows)] == [0.10, 0.12, 0.13]

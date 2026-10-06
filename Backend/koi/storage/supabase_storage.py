@@ -479,7 +479,8 @@ class SupabaseStorage:
 
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
-                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
+                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
         with _operation("insert_image"):
             row = {
                 "user_ID": user_id,
@@ -490,6 +491,8 @@ class SupabaseStorage:
                 "baseline_reset": baseline_reset,
                 "quality": quality,
                 "thumbnail_path": thumbnail_path,
+                "gcc": gcc,
+                "colour": colour,
             }
             self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
