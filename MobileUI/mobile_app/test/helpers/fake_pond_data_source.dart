@@ -40,6 +40,7 @@ class FakePondDataSource extends PondDataSource {
     List<String>? speciesNames,
     this.userProfileResponse = const {'ClosestStations': null},
     this.frame,
+    this.frames = const [],
     this.frameError,
     this.assessment,
     this.evaporationForecast,
@@ -63,6 +64,7 @@ class FakePondDataSource extends PondDataSource {
   List<String> speciesNames;
   Map<String, dynamic> userProfileResponse;
   PondCameraFrame? frame;
+  List<PondCameraFrame> frames;
   String? frameError;
   WaterChemistryAssessment? assessment;
   EvaporationForecast? evaporationForecast;
@@ -195,6 +197,10 @@ class FakePondDataSource extends PondDataSource {
     {'userId': userId},
     (frame: frame, error: frameError),
   );
+
+  @override
+  Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day) =>
+      _answer('fetchFramesForDay', {'userId': userId, 'day': day}, frames);
 
   @override
   Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) =>

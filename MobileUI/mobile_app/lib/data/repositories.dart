@@ -28,6 +28,7 @@ abstract interface class PondProfileRepository {
 }
 
 abstract interface class CameraFramesRepository {
+  Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day);
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
   );

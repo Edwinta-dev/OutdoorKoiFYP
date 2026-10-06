@@ -27,8 +27,10 @@ class LivePondDataSource extends PondDataSource {
     : api =
           api ??
           DigitalTwinApi(
-            accessToken: () =>
-                (client ?? Supabase.instance.client).auth.currentSession?.accessToken,
+            accessToken: () => (client ?? Supabase.instance.client)
+                .auth
+                .currentSession
+                ?.accessToken,
           );
 
   @override
@@ -89,6 +91,14 @@ class LivePondDataSource extends PondDataSource {
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
   ) => PondCameraStorage.fetchLatestFrame(userId: userId, client: _client);
+
+  @override
+  Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day) =>
+      PondCameraStorage.fetchFramesForDay(
+        userId: userId,
+        day: day,
+        client: _client,
+      );
 
   @override
   Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) =>
