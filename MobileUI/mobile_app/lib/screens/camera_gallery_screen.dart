@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../utils/pond_camera_storage.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/shared/pond_widgets.dart';
+import 'water_mask_editor_screen.dart';
 
 String _time(DateTime? time) {
   if (time == null) return 'Time unknown';
@@ -73,6 +74,15 @@ class _CameraGalleryScreenState extends ConsumerState<CameraGalleryScreen> {
       appBar: AppBar(
         title: const Text('Camera gallery'),
         actions: [
+          IconButton(
+            tooltip: 'Edit water mask',
+            icon: const Icon(Icons.crop_free),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => WaterMaskEditorScreen(userId: widget.userId),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Refresh camera history',
             icon: const Icon(Icons.refresh),

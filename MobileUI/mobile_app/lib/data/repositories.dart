@@ -28,6 +28,8 @@ abstract interface class PondProfileRepository {
 }
 
 abstract interface class CameraFramesRepository {
+  Future<List<List<double>>?> fetchCameraMask(int userId);
+  Future<void> saveCameraMask(int userId, List<List<double>> polygon);
   Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day);
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,

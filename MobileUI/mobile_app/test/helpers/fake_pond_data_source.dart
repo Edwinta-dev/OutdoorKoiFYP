@@ -85,6 +85,16 @@ class FakePondDataSource extends PondDataSource {
 
   final List<FakeCall> calls = [];
 
+  List<List<double>>? cameraMask;
+
+  @override
+  Future<List<List<double>>?> fetchCameraMask(int userId) =>
+      _answer('fetchCameraMask', {'userId': userId}, cameraMask);
+
+  @override
+  Future<void> saveCameraMask(int userId, List<List<double>> polygon) =>
+      _answer('saveCameraMask', {'userId': userId, 'polygon': polygon}, null);
+
   Iterable<FakeCall> callsTo(String name) => calls.where((c) => c.name == name);
 
   Future<T> _answer<T>(String name, Map<String, Object?> args, T value) {

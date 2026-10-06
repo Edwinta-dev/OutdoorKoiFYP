@@ -88,6 +88,23 @@ class LivePondDataSource extends PondDataSource {
   }
 
   @override
+  Future<List<List<double>>?> fetchCameraMask(int userId) async {
+    final data = await api.request('GET', '/v1/ponds/$userId/camera/mask');
+    return (data['mask'] as List?)
+        ?.map(
+          (point) => (point as List).map((v) => (v as num).toDouble()).toList(),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> saveCameraMask(int userId, List<List<double>> polygon) async {
+    await api.request('PUT', '/v1/ponds/$userId/camera/mask', {
+      'polygon': polygon,
+    });
+  }
+
+  @override
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
   ) => PondCameraStorage.fetchLatestFrame(userId: userId, client: _client);
