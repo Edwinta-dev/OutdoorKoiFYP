@@ -108,7 +108,8 @@ LEGACY_PREFIX = "legacy:"
 
 # pondInterventions.event_type -> the engine's event kind.
 ROW_KINDS = {"FEEDING": EventKind.FEEDING, "WATER_CHANGE": EventKind.WATER_CHANGE,
-             "WATER_TOPUP": EventKind.TOP_UP, "ALGAE_SCRUB": EventKind.ALGAL_SCRUB}
+             "WATER_TOPUP": EventKind.TOP_UP, "ALGAE_SCRUB": EventKind.ALGAL_SCRUB,
+             "SALT": EventKind.SALT, "FILTER_CLEAN": EventKind.FILTER_CLEAN}
 
 
 def normalise_event_id(value: object) -> str:
@@ -136,7 +137,8 @@ def event_from_row(row: dict) -> Optional[PondEvent]:
                      volume_percent=_number(row.get("volume_percentage")),
                      volume_litres=_number(row.get("volume_litres")),
                      scrub_type=row.get("algae_method"), food_grams=_number(row.get("food_grams")),
-                     protein_percent=_number(row.get("protein_percentage")))
+                     protein_percent=_number(row.get("protein_percentage")),
+                     salt_grams=_number(row.get("salt_grams")), notes=row.get("notes"))
 
 
 def event_values(event: PondEvent) -> dict:
@@ -144,7 +146,7 @@ def event_values(event: PondEvent) -> dict:
     return {"kind": event.kind.value, "time": event.time.isoformat(),
             "volume_percent": event.volume_percent, "volume_litres": event.volume_litres,
             "scrub_type": event.scrub_type, "food_grams": event.food_grams,
-            "protein_percent": event.protein_percent}
+            "protein_percent": event.protein_percent, "salt_grams": event.salt_grams, "notes": event.notes}
 
 
 def _same_amounts(a: PondEvent, b: PondEvent) -> bool:
@@ -182,10 +184,14 @@ class LedgerEntry:
 
     @classmethod
     def from_dict(cls, d: dict) -> "LedgerEntry":
+        row = dict(d["row"]) if d.get("row") is not None else None
+        if row is not None:
+            row.setdefault("salt_grams", None)
+            row.setdefault("notes", None)
         return cls(event_id=d["event_id"], seq=int(d["seq"]), event=PondEvent.from_dict(d["event"]),
                    model_time=parse_timestamp(d["model_time"]), recorded_at=parse_timestamp(d["recorded_at"]),
                    source=d.get("source", "api"), status=d.get("status", APPLIED), row_id=d.get("row_id"),
-                   row=d.get("row"), revision=int(d.get("revision", 0)), legacy=bool(d.get("legacy", False)))
+                   row=row, revision=int(d.get("revision", 0)), legacy=bool(d.get("legacy", False)))
 
 
 @dataclass

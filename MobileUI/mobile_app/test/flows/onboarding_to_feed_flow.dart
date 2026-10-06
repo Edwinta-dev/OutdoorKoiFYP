@@ -5,11 +5,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile_app/data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_app/data/providers.dart';
+import 'package:mobile_app/data/local_profile_repository.dart';
 import 'package:mobile_app/main.dart';
 import 'package:mobile_app/screens/dashboard_view.dart';
 import 'package:mobile_app/screens/onboarding_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fake_pond_data_source.dart';
 import '../helpers/fixtures.dart';
@@ -30,14 +31,21 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 Future<void> runOnboardingToFeedFlow(WidgetTester tester) async {
-  SharedPreferences.setMockInitialValues({});
+  final local = FakeLocalProfileRepository();
   final fake = FakePondDataSource(
     assessment: Fixtures.assessment(),
     eventAssessment: Fixtures.assessment(),
   );
 
   await tester.pumpWidget(
-    PondDataScope(source: fake, child: const KoiMonitorApp(isOnboarded: false)),
+    ProviderScope(
+      retry: (_, _) => null,
+      overrides: [
+        pondDataSourceProvider.overrideWithValue(fake),
+        localProfileRepositoryProvider.overrideWithValue(local),
+      ],
+      child: const KoiMonitorApp(isOnboarded: false),
+    ),
   );
   await tester.pumpAndSettle();
 
@@ -67,9 +75,8 @@ Future<void> runOnboardingToFeedFlow(WidgetTester tester) async {
   expect(profile['userID'], '7');
   expect(profile['volume'], '1200');
   expect(profile['manualpostallocation'], 18956);
-  final prefs = await SharedPreferences.getInstance();
-  expect(prefs.getBool('isOnboarded'), isTrue);
-  expect(prefs.getString('userID'), '7');
+  expect((await local.load()).isOnboarded, isTrue);
+  expect((await local.load()).pondId, 7);
 
   // --- Dashboard ---
   expect(find.byType(OnboardingScreen), findsNothing);

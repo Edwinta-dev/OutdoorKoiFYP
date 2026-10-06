@@ -102,7 +102,7 @@ def test_scrub_removes_location_email_and_tokens():
         "message": f"failed for owner@example.com with Bearer {token} and {token}",
         "url": "https://user:pass@host.invalid/x?token=abc&volume=1200",
         "headers": [["Authorization", "Bearer x"], ["Accept", "application/json"]],
-        "latency_ms": 12, "volume": 1200, "pond_id": "455", "route": "/assessment/<int:user_id>",
+        "latency_ms": 12, "volume": 1200, "pond_id": "455", "route": "/v1/ponds/<int:user_id>/assessments/chemistry",
     }
     out = scrub(data)
     for key in ("latitude", "longitude", "lat", "lng", "manualpostallocation", "ClosestStations",
@@ -116,7 +116,7 @@ def test_scrub_removes_location_email_and_tokens():
     assert out["url"].endswith(f"?token={FILTERED}&volume=1200")
     assert out["headers"] == [["Authorization", FILTERED], ["Accept", "application/json"]]
     assert (out["latency_ms"], out["volume"], out["pond_id"], out["route"]) == \
-        (12, 1200, "455", "/assessment/<int:user_id>")
+        (12, 1200, "455", "/v1/ponds/<int:user_id>/assessments/chemistry")
 
 
 def test_scrub_text_leaves_ordinary_messages_alone():
@@ -147,7 +147,7 @@ def test_api_unhandled_error_is_reported_without_the_token(transport, monkeypatc
 
     monkeypatch.setattr(storage, "fetch_latest_evaluation", explode)
     token = mint_token()
-    resp = api_client(app, token).get(f"/assessment/{USER}?lat=1.35&lon=103.8")
+    resp = api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry?lat=1.35&lon=103.8")
     assert resp.status_code == 500
     assert transport.events, "the unhandled error was not reported"
     event = transport.events[-1]

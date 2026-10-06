@@ -1,8 +1,9 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../data/local_profile_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> handleImageManagement(
@@ -10,9 +11,8 @@ Future<void> handleImageManagement(
   VoidCallback onImageUpdated,
 ) async {
   // 1. Retrieve the userID stored locally during onboarding
-  final prefs = await SharedPreferences.getInstance();
-  final userId =
-      prefs.getString('userID') ?? prefs.getInt('userID')?.toString() ?? '1';
+  final prefs = await PreferencesProfileRepository().load();
+  final userId = prefs.pondId?.toString() ?? '0';
 
   if (!context.mounted) return;
 
@@ -20,39 +20,42 @@ Future<void> handleImageManagement(
   unawaited(
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: AppColors.of(context).surfaceRaised,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
       ),
       builder: (BuildContext sheetContext) {
         return Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(AppSpace.xxl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Manage Species Image',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
+                style: AppType.style(
+                  color: AppColors.of(context).text,
+                  fontSize: AppType.title,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               // Option A: Pick & Upload / Overwrite Image
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.add_photo_alternate_outlined,
-                  color: Color(0xFF38BDF8),
+                  color: AppColors.of(context).info,
                 ),
-                title: const Text(
+                title: Text(
                   'Upload / Change Image',
-                  style: TextStyle(color: Colors.white),
+                  style: AppType.style(color: AppColors.of(context).text),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Choose from gallery or camera',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                  style: AppType.style(
+                    color: AppColors.of(context).textSecondary,
+                    fontSize: AppType.label,
+                  ),
                 ),
                 onTap: () async {
                   Navigator.pop(sheetContext);
@@ -60,21 +63,24 @@ Future<void> handleImageManagement(
                 },
               ),
 
-              const Divider(color: Colors.white12),
+              Divider(color: AppColors.of(context).outline),
 
               // Option B: Delete Current Image Asset
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.delete_outline,
-                  color: Colors.redAccent,
+                  color: AppColors.of(context).danger,
                 ),
-                title: const Text(
+                title: Text(
                   'Remove Image',
-                  style: TextStyle(color: Colors.redAccent),
+                  style: AppType.style(color: AppColors.of(context).danger),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Clear current custom image storage',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                  style: AppType.style(
+                    color: AppColors.of(context).textSecondary,
+                    fontSize: AppType.label,
+                  ),
                 ),
                 onTap: () async {
                   Navigator.pop(sheetContext);
@@ -112,8 +118,8 @@ Future<void> _pickAndUploadImage(
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (c) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+        builder: (c) => Center(
+          child: CircularProgressIndicator(color: AppColors.of(context).info),
         ),
       ),
     );
@@ -166,8 +172,8 @@ Future<void> _deleteUserImage(
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (c) => const Center(
-          child: CircularProgressIndicator(color: Colors.redAccent),
+        builder: (c) => Center(
+          child: CircularProgressIndicator(color: AppColors.of(context).danger),
         ),
       ),
     );

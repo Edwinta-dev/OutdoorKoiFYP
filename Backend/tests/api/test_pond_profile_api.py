@@ -137,7 +137,7 @@ FEED = {"user_id": USER, "food_grams": 50.0, "protein_percent": 40.0}
 
 def test_profile_fish_settings_in_an_event_body_are_ignored(client, app):
     client.put(url(), json=PROFILE)
-    resp = client.post("/events/feeding", json={**FEED, "fish_type": "Goldfish", "fish_count": 99})
+    resp = client.post(f"/v1/ponds/{USER}/events/feeding", json={**FEED, "fish_type": "Goldfish", "fish_count": 99})
     assert resp.status_code == 200, resp.get_json()
     config = twin(app).chemistry.config
     assert (config.fish_type, config.fish_count) == ("Koi", 7)
@@ -145,7 +145,7 @@ def test_profile_fish_settings_in_an_event_body_are_ignored(client, app):
 
 
 def test_profile_events_without_profile_rows_use_userdata_and_defaults(client, app):
-    client.post("/events/feeding", json={**FEED, "fish_type": "Goldfish", "fish_count": 99})
+    client.post(f"/v1/ponds/{USER}/events/feeding", json={**FEED, "fish_type": "Goldfish", "fish_count": 99})
     config = twin(app).chemistry.config
     userdata = app.extensions["koi_storage"].fetch_pond_config(USER)
     assert config.volume_litres == userdata["volume_litres"]
@@ -153,9 +153,9 @@ def test_profile_events_without_profile_rows_use_userdata_and_defaults(client, a
 
 
 def test_profile_change_reaches_an_existing_twin_and_the_evaporation_forecast(client, app):
-    client.post("/events/feeding", json=FEED)  # the twin exists, on the UserData profile
+    client.post(f"/v1/ponds/{USER}/events/feeding", json=FEED)  # the twin exists, on the UserData profile
     client.put(url(), json=PROFILE)
-    forecast = client.get(f"/forecast/evaporation/{USER}").get_json()
+    forecast = client.get(f"/v1/ponds/{USER}/forecasts/evaporation").get_json()
     assert forecast["volume_litres"] == 4000.0
     assert forecast["assumed_depth_m"] == 0.8
     assert forecast["surface_area_m2"] == pytest.approx(4.0 / 0.8)
@@ -163,10 +163,10 @@ def test_profile_change_reaches_an_existing_twin_and_the_evaporation_forecast(cl
 
 def test_profile_depth_can_be_replaced_for_one_evaporation_forecast(client, app):
     client.put(url(), json=PROFILE)
-    forecast = client.get(f"/forecast/evaporation/{USER}?depth_m=2.0").get_json()
+    forecast = client.get(f"/v1/ponds/{USER}/forecasts/evaporation?depth_m=2.0").get_json()
     assert forecast["assumed_depth_m"] == 2.0 and forecast["surface_area_m2"] == pytest.approx(2.0)
     assert twin(app).evaporation.config.pond_depth_m == 0.8
-    assert client.get(f"/forecast/evaporation/{USER}").get_json()["assumed_depth_m"] == 0.8
+    assert client.get(f"/v1/ponds/{USER}/forecasts/evaporation").get_json()["assumed_depth_m"] == 0.8
 
 
 def test_profile_is_what_the_poller_runs_the_pond_with(app):

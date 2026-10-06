@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/dashboard/solar_outcome_card.dart
 
 import 'package:flutter/material.dart';
@@ -35,165 +37,169 @@ class SolarOutcomeCard extends StatelessWidget {
     final bool isHighUvOrSun = (uvNum >= 6 && isFairSky) || luxNum > 15000;
 
     // 3. Colors & Progress
-    const Color kLuxColor = Color(0xFF50C878); // Bright aquatic cyan
-    const Color kWarningAmber = Colors.amberAccent;
+    final Color kLuxColor = AppColors.of(
+      context,
+    ).healthy; // Bright aquatic cyan
+    final Color kWarningAmber = AppColors.of(context).warning;
     final double exposureProgress = (luxNum / 30000.0).clamp(0.0, 1.0);
 
-    return InkWell(
+    return OutcomeCardShell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        // 1. REMOVE color: const Color(0xFF131B2A)
-        // 2. REMOVE border: Border.all(...)
-        // 3. REMOVE boxShadow: [...]
-        decoration: const BoxDecoration(
-          color:
-              Colors.transparent, // Lets the HUD parent container show through!
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
+      transparent: true,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StatusChip(
+            status: isHighUvOrSun ? PondStatus.warning : PondStatus.healthy,
+          ),
+          const SizedBox(height: AppSpace.md),
 
-            // --- 2. MAIN DIAL + DATA PANEL (LEFT/RIGHT SPLIT) ---
-            Row(
-              children: [
-                // LEFT SIDE: Circular Arc Progress Dial
-                SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CustomPaint(
-                        size: const Size(96, 96),
-                        painter: _MutedArcPainter(
-                          progress: exposureProgress,
-                          strokeColor: isHighUvOrSun
-                              ? kWarningAmber
-                              : kLuxColor,
-                        ),
+          // --- 2. MAIN DIAL + DATA PANEL (LEFT/RIGHT SPLIT) ---
+          AdaptiveRow(
+            minWidth: 300,
+            children: [
+              // LEFT SIDE: Circular Arc Progress Dial
+              SizedBox(
+                width: 96,
+                height: 96,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(96, 96),
+                      painter: _MutedArcPainter(
+                        progress: exposureProgress,
+                        trackColor: AppColors.of(context).outline,
+                        strokeColor: isHighUvOrSun ? kWarningAmber : kLuxColor,
                       ),
+                    ),
 
-                      // Custom Self-Sourced Asset (Algae / Biological icon)
-                      Image.asset(
-                        'lib/assets/seaweed.png', // Dedicated ecosystem asset
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.contain,
-                      ),
-                    ],
-                  ),
+                    // Custom Self-Sourced Asset (Algae / Biological icon)
+                    Image.asset(
+                      'lib/assets/seaweed.png', // Dedicated ecosystem asset
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.contain,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 18),
+              ),
+              const SizedBox(width: AppSpace.xl),
 
-                // RIGHT SIDE: Numerical Metric Displays
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Ambient Lux Reading (Always Shown)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            luxNum.toStringAsFixed(0),
-                            style: TextStyle(
-                              color: isHighUvOrSun ? kWarningAmber : kLuxColor,
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'lx Ambient',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // --- 3. CONDITIONAL ALERT-BY-EXCEPTION ROW ---
-                      if (isHighUvOrSun) ...[
-                        // Displays ONLY when sunlight/UV is strong enough to accelerate algae
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: kWarningAmber.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: kWarningAmber.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.warning_amber_rounded,
-                                color: kWarningAmber,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 5),
-                              Flexible(
-                                child: Text(
-                                  'UV $uvNum • $forecast2hr ',
-                                  style: const TextStyle(
-                                    color: kWarningAmber,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+              // RIGHT SIDE: Numerical Metric Displays
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Ambient Lux Reading (Always Shown)
+                    AdaptiveRow(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          luxNum.toStringAsFixed(0),
+                          style: AppType.style(
+                            color: isHighUvOrSun ? kWarningAmber : kLuxColor,
+                            fontSize: AppType.metric,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                      ] else ...[
-                        // Normal Baseline View (No UV/Forecast redundancy)
-                        Row(
+                        const SizedBox(width: AppSpace.xs),
+                        Text(
+                          'lx Ambient',
+                          style: AppType.style(
+                            color: AppColors.of(context).textMuted,
+                            fontSize: AppType.caption,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+
+                    // --- 3. CONDITIONAL ALERT-BY-EXCEPTION ROW ---
+                    if (isHighUvOrSun) ...[
+                      // Displays ONLY when sunlight/UV is strong enough to accelerate algae
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.sm,
+                          vertical: AppSpace.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kWarningAmber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                          border: Border.all(
+                            color: kWarningAmber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: AdaptiveRow(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF50C878), // Healthy green dot
-                                shape: BoxShape.circle,
-                              ),
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: kWarningAmber,
+                              size: 14,
                             ),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'Algal Photosynthesis Stable',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                            const SizedBox(width: AppSpace.xs),
+                            Flexible(
+                              child: Text(
+                                'UV $uvNum • $forecast2hr ',
+                                style: AppType.style(
+                                  color: kWarningAmber,
+                                  fontSize: AppType.caption,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'No intense UV bloom factors',
-                          style: TextStyle(color: Colors.white38, fontSize: 10),
+                      ),
+                    ] else ...[
+                      // Normal Baseline View (No UV/Forecast redundancy)
+                      AdaptiveRow(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: AppColors.of(
+                                context,
+                              ).healthy, // Healthy green dot
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          Text(
+                            'Algal Photosynthesis Stable',
+                            style: AppType.style(
+                              color: AppColors.of(context).textSecondary,
+                              fontSize: AppType.caption,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpace.xxs),
+                      Text(
+                        'No intense UV bloom factors',
+                        style: AppType.style(
+                          color: AppColors.of(context).textMuted,
+                          fontSize: AppType.micro,
                         ),
-                      ],
+                      ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -203,8 +209,13 @@ class SolarOutcomeCard extends StatelessWidget {
 class _MutedArcPainter extends CustomPainter {
   final double progress;
   final Color strokeColor;
+  final Color trackColor;
 
-  _MutedArcPainter({required this.progress, required this.strokeColor});
+  _MutedArcPainter({
+    required this.progress,
+    required this.strokeColor,
+    required this.trackColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -214,7 +225,7 @@ class _MutedArcPainter extends CustomPainter {
     const sweepAngle = 4.6;
 
     final bgPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
+      ..color = trackColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
@@ -245,5 +256,6 @@ class _MutedArcPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _MutedArcPainter oldDelegate) =>
       oldDelegate.progress != progress ||
-      oldDelegate.strokeColor != strokeColor;
+      oldDelegate.strokeColor != strokeColor ||
+      oldDelegate.trackColor != trackColor;
 }

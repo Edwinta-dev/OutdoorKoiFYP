@@ -289,15 +289,12 @@ python simulator.py                    # interactive four-arm simulator
 
 Every route is under `/v1`; the full description is
 [docs/api/openapi.yaml](docs/api/openapi.yaml) (generated, see
-[docs/api/README.md](docs/api/README.md)). The unversioned paths the app
-still calls (`/assessment/...`, `/forecast/...`, `/events/...`,
-`/ratings/...`) are deprecated aliases and answer with a `Deprecation`
-header. GET responses carry an `ETag` and answer `If-None-Match` with 304.
+[docs/api/README.md](docs/api/README.md)). The mobile app uses `/v1`; deprecated assessment, forecast, event and rating aliases have been removed. GET responses carry an `ETag` and answer `If-None-Match` with 304.
 
 | Method | Route | |
 |---|---|---|
 | `GET` | `/v1/ponds/{pond}/dashboard` | Everything the dashboard shows in one response: each channel's latest reading with its own times, the three assessments, next actions, weather now and the forecasts |
-| `POST` | `/v1/ponds/{pond}/events/{feeding,water-change,top-up,algal-scrub}` | Mutates state, re-assesses, returns the fresh assessments |
+| `POST` | `/v1/ponds/{pond}/events/{feeding,water-change,top-up,algal-scrub,salt,filter-clean}` | Mutates state, re-assesses, returns the fresh assessments |
 | `GET` | `/v1/ponds/{pond}/assessments[/chemistry,/evaporation,/algae]` | Current Green / Amber / Red + advisory text |
 | `GET` | `/v1/ponds/{pond}/forecasts/chemistry` | Chemistry: first-breach day + full trajectory |
 | `GET` | `/v1/ponds/{pond}/forecasts/evaporation` | Next top-up, feed-ration guidance |

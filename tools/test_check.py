@@ -222,6 +222,17 @@ def test_stage_sketch_compiles_against_the_example_not_real_secrets(monkeypatch,
     assert sorted(p.name for p in bench.iterdir()) == ["bench.ino"]
 
 
+def test_host_test_exe_is_a_fresh_path_each_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(check, "BUILD", tmp_path / "build")
+    first = check.host_test_exe()
+    first.write_bytes(b"built")
+    second = check.host_test_exe()
+    assert second != first and second.parent.parent == tmp_path / "build"
+    assert not second.exists()
+    # The earlier run's directory is cleaned up when nothing holds it.
+    assert not first.parent.exists()
+
+
 def test_pytest_count_pattern():
     out = "....\n334 assertions passed\n69 passed, 2 skipped in 0.60s\n"
     assert check.last_match(check.PYTEST_COUNTS, out) == "69 passed, 2 skipped"

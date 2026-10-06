@@ -3,6 +3,38 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Salt addition and filter cleaning (issue #29)
+
+`Backend/koi/models/engine.py`: SALT increases expected TDS by nominal
+added dissolved mass `1000 * salt_grams / volume_litres` mg/L. Old engine
+behaviour: no salt event, hence zero expected step. The issue amendment
+corrects the old example of 0.01 ppm for 1 g in 100 L to **10 mg/L**,
+a factor of 1000 larger. Grams become
+milligrams by multiplying by 1000. Pond volume and salt mass must be
+finite and positive. This is a model assumption: an EC-derived meter's
+TDS response varies with its calibration and the dissolved ions, so the
+nominal mass is not a guarantee of the measured step.
+
+SALT uses the existing six-hour volume-event rate-check allowance;
+plausible-range and stale-run checks remain in force. Its day is excluded
+from chemistry trends. The evaporation cross-check uses complete daily
+averages strictly after the latest salt event's local day, so a slope
+never spans added mass. It reports insufficient data until at least
+three post-salt days exist; subsequent concentration trends remain usable.
+Both logged rows and events already posted to the engine are considered.
+
+FILTER_CLEAN leaves model pools unchanged. For samples in the half-open
+interval `[event_time, event_time + 24 hours)`, chemistry daily snapshots
+persist `ph_after_maintenance` and `tds_after_maintenance` for the trusted
+channels actually read; those buckets are excluded from chemistry trends.
+Daily snapshot version 3 adds these flags; version 2 keeps its local-day
+loader and missing flags default to false, as do legacy snapshots.
+The SQL graph history derives `after_maintenance` for pH/TDS days whose
+Singapore midnight boundaries overlap that interval. This deliberately
+marks the whole daily average, survives sensor-row retention, and follows
+intervention edits/deletions. The evaporation cross-check omits the same
+maintenance days. No existing numeric rate or threshold changed.
+
 ## Device health and data confidence (issue #23)
 
 File: `Backend/koi/models/device_health.py`. New constants; no existing
@@ -130,3 +162,57 @@ and the server's 60 s .. 24 h clamp.
 The stored `imageTable.current_state` grows from `[label, smoothed]` to
 `[label, smoothed, raised_frames, stable_frames]`. Rows in the old shape load
 with both counters at 0; the app only reads element 0.
+
+
+## Projection sensitivity ranges (issue #31)
+
+The central constants remain unchanged: TAN nitrification 0.05/hour,
+nitrite nitrification 0.035/hour, wind shelter factor 0.6, assumed depth
+1.2 m, and fallback algae intrinsic rate 0.45/day.
+`Backend/koi/models/uncertainty.json` records low/central/high values and
+a source comment for each range. Nitrification and fallback algae rates
+use an explicitly assumed +/-50% sensitivity range; shelter uses
+0.4/0.6/0.8. These are not measured confidence intervals. Assumed depth
+uses the existing documented typical 1.0 to 1.5 m range; a measured
+profile or query depth stays fixed. Camera-fitted and declining algae
+rates stay fixed; only the literature fallback varies.
+
+Forecasts take the pointwise minimum and maximum of three paired
+scenarios, including the central one. Pairing all low constants and all
+high constants bounds these scenarios, not every possible combination
+of parameters. First-crossing ranges retain day-zero breaches and mark
+the upper day unknown if any scenario stays below threshold through the
+horizon. The live engines, existing snapshots and default kinetics use
+the same central values as before.
+## TDS owner questions (issue #35)
+
+No existing numeric constants change. New prompt defaults are: minimum
+step 20 ppm, signal confidence threshold 0.8 and per-pond cool-down 24 hours.
+They are settings, and `KOI_TDS_PROMPTS=false` disables observation and answers.
+The viability detector's existing 12-reading median baseline and two-reading
+persistence are unchanged. Its floor is the greater of the configured minimum
+and three times the baseline's max-minus-min spread. Step signal confidence
+is `max(0, 1 - spread / abs(delta))`; this is a heuristic, not a calibrated
+probability of an intervention.
+
+A slope uses the latest 12 readings: its net change must exceed the minimum
+step, no adjacent change may exceed that minimum, and the linear fit's
+R-squared must meet the confidence threshold. The fitted rate is ppm/hour,
+using reading timestamps. Both rises and falls are candidates. Missing,
+nonfinite and out-of-range TDS (outside the existing 5..5000 ppm channel
+bounds) are excluded. Duplicate or older timestamps do not advance the baseline.
+
+An applied ledger event within six hours before the signal start through
+its confirmation supplies an explanation, so no question is created.
+Cool-down begins at confirmation time, including when the question is later
+dismissed. Detected steps reset the baseline even when their questions are
+suppressed. A rise suggests salt or filter cleaning; a fall suggests water
+change, top-up or filter cleaning. These are hypotheses, not event detections.
+An owner can name any supported event and must provide the normal event
+amounts. No mass or volume is inferred from the TDS signal.
+
+Snapshot version 5 stores the rolling baseline, pending deviation, slope
+window, questions, answers and rejections in each pond's existing snapshot.
+Older versions load empty prompt state without changing engine history.
+`none of these` suppresses all offered event kinds for later signals of the
+same type and direction on this pond. `dismiss` closes only that question.

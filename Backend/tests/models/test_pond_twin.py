@@ -184,7 +184,7 @@ def test_snapshot_round_trip_preserves_all_three_engines():
     restored = PondTwin.from_snapshot(json.loads(raw))
 
     assert isinstance(raw, str), "snapshot is JSON-serialisable"
-    assert snap.get("version") == 4, f"snapshot is versioned: {snap.get('version')}"
+    assert snap.get("version") == 5, f"snapshot is versioned: {snap.get('version')}"
     assert abs(restored.chemistry._tan_mg - twin.chemistry._tan_mg) < 1e-9, \
         "chemistry TAN preserved"
     assert abs(restored.chemistry._no3_mg - twin.chemistry._no3_mg) < 1e-9, \
@@ -227,7 +227,7 @@ def test_legacy_bare_chemistry_snapshot_still_loads():
     assert upgraded.evaporation.config.volume_litres == 5000, \
         "legacy upgrade carries pond volume across"
     # And it must re-serialise in the NEW shape.
-    assert upgraded.to_snapshot().get("version") == 4, \
+    assert upgraded.to_snapshot().get("version") == 5, \
         "re-snapshot uses the new versioned shape"
 
     # Partial v2 snapshot (missing algae) must not explode.

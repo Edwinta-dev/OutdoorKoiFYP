@@ -492,8 +492,7 @@ def test_schema_scan_finds_every_client(refs):
     sources = {r.where.split(":")[0] for r in refs}
     for expected in ["Backend/koi/storage/supabase_storage.py",
                      "Embedded/sensor_node/sensor_node.ino",
-                     "MobileUI/mobile_app/lib/widgets/modals/quick_log_modals.dart",
-                     "MobileUI/mobile_app/lib/screens/onboarding_screen.dart",
+                     "MobileUI/mobile_app/lib/data/pond_data_source.dart",
                      "MobileUI/mobile_app/lib/utils/pond_camera_storage.dart"]:
         assert expected in sources, f"no Supabase references found in {expected}"
     kinds = {r.kind for r in refs}
@@ -553,7 +552,7 @@ def bundled_payload_keys() -> set[str]:
     """Every key read from get_bundled_dashboard_payload's result."""
     from conftest import DASHBOARD_PAYLOAD
 
-    keys = set(DASHBOARD_PAYLOAD)
+    keys = set(DASHBOARD_PAYLOAD) | {'telemetry_history', 'tempC'}
     for section in ("raw_sensor", "nea_telemetry"):
         keys |= set(DASHBOARD_PAYLOAD[section])
     keys |= {"forecast_2hr", "forecast_24hr", "outlook_4day"}  # forecast_utils.py
@@ -567,6 +566,7 @@ def bundled_payload_keys() -> set[str]:
 
 def historical_payload_keys() -> set[str]:
     keys = _dart_keys(DART_LIB / "screens" / "detail_graph_screen.dart", r"data|e")
+    keys |= _dart_keys(DART_LIB / "data" / "telemetry_history.dart", r"json")
     keys |= _dart_keys(DART_LIB / "widgets" / "detail_graph" / "historical_line_chart.dart",
                        r"points\[i\]|ev|points\.first")
     return keys

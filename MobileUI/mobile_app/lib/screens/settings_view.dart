@@ -1,16 +1,18 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/providers.dart';
+
 import 'onboarding_screen.dart';
 import '../utils/app_log.dart';
 
-class SettingsView extends StatefulWidget {
+class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
   @override
-  State<SettingsView> createState() => _SettingsViewState();
+  ConsumerState<SettingsView> createState() => _SettingsViewState();
 }
 
-class _SettingsViewState extends State<SettingsView> {
+class _SettingsViewState extends ConsumerState<SettingsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,18 +27,26 @@ class _SettingsViewState extends State<SettingsView> {
               fallbackHeight: 200,
             ), // Temporary stand-in for your graph
 
-            const SizedBox(height: 16), // Adds clean spacing between elements
+            const SizedBox(
+              height: AppSpace.lg,
+            ), // Adds clean spacing between elements
             // 2. The Menu Section Title
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
               child: Text(
                 'Quick Actions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: AppType.style(
+                  fontSize: AppType.title,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             // 3. The Menu Items
             ListTile(
-              leading: const Icon(Icons.water_drop, color: Colors.teal),
+              leading: Icon(
+                Icons.water_drop,
+                color: AppColors.of(context).water,
+              ),
               title: const Text('Water Quality Log'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
@@ -44,7 +54,7 @@ class _SettingsViewState extends State<SettingsView> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.scale, color: Colors.teal),
+              leading: Icon(Icons.scale, color: AppColors.of(context).water),
               title: const Text('Biomass Tracker'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
@@ -54,12 +64,17 @@ class _SettingsViewState extends State<SettingsView> {
 
             TextButton(
               style: ButtonStyle(
-                foregroundColor: WidgetStateProperty.all<Color>(Colors.red),
+                foregroundColor: WidgetStateProperty.all<Color>(
+                  AppColors.of(context).danger,
+                ),
               ),
               onPressed:
                   deletePondData, // Implement this function to handle data deletion
 
-              child: const Text('Delete Pond Data', style: TextStyle(fontSize: 16)),
+              child: Text(
+                'Delete Pond Data',
+                style: AppType.style(fontSize: AppType.body),
+              ),
             ),
           ],
         ),
@@ -70,15 +85,12 @@ class _SettingsViewState extends State<SettingsView> {
   void deletePondData() async {
     // Implement the logic to delete pond data here
     // This could involve clearing shared preferences, database entries, etc.
-    final prefs = await SharedPreferences.getInstance();
-    final String userid = prefs.getString('userID') ?? '0';
+    final prefs = await ref.read(localProfileRepositoryProvider).load();
+    final String userid = prefs.pondId?.toString() ?? '0';
     final int userIDInt = int.parse(userid);
-    await prefs.setBool('isOnboarded', false);
-    log('Deleting pond data for user ID: $userid');
-    await Supabase.instance.client
-        .from('UserData')
-        .delete()
-        .eq('userID', userIDInt); // Example for Supabase
+    await ref.read(pondProfileRepositoryProvider).deletePond(userIDInt);
+    await ref.read(localProfileRepositoryProvider).save({'isOnboarded': false});
+    ref.invalidate(localProfileProvider);
     log('Pond data deleted'); // Placeholder for actual deletion logic
     if (!mounted) return;
     Navigator.pushReplacement(

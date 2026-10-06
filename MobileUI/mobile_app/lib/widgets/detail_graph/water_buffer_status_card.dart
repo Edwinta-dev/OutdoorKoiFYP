@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/detail_graph/water_buffer_status_card.dart
 //
 // Displays the WaterChemistryAssessment computed server-side by the
@@ -6,37 +8,27 @@
 // screen. Fetches GET /assessment/<user_id> via DigitalTwinApi.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
 
-class WaterBufferStatusCard extends StatefulWidget {
+class WaterBufferStatusCard extends ConsumerStatefulWidget {
   final int userId;
 
   const WaterBufferStatusCard({super.key, required this.userId});
 
   @override
-  State<WaterBufferStatusCard> createState() => _WaterBufferStatusCardState();
+  ConsumerState<WaterBufferStatusCard> createState() =>
+      _WaterBufferStatusCardState();
 }
 
-class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
-  late Future<WaterChemistryAssessment?> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
-  }
-
-  void _retry() {
-    setState(() {
-      _future = PondDataScope.of(context).fetchLatestAssessment(widget.userId);
-    });
-  }
+class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
+  void _retry() => ref.invalidate(assessmentProvider(widget.userId));
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<WaterChemistryAssessment?>(
-      future: _future,
+      future: ref.watch(assessmentProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(child: _loadingState());
@@ -55,64 +47,29 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
   // ------------------------------------------------------------------
 
   Widget _loadingState() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 24),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xxl),
       child: Center(
         child: SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
             strokeWidth: 2.4,
-            color: Colors.cyanAccent,
+            color: AppColors.of(context).info,
           ),
         ),
       ),
     );
   }
 
-  Widget _unavailableState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.science_outlined, color: Colors.white38, size: 18),
-              SizedBox(width: 8),
-              Text(
-                'Water Buffer & Nitrogen Cycle',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'No digital twin assessment yet. This appears once the pond '
-            'engine has run at least one poll cycle, or the analysis '
-            'service is unreachable from this device.',
-            style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
-          ),
-          const SizedBox(height: 10),
-          TextButton.icon(
-            onPressed: _retry,
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.cyanAccent,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Retry', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _unavailableState() => PondErrorState(
+    title: 'Water Buffer & Nitrogen Cycle',
+    message:
+        'No digital twin assessment yet. This appears once the pond '
+        'engine has run at least one poll cycle, or the analysis '
+        'service is unreachable from this device.',
+    onRetry: _retry,
+  );
 
   // ------------------------------------------------------------------
   // Main content
@@ -121,40 +78,31 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
   Widget _assessmentCard(WaterChemistryAssessment a) {
     final statusColor = _statusColor(a.status);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return OutcomeCardShell(
+      accent: statusColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(
+          AdaptiveRow(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
-                child: Row(
+              Expanded(
+                child: AdaptiveRow(
                   children: [
-                    Icon(Icons.science_outlined, color: Colors.cyanAccent, size: 18),
-                    SizedBox(width: 8),
+                    Icon(
+                      Icons.science_outlined,
+                      color: AppColors.of(context).info,
+                      size: 18,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
                     Expanded(
                       child: Text(
                         'Water Buffer & Nitrogen Cycle',
-                        style: TextStyle(
-                          color: Colors.white,
+                        style: AppType.style(
+                          color: AppColors.of(context).text,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: AppType.body,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -162,28 +110,16 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  a.category.toUpperCase(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              StatusChip(
+                status: PondStatus.fromWire(a.status),
+                label: a.category.toUpperCase(),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.lg),
 
           // TAN / NO2 / NO3 metric tiles
-          Row(
+          AdaptiveRow(
             children: [
               Expanded(
                 child: _metricBox(
@@ -192,7 +128,7 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
                   _levelColor(a.tanPpm, watch: 0.5, danger: 1.0),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: _metricBox(
                   'Nitrite (NO₂)',
@@ -201,7 +137,7 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
                   isHighlight: a.no2Ppm > 0.5,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: _metricBox(
                   'Nitrate (NO₃)',
@@ -212,22 +148,22 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
             ],
           ),
 
-          const SizedBox(height: 14),
-          const Divider(color: Colors.white10, height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.lg),
+          Divider(color: AppColors.of(context).outline, height: 1),
+          const SizedBox(height: AppSpace.md),
 
           // Advisory
-          Row(
+          AdaptiveRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.info_outline, color: statusColor, size: 16),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Text(
                   a.advisory,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11.5,
+                  style: AppType.style(
+                    color: AppColors.of(context).textSecondary,
+                    fontSize: AppType.label,
                     height: 1.4,
                   ),
                 ),
@@ -237,8 +173,8 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
 
           // Buffering trend readout, if the engine has enough history
           if (a.phReactivity != null || a.tdsTrend != null) ...[
-            const SizedBox(height: 12),
-            Row(
+            const SizedBox(height: AppSpace.md),
+            AdaptiveRow(
               children: [
                 if (a.phReactivity != null)
                   Expanded(
@@ -266,25 +202,34 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
 
           // Add-hardener call to action
           if (a.addHardenerNow) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.amberAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.md,
+                vertical: AppSpace.sm,
               ),
-              child: const Row(
+              decoration: BoxDecoration(
+                color: AppColors.of(context).warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(
+                  color: AppColors.of(context).warning.withValues(alpha: 0.4),
+                ),
+              ),
+              child: AdaptiveRow(
                 children: [
-                  Icon(Icons.science, color: Colors.amberAccent, size: 15),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.science,
+                    color: AppColors.of(context).warning,
+                    size: 15,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: Text(
                       'Add KH / Calcium buffer now',
-                      style: TextStyle(
-                        color: Colors.amberAccent,
-                        fontSize: 11,
+                      style: AppType.style(
+                        color: AppColors.of(context).warning,
+                        fontSize: AppType.caption,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -296,7 +241,7 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
 
           // Sensor gating warnings, if any
           if (a.sensorWarnings.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -314,67 +259,37 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
   // Small building blocks
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: child,
-    );
-  }
+  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
 
-  Widget _metricBox(String label, String value, Color valueColor, {bool isHighlight = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      decoration: BoxDecoration(
-        color: isHighlight
-            ? valueColor.withValues(alpha: 0.1)
-            : Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isHighlight
-              ? valueColor.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.05),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white38, fontSize: 9),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: valueColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _metricBox(
+    String label,
+    String value,
+    Color valueColor, {
+    bool isHighlight = false,
+  }) => MetricTile(
+    label: label,
+    value: value,
+    color: valueColor,
+    estimate: true,
+    status: valueColor == AppColors.of(context).danger
+        ? PondStatus.danger
+        : valueColor == AppColors.of(context).warning
+        ? PondStatus.warning
+        : null,
+  );
 
   Widget _trendLine(String label, String value, IconData icon) {
-    return Row(
+    return AdaptiveRow(
       children: [
-        Icon(icon, color: Colors.white38, size: 13),
-        const SizedBox(width: 4),
+        Icon(icon, color: AppColors.of(context).textMuted, size: 13),
+        const SizedBox(width: AppSpace.xs),
         Expanded(
           child: Text(
             '$label: $value',
-            style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+            style: AppType.style(
+              color: AppColors.of(context).textMuted,
+              fontSize: AppType.caption,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -384,22 +299,34 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
 
   Widget _warningChip(String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.xs,
       ),
-      child: Row(
+      decoration: BoxDecoration(
+        color: AppColors.of(context).text.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.08),
+        ),
+      ),
+      child: AdaptiveRow(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.white38, size: 11),
-          const SizedBox(width: 4),
+          Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.of(context).textMuted,
+            size: 11,
+          ),
+          const SizedBox(width: AppSpace.xs),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white38, fontSize: 9.5),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.micro,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -417,17 +344,21 @@ class _WaterBufferStatusCardState extends State<WaterBufferStatusCard> {
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'red':
-        return Colors.redAccent;
+        return AppColors.of(context).danger;
       case 'amber':
-        return Colors.amberAccent;
+        return AppColors.of(context).warning;
       default:
-        return Colors.greenAccent;
+        return AppColors.of(context).healthy;
     }
   }
 
-  Color _levelColor(double value, {required double watch, required double danger}) {
-    if (value > danger) return Colors.redAccent;
-    if (value > watch) return Colors.amberAccent;
-    return Colors.greenAccent;
+  Color _levelColor(
+    double value, {
+    required double watch,
+    required double danger,
+  }) {
+    if (value > danger) return AppColors.of(context).danger;
+    if (value > watch) return AppColors.of(context).warning;
+    return AppColors.of(context).healthy;
   }
 }

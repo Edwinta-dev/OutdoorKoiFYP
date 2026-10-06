@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from functools import cache
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
 from pydantic_core import PydanticCustomError
@@ -40,6 +40,34 @@ class _Body(BaseModel):
 
 class _Query(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
+
+class KitReadingBody(_Body):
+    user_id: int = Field(gt=0)
+    taken_at: Optional[datetime] = Field(default=None, description="Sample time; null means unknown, no comparison.")
+    kit: Optional[str] = Field(default=None, max_length=200)
+    ammonia_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False,
+                                         description="Total ammonia (TAN), mg/L; not free NH3.")
+    nitrite_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Nitrite, mg/L.")
+    nitrate_mg_l: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Nitrate, mg/L.")
+    ph: Optional[float] = Field(default=None, ge=0, le=14, allow_inf_nan=False)
+    kh_dkh: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False, description="Carbonate hardness, dKH.")
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+    @field_validator("taken_at", mode="before")
+    @classmethod
+    def _taken_at(cls, value: object) -> Optional[datetime]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("taken_at must be an ISO 8601 string")
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            raise ValueError("taken_at must include a time zone")
+        dt = dt.astimezone(timezone.utc)
+        if dt > utc_now():
+            raise ValueError("taken_at cannot be in the future")
+        return dt
 
 
 class EventBody(_Body):
@@ -122,8 +150,38 @@ class VolumeEvent(EventBody):
         return self
 
 
+class SaltEvent(EventBody):
+    salt_grams: float = Field(gt=0, allow_inf_nan=False, description="Added salt mass in grams.")
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class FilterCleanEvent(EventBody):
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
 class AlgalScrubEvent(EventBody):
     scrub_type: str = Field(default="unspecified", min_length=1, max_length=64)
+
+
+class PromptAnswer(_Body):
+    user_id: int = Field(gt=0)
+    answer: Literal["water_change", "top_up", "algal_scrub", "feeding", "salt", "filter_clean",
+                    "none of these", "dismiss"]
+    volume_percent: Optional[float] = Field(default=None, gt=0, le=100, allow_inf_nan=False)
+    volume_litres: Optional[float] = Field(default=None, gt=0, le=1_000_000, allow_inf_nan=False)
+    salt_grams: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    food_grams: Optional[float] = Field(default=None, ge=0, le=10_000, allow_inf_nan=False)
+    protein_percent: Optional[float] = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    scrub_type: str = Field(default="unspecified", min_length=1, max_length=64)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _event_amounts(self):
+        models = {"water_change": VolumeEvent, "top_up": VolumeEvent, "salt": SaltEvent,
+                  "feeding": FeedingEvent, "filter_clean": FilterCleanEvent, "algal_scrub": AlgalScrubEvent}
+        if self.answer in models:
+            on_pond_path(models[self.answer]).model_validate(self.model_dump(exclude_none=True))
+        return self
 
 
 class AlgaeRatingEvent(EventBody):

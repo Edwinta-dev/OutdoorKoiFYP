@@ -55,6 +55,11 @@ engine for replaying an event that arrives in the past. A v3 or older
 snapshot loads with an empty ledger whose since is the snapshot's
 saved_at (rows created before it count as applied) and one checkpoint at
 its newest input.
+
+Version 5 adds "tds_prompts": rolling baseline, pending steps, recent
+readings, questions, answers and rejected explanations. Older snapshots
+load with empty prompt state. Both storage adapters keep it in the same
+snapshot transaction as sensors and events, with no schema change.
 """
 from __future__ import annotations
 
@@ -65,14 +70,15 @@ from typing import Callable, Optional
 from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import event_ledger as el
-from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine
+from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine, salt_tds_step
 from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
 from koi.models.sensor_inputs import SensorInput, parse_timestamp
+from koi.models.tds_prompts import TdsPrompts
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 4
+SNAPSHOT_VERSION = 5
 
 # Ledgered sensor inputs with a time in (after, until], oldest first
 # (EngineRegistry.sensor_history): what a replay reads back.
@@ -110,6 +116,7 @@ class PondTwin:
         # The events applied and the chemistry checkpoints for replay
         # (event_ledger.py). A new twin has a genesis checkpoint.
         self.ledger = el.EventLedger()
+        self.tds_prompts = TdsPrompts()
         self.ledger.add_checkpoint(el.Checkpoint(None, self._chemistry_checkpoint(None)))
 
     # ----------------------------------------------------------
@@ -154,9 +161,16 @@ class PondTwin:
         self._chemistry_event(event, now)
         self._other_engines_event(event, now)
 
+    def _validate_salt(self, event: PondEvent) -> None:
+        if event.kind == EventKind.SALT:
+            volume = (self.profiles.at(event.time).volume_l if self.profiles is not None
+                      else self.chemistry.config.volume_litres)
+            salt_tds_step(event.salt_grams, volume)
+
     def _chemistry_event(self, event: PondEvent, now: Optional[datetime]) -> None:
         """The chemistry half of apply_event, under the profile in force
         at event.time, leaving every engine on the profile at now."""
+        self._validate_salt(event)
         if self.profiles is not None:
             self.use_profile(self.profiles.at(event.time))
         self.chemistry.apply_event(event)
@@ -283,6 +297,7 @@ class PondTwin:
             return {"event_id": existing.event_id,
                     "status": "duplicate" if existing.status == el.APPLIED else "deleted",
                     "replayed": False, "replayed_from": None, "placed_late": existing.placed_late}
+        self._validate_salt(event)
         entry = self.ledger.add(event_id, event, recorded_at=now, source=source)
         self._other_engines_event(event, now)
         outcome = self._place([entry], [], now, history)
@@ -309,6 +324,11 @@ class PondTwin:
             if event is None or event_id is None or event.time < window_start:
                 report["skipped"].append({"row_id": row.get("id"), "reason": "unknown event_type" if event is None
                                           else "no event_id" if event_id is None else "outside the window"})
+                continue
+            try:
+                self._validate_salt(event)
+            except ValueError as exc:
+                report["skipped"].append({"row_id": row.get("id"), "reason": str(exc)})
                 continue
             event_id = el.normalise_event_id(event_id)
             seen.add(event_id)
@@ -470,7 +490,9 @@ class PondTwin:
             snap["daily"] = {k: v.to_dict() for k, v in self.chemistry._daily.items()
                              if v.calendar_date(tz) >= day}
             reach = through - _CHECKPOINT_EVENT_REACH
-            snap["events"] = [e.to_dict() for e in self.chemistry._events if e.time >= reach]
+            snap["events"] = [e.to_dict() for e in self.chemistry._events
+                              if e.time >= (through - timedelta(hours=24)
+                                            if e.kind == EventKind.FILTER_CLEAN else reach)]
         return snap
 
     def _restore_chemistry(self, checkpoint: el.Checkpoint) -> WaterChemistryEngine:
@@ -485,7 +507,9 @@ class PondTwin:
             older = {k: v for k, v in self.chemistry._daily.items() if v.calendar_date(tz) < day}
             restored._daily = {**older, **restored._daily}
             reach = through - _CHECKPOINT_EVENT_REACH
-            restored._events = [e for e in self.chemistry._events if e.time < reach] + restored._events
+            restored._events = [e for e in self.chemistry._events
+                                if e.time < (through - timedelta(hours=24)
+                                             if e.kind == EventKind.FILTER_CLEAN else reach)] + restored._events
         return restored
 
     # ==========================================================
@@ -648,6 +672,7 @@ class PondTwin:
                 "last_input_at": self.last_input_at.isoformat() if self.last_input_at else None,
             },
             "event_ledger": self.ledger.to_dict(),
+            "tds_prompts": self.tds_prompts.to_dict(),
         }
 
     @classmethod
@@ -658,7 +683,8 @@ class PondTwin:
     ) -> "PondTwin":
         """Rehydrates a twin, tolerating these shapes:
 
-          v4  - the namespaced shape to_snapshot() emits now
+          v5  - adds per-pond TDS baseline, prompts and rejected explanations
+          v4  - the same without "tds_prompts": empty prompt state
           v3  - the same without "event_ledger": a new ledger (_load_ledger)
           v2  - the same without "sensor_inputs": no channel readings yet
           v1  - a BARE WaterChemistryEngine snapshot, which is what every
@@ -718,6 +744,7 @@ class PondTwin:
         last = inputs.get("last_input_at")
         twin.last_input_at = parse_timestamp(last) if last else None
         twin._load_ledger(snapshot)
+        twin.tds_prompts = TdsPrompts.from_dict(snapshot.get("tds_prompts") or {})
         return twin
 
     def _load_ledger(self, snapshot: dict) -> None:

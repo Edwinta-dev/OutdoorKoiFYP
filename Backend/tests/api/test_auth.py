@@ -37,15 +37,17 @@ UNLINKED_AUTH_UID = "f0e1d2c3-b4a5-4697-8879-000000000000"   # an account with n
 UNLINKED_SESSION_ID = "e9d8c7b6-a5f4-4e3d-8c2b-000000000001"
 UNKNOWN = 999                    # no UserData row at all
 
-READS = ["/ratings/algae/{}", "/assessment/{}", "/assessment/evaporation/{}", "/assessment/algae/{}",
-         "/assessment/all/{}", "/forecast/{}", "/forecast/evaporation/{}", "/forecast/algae/{}"]
+READS = ["/v1/ponds/{}/ratings/algae", "/v1/ponds/{}/assessments/chemistry",
+    "/v1/ponds/{}/assessments/evaporation", "/v1/ponds/{}/assessments/algae",
+         "/v1/ponds/{}/assessments", "/v1/ponds/{}/forecasts/chemistry",
+             "/v1/ponds/{}/forecasts/evaporation", "/v1/ponds/{}/forecasts/algae"]
 WRITES = [
-    ("/events/feeding", {"food_grams": 100.0, "protein_percent": 40.0}),
-    ("/events/water-change", {"volume_percent": 20.0}),
-    ("/events/top-up", {"volume_percent": 20.0}),
-    ("/events/algal-scrub", {"scrub_type": "brush"}),
-    ("/events/algae-rating", {"severity": "minor"}),
-    ("/events/algae-rating/undo", {}),
+    (f"/v1/ponds/{USER}/events/feeding", {"food_grams": 100.0, "protein_percent": 40.0}),
+    (f"/v1/ponds/{USER}/events/water-change", {"volume_percent": 20.0}),
+    (f"/v1/ponds/{USER}/events/top-up", {"volume_percent": 20.0}),
+    (f"/v1/ponds/{USER}/events/algal-scrub", {"scrub_type": "brush"}),
+    (f"/v1/ponds/{USER}/events/algae-rating", {"severity": "minor"}),
+    (f"/v1/ponds/{USER}/events/algae-rating/undo", {}),
 ]
 
 
@@ -104,11 +106,12 @@ def test_auth_valid_token_logs_events_for_its_own_pond(app, path, body):
 
 def test_auth_valid_token_within_clock_leeway_is_accepted(app):
     client = as_user(app, expires_in=-timedelta(seconds=10))
-    assert client.get(f"/forecast/evaporation/{USER}").status_code == 200
+    assert client.get(f"/v1/ponds/{USER}/forecasts/evaporation").status_code == 200
 
 
 def test_auth_scheme_name_is_case_insensitive(app):
-    resp = app.test_client().get(f"/forecast/evaporation/{USER}", headers={"Authorization": f"bearer {mint_token()}"})
+    resp = app.test_client().get(f"/v1/ponds/{USER}/forecasts/evaporation",
+        headers={"Authorization": f"bearer {mint_token()}"})
     assert resp.status_code == 200
 
 
@@ -136,7 +139,7 @@ def test_auth_unauthenticated_event_is_401_and_writes_nothing(anon, storage, pat
 
 @pytest.mark.parametrize("header", ["", "Bearer", "Bearer   ", "Basic dXNlcjpwYXNz", mint_token()])
 def test_auth_missing_or_non_bearer_header_is_401(anon, header):
-    resp = anon.get(f"/assessment/{USER}", headers={"Authorization": header})
+    resp = anon.get(f"/v1/ponds/{USER}/assessments/chemistry", headers={"Authorization": header})
     assert error(resp, 401)["code"] == "auth_required"
     assert resp.headers["WWW-Authenticate"].startswith("Bearer")
 
@@ -144,14 +147,14 @@ def test_auth_missing_or_non_bearer_header_is_401(anon, header):
 # --- invalid tokens ---------------------------------------------------
 
 def test_auth_expired_token_is_401(app):
-    resp = as_user(app, expires_in=-timedelta(minutes=5)).get(f"/assessment/{USER}")
+    resp = as_user(app, expires_in=-timedelta(minutes=5)).get(f"/v1/ponds/{USER}/assessments/chemistry")
     assert error(resp, 401)["code"] == "token_expired"
     assert "WWW-Authenticate" in resp.headers
 
 
 def test_auth_wrong_signature_is_401(app):
     token = mint_token(secret="a-different-secret-that-is-at-least-32-bytes")
-    assert error(api_client(app, token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 def test_auth_tampered_payload_is_401(app):
@@ -160,18 +163,18 @@ def test_auth_tampered_payload_is_401(app):
         jwt.api_jws.json.dumps({"sub": OTHER_AUTH_UID, "session_id": OTHER_SESSION_ID, "aud": "authenticated",
                                 "iss": TEST_ISSUER, "exp": 4102444800}).encode()).decode()
     token = f"{header}.{forged_payload}.{signature}"
-    assert error(api_client(app, token).get(f"/assessment/{OTHER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{OTHER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 @pytest.mark.parametrize("token", ["not-a-jwt", "a.b.c", "eyJhbGciOiJIUzI1NiJ9..", "Bearer x"])
 def test_auth_malformed_token_is_401(app, token):
-    assert error(api_client(app, token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 def test_auth_unsigned_alg_none_token_is_401(app):
     token = jwt.encode({"sub": USER_AUTH_UID, "session_id": USER_SESSION_ID, "aud": "authenticated",
                         "iss": TEST_ISSUER, "exp": 4102444800}, key=None, algorithm="none")
-    assert error(api_client(app, token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 @pytest.mark.parametrize("claims", [
@@ -186,7 +189,7 @@ def test_auth_unsigned_alg_none_token_is_401(app):
     {"session_id": "abc"},
 ])
 def test_auth_token_with_wrong_or_missing_claim_is_401(app, claims):
-    assert error(as_user(app, **claims).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(as_user(app, **claims).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 def test_auth_service_role_style_token_without_session_is_401(app):
@@ -194,40 +197,40 @@ def test_auth_service_role_style_token_without_session_is_401(app):
     user session, so neither opens a pond."""
     token = jwt.encode({"role": "service_role", "iss": TEST_ISSUER, "aud": "authenticated",
                         "exp": 4102444800}, TEST_JWT_SECRET, algorithm="HS256")
-    assert error(api_client(app, token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 # --- revoked sessions -------------------------------------------------
 
 def test_auth_signed_out_session_is_401_before_the_token_expires(app, storage):
     storage._tables["auth.sessions"] = [r for r in storage._tables["auth.sessions"] if r["id"] != USER_SESSION_ID]
-    resp = api_client(app).get(f"/assessment/{USER}")
+    resp = api_client(app).get(f"/v1/ponds/{USER}/assessments/chemistry")
     assert error(resp, 401)["code"] == "session_revoked"
     # The other account's session is unaffected.
-    assert as_other(app).get(f"/ratings/algae/{OTHER}").status_code == 200
+    assert as_other(app).get(f"/v1/ponds/{OTHER}/ratings/algae").status_code == 200
 
 
 def test_auth_session_past_not_after_is_401(app, storage):
     for row in storage._tables["auth.sessions"]:
         if row["id"] == USER_SESSION_ID:
             row["not_after"] = "2026-08-01T00:00:00+00:00"   # before the storage clock
-    assert error(api_client(app).get(f"/assessment/{USER}"), 401)["code"] == "session_revoked"
+    assert error(api_client(app).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "session_revoked"
 
 
 def test_auth_session_of_another_account_is_401(app):
     """A token whose session_id belongs to another account's session."""
     client = as_user(app, session_id=OTHER_SESSION_ID)
-    assert error(client.get(f"/assessment/{USER}"), 401)["code"] == "session_revoked"
+    assert error(client.get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "session_revoked"
 
 
 # --- ponds: two accounts, forged ids, unlinked accounts -----------------
 
 def test_auth_two_accounts_each_reach_only_their_own_pond(app):
     mine, theirs = api_client(app), as_other(app)
-    assert mine.get(f"/ratings/algae/{USER}").status_code == 200
-    assert theirs.get(f"/ratings/algae/{OTHER}").status_code == 200
-    assert error(mine.get(f"/ratings/algae/{OTHER}"), 403)["code"] == "pond_forbidden"
-    assert error(theirs.get(f"/ratings/algae/{USER}"), 403)["code"] == "pond_forbidden"
+    assert mine.get(f"/v1/ponds/{USER}/ratings/algae").status_code == 200
+    assert theirs.get(f"/v1/ponds/{OTHER}/ratings/algae").status_code == 200
+    assert error(mine.get(f"/v1/ponds/{OTHER}/ratings/algae"), 403)["code"] == "pond_forbidden"
+    assert error(theirs.get(f"/v1/ponds/{USER}/ratings/algae"), 403)["code"] == "pond_forbidden"
 
 
 @pytest.mark.parametrize("path", READS)
@@ -238,9 +241,9 @@ def test_auth_wrong_pond_in_path_is_403(app, path):
 
 
 @pytest.mark.parametrize("path, body", WRITES)
-def test_auth_forged_pond_in_body_is_403_and_writes_nothing(app, storage, path, body):
+def test_auth_forged_pond_in_body_is_mismatch_and_writes_nothing(app, storage, path, body):
     resp = api_client(app).post(path, json={"user_id": OTHER, **body})
-    assert error(resp, 403)["code"] == "pond_forbidden"
+    assert error(resp, 400)["code"] == "pond_mismatch"
     assert storage.fetch_snapshot_version(OTHER) == 0
     assert storage.rows("algae_severity_ratings") == []
 
@@ -249,20 +252,21 @@ def test_auth_unknown_pond_id_is_403_not_404(app):
     """A pond id gives no access whether or not it exists, and the reply
     does not reveal which."""
     client = api_client(app)
-    assert error(client.get(f"/assessment/{UNKNOWN}"), 403)["code"] == "pond_forbidden"
-    assert error(client.post("/events/top-up", json={"user_id": UNKNOWN, "volume_percent": 5.0}), 403)
+    assert error(client.get(f"/v1/ponds/{UNKNOWN}/assessments/chemistry"), 403)["code"] == "pond_forbidden"
+    assert error(client.post(f"/v1/ponds/{UNKNOWN}/events/top-up", json={"user_id": UNKNOWN,
+        "volume_percent": 5.0}), 403)
 
 
 def test_auth_account_with_no_linked_pond_is_403(app):
     client = as_user(app, sub=UNLINKED_AUTH_UID, session_id=UNLINKED_SESSION_ID)
-    assert error(client.get(f"/assessment/{USER}"), 403)["code"] == "pond_not_linked"
-    resp = client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
+    assert error(client.get(f"/v1/ponds/{USER}/assessments/chemistry"), 403)["code"] == "pond_not_linked"
+    resp = client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER, "volume_percent": 5.0})
     assert error(resp, 403)["code"] == "pond_not_linked"
 
 
 def test_auth_identity_comes_from_the_token_not_the_request(app):
     """Headers or body fields naming another account change nothing."""
-    resp = api_client(app).post("/events/top-up", json={"user_id": OTHER, "volume_percent": 5.0,
+    resp = api_client(app).post(f"/v1/ponds/{OTHER}/events/top-up", json={"user_id": OTHER, "volume_percent": 5.0,
                                                          "auth_uid": OTHER_AUTH_UID, "sub": OTHER_AUTH_UID})
     assert error(resp, 403)["code"] == "pond_forbidden"
 
@@ -300,33 +304,36 @@ def es_app(storage, jwks):
 def test_auth_jwks_es256_token_is_accepted(storage, es256):
     key, jwks = es256
     token = mint_token(secret=key, algorithm="ES256", headers={"kid": "koi-test-kid"})
-    assert api_client(es_app(storage, jwks), token).get(f"/forecast/evaporation/{USER}").status_code == 200
+    assert api_client(es_app(storage, jwks), token).get(f"/v1/ponds/{USER}/forecasts/evaporation").status_code == 200
 
 
 def test_auth_jwks_token_signed_by_another_key_is_401(storage, es256):
     _, jwks = es256
     stranger = ec.generate_private_key(ec.SECP256R1())
     token = mint_token(secret=stranger, algorithm="ES256", headers={"kid": "koi-test-kid"})
-    assert error(api_client(es_app(storage, jwks), token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(es_app(storage, jwks), token).get(f"/v1/ponds/{USER}/assessments/chemistry"),
+        401)["code"] == "invalid_token"
 
 
 def test_auth_jwks_unknown_kid_is_401(storage, es256):
     key, jwks = es256
     token = mint_token(secret=key, algorithm="ES256", headers={"kid": "rotated-away"})
-    assert error(api_client(es_app(storage, jwks), token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(es_app(storage, jwks), token).get(f"/v1/ponds/{USER}/assessments/chemistry"),
+        401)["code"] == "invalid_token"
 
 
 def test_auth_jwks_mode_refuses_an_hs256_token(storage, es256):
     """Algorithm confusion: only the configured algorithm is accepted."""
     _, jwks = es256
     token = mint_token(headers={"kid": "koi-test-kid"})
-    assert error(api_client(es_app(storage, jwks), token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(es_app(storage, jwks), token).get(f"/v1/ponds/{USER}/assessments/chemistry"),
+        401)["code"] == "invalid_token"
 
 
 def test_auth_hs256_mode_refuses_an_es256_token(app):
     key = ec.generate_private_key(ec.SECP256R1())
     token = mint_token(secret=key, algorithm="ES256")
-    assert error(api_client(app, token).get(f"/assessment/{USER}"), 401)["code"] == "invalid_token"
+    assert error(api_client(app, token).get(f"/v1/ponds/{USER}/assessments/chemistry"), 401)["code"] == "invalid_token"
 
 
 def test_auth_jwks_unreachable_is_503(storage):
@@ -334,7 +341,7 @@ def test_auth_jwks_unreachable_is_503(storage):
         def get_signing_key_from_jwt(self, token):
             raise jwt.PyJWKClientConnectionError("connection refused")
 
-    resp = api_client(es_app(storage, Down()), mint_token()).get(f"/assessment/{USER}")
+    resp = api_client(es_app(storage, Down()), mint_token()).get(f"/v1/ponds/{USER}/assessments/chemistry")
     assert error(resp, 503)["code"] == "auth_unavailable"
 
 
@@ -374,9 +381,10 @@ def test_auth_jwks_client_is_built_from_the_url_without_fetching():
 def test_auth_bypass_in_development_trusts_the_request_user_id(storage):
     app = create_app(make_settings(env="development", auth="disabled", supabase_jwt_secret=""), storage=storage)
     client = app.test_client()
-    assert client.get(f"/forecast/evaporation/{USER}").status_code == 200
-    assert client.get(f"/ratings/algae/{OTHER}").status_code == 200
-    assert client.post("/events/top-up", json={"user_id": USER, "volume_percent": 5.0}).status_code == 200
+    assert client.get(f"/v1/ponds/{USER}/forecasts/evaporation").status_code == 200
+    assert client.get(f"/v1/ponds/{OTHER}/ratings/algae").status_code == 200
+    assert client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER,
+        "volume_percent": 5.0}).status_code == 200
 
 
 @pytest.mark.parametrize("env", ["production", "test"])
@@ -422,5 +430,5 @@ def test_auth_memory_storage_session_checks(storage):
 
 def test_auth_storage_failure_is_not_a_sign_in(app, storage):
     storage.failing.add("is_session_active")
-    resp = api_client(app).get(f"/assessment/{USER}")
+    resp = api_client(app).get(f"/v1/ponds/{USER}/assessments/chemistry")
     assert resp.status_code >= 500

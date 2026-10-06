@@ -45,8 +45,13 @@ dev = [
     # API response in the tests is validated against it.
     "pyyaml>=6.0",
     "jsonschema>=4.21",
+    # Property-based tests of the model engines (tests/models/test_property_engines.py).
+    "hypothesis>=6.100",
 ]
 wsgi = ["gunicorn>=22.0"]
+
+[tool.setuptools.package-data]
+"koi.models" = ["uncertainty.json"]
 
 [tool.setuptools.packages.find]
 include = ["koi*"]

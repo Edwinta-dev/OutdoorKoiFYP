@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/fish/fish_carousel_header.dart
 
 import 'package:flutter/material.dart';
@@ -36,64 +38,66 @@ class FishCarouselHeader extends StatelessWidget {
       children: [
         // --- 1. MINIMALIST HUD HEADER BLOCK (Min 4 rows, highly structured) ---
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Row 1 & 4: Main Species Name + Care Level Badge (Attractive UI pill)
-              Row(
+              AdaptiveRow(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
+                      style: AppType.style(
+                        color: AppColors.of(context).text,
+                        fontSize: AppType.heading,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.5,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   // Attractive Care Level Glass Pill
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: AppSpace.md,
+                      vertical: AppSpace.sm,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
+                      color: AppColors.of(context).info.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppRadius.panel),
                       border: Border.all(
-                        color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                        color: AppColors.of(
+                          context,
+                        ).info.withValues(alpha: 0.4),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+                          color: AppColors.of(
+                            context,
+                          ).info.withValues(alpha: 0.1),
                           blurRadius: 8,
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: AdaptiveRow(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.shield_outlined,
-                          color: Color(0xFF38BDF8),
+                          color: AppColors.of(context).info,
                           size: 13,
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: AppSpace.xs),
                         Text(
                           'Care: $careLevel',
-                          style: const TextStyle(
-                            color: Color(0xFF38BDF8),
+                          style: AppType.style(
+                            color: AppColors.of(context).info,
                             fontWeight: FontWeight.w700,
-                            fontSize: 11,
+                            fontSize: AppType.caption,
                           ),
                         ),
                       ],
@@ -101,56 +105,54 @@ class FishCarouselHeader extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpace.sm),
 
               // Row 2: Common Names (Allows wrapping if long)
-              Row(
+              AdaptiveRow(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.label_outline_rounded,
-                    color: Colors.white54,
+                    color: AppColors.of(context).textMuted,
                     size: 14,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: Text(
                       commonNames,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
+                      style: AppType.style(
+                        color: AppColors.of(context).textSecondary,
+                        fontSize: AppType.body,
                         fontWeight: FontWeight.w500,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpace.sm),
 
               // Row 3: Number of Fishes in Tank + Carousel Position Indicator
-              Row(
+              AdaptiveRow(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.phishing_outlined,
-                    color: Color(0xFF50C878),
+                    color: AppColors.of(context).healthy,
                     size: 14,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: AppSpace.sm),
                   Text(
                     'Owned in Tank: $fishCount specimen(s)',
-                    style: const TextStyle(
-                      color: Color(0xFF50C878),
-                      fontSize: 12,
+                    style: AppType.style(
+                      color: AppColors.of(context).healthy,
+                      fontSize: AppType.label,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const Spacer(),
                   Text(
                     'Profile ${currentIndex + 1} of ${fishProfiles.length}',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 11,
+                    style: AppType.style(
+                      color: AppColors.of(context).textMuted,
+                      fontSize: AppType.caption,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -159,22 +161,22 @@ class FishCarouselHeader extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: AppSpace.lg),
 
         // --- 2. CLEAN BORDERLESS IMAGE CAROUSEL VIEWPORT ---
         Container(
           height: 220,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
-            borderRadius: BorderRadius.circular(20),
+            color: AppColors.of(context).text.withValues(alpha: 0.02),
+            borderRadius: BorderRadius.circular(AppRadius.panel),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: AppColors.of(context).text.withValues(alpha: 0.08),
               width: 1,
             ),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppRadius.panel),
             child: Stack(
               children: [
                 PageView.builder(
@@ -190,7 +192,7 @@ class FishCarouselHeader extends StatelessWidget {
                             alignment: Alignment.center,
                             width: double.infinity,
                           )
-                        : Container(color: const Color(0xFF131B2A));
+                        : Container(color: AppColors.of(context).surface);
                   },
                 ),
 
@@ -199,22 +201,26 @@ class FishCarouselHeader extends StatelessWidget {
                   top: 12,
                   right: 12,
                   child: Material(
-                    color: Colors.transparent,
+                    color: AppColors.transparent,
                     child: InkWell(
                       onTap: onManageImage,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(AppRadius.panel),
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(AppSpace.sm),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
+                          color: AppColors.of(
+                            context,
+                          ).shadow.withValues(alpha: 0.6),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: AppColors.of(
+                              context,
+                            ).text.withValues(alpha: 0.2),
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.edit_outlined,
-                          color: Colors.white,
+                          color: AppColors.of(context).onImage,
                           size: 18,
                         ),
                       ),

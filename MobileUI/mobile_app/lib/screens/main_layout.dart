@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/screens/main_layout.dart
 
 import 'package:flutter/material.dart';
@@ -41,64 +42,37 @@ class _MainLayoutState extends State<MainLayout> {
         : 'Settings';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: AppColors.of(context).canvas,
       extendBody: true,
 
-      // SIMPLIFIED REUSABLE TOP HUD HEADER BAR
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 8.0,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Standard Brand Title + Koi Icon
-                Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        image: DecorationImage(
-                          image: AssetImage('lib/assets/koi_icon.png'),
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      currentTitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ],
+      appBar: AppBar(
+        toolbarHeight: 60 + (MediaQuery.textScalerOf(context).scale(14) - 14),
+        backgroundColor: AppColors.of(context).canvas,
+        title: Row(
+          children: [
+            Image.asset('lib/assets/koi_icon.png', width: 50, height: 40),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Text(
+                currentTitle,
+                style: AppType.style(
+                  color: AppColors.of(context).text,
+                  fontSize: AppType.body,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
                 ),
-
-                // Screen-Specific Actions (e.g., Refresh only appears on Dashboard index 0)
-                if (_currentIndex == 0)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.refresh,
-                      color: Colors.white54,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      // DashboardView handles its own refresh via its internal state or global/stream hooks
-                      _dashboardKey.currentState?.refreshData();
-                    },
-                  ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
+        actions: [
+          if (_currentIndex == 0)
+            IconButton(
+              tooltip: 'Refresh pond readings',
+              icon: const Icon(Icons.refresh),
+              onPressed: () => _dashboardKey.currentState?.refreshData(),
+            ),
+        ],
       ),
 
       // ROUND 2 FIX: was `body: _screens[_currentIndex]`, which swaps in a
@@ -116,20 +90,25 @@ class _MainLayoutState extends State<MainLayout> {
       // DOCKED FLOATING ISLAND NAVIGATION BAR
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.xl,
+            vertical: AppSpace.lg,
+          ),
           child: Container(
-            height: 66,
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            constraints: const BoxConstraints(minHeight: 66),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.90),
-              borderRadius: BorderRadius.circular(33),
+              color: AppColors.of(
+                context,
+              ).surfaceRaised.withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
+                color: AppColors.of(context).text.withValues(alpha: 0.12),
                 width: 1.0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
+                  color: AppColors.of(context).shadow.withValues(alpha: 0.35),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -142,23 +121,29 @@ class _MainLayoutState extends State<MainLayout> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildNavBarItem(
-                        0,
-                        Icons.water_drop_outlined,
-                        Icons.water_drop,
-                        'Dashboard',
+                      Expanded(
+                        child: _buildNavBarItem(
+                          0,
+                          Icons.water_drop_outlined,
+                          Icons.water_drop,
+                          'Dashboard',
+                        ),
                       ),
-                      _buildNavBarItem(
-                        1,
-                        Icons.phishing_outlined,
-                        Icons.phishing,
-                        'Fish Tips',
+                      Expanded(
+                        child: _buildNavBarItem(
+                          1,
+                          Icons.phishing_outlined,
+                          Icons.phishing,
+                          'Fish Tips',
+                        ),
                       ),
-                      _buildNavBarItem(
-                        2,
-                        Icons.settings_outlined,
-                        Icons.settings,
-                        'Settings',
+                      Expanded(
+                        child: _buildNavBarItem(
+                          2,
+                          Icons.settings_outlined,
+                          Icons.settings,
+                          'Settings',
+                        ),
                       ),
                     ],
                   ),
@@ -166,8 +151,8 @@ class _MainLayoutState extends State<MainLayout> {
                 Container(
                   height: 28,
                   width: 1,
-                  margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                  color: Colors.white.withValues(alpha: 0.15),
+                  margin: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+                  color: AppColors.of(context).text.withValues(alpha: 0.15),
                 ),
                 _buildActionPillButton(context),
               ],
@@ -185,22 +170,25 @@ class _MainLayoutState extends State<MainLayout> {
     String label,
   ) {
     final isSelected = _currentIndex == index;
-    const activeColor = Color(0xFF38BDF8);
-    const inactiveColor = Colors.white60;
+    final activeColor = AppColors.of(context).info;
+    final inactiveColor = AppColors.of(context).textSecondary;
 
     return InkWell(
       onTap: () => setState(() => _currentIndex = index),
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(AppRadius.sheet),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.xs,
+          vertical: AppSpace.sm,
+        ),
         decoration: BoxDecoration(
           color: isSelected
               ? activeColor.withValues(alpha: 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
+              : AppColors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.sheet),
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -209,13 +197,13 @@ class _MainLayoutState extends State<MainLayout> {
               size: 20,
             ),
             if (isSelected) ...[
-              const SizedBox(width: 4),
+              const SizedBox(height: AppSpace.xs),
               Text(
                 label,
-                style: const TextStyle(
+                style: AppType.style(
                   color: activeColor,
                   fontWeight: FontWeight.w600,
-                  fontSize: 11,
+                  fontSize: AppType.caption,
                 ),
               ),
             ],
@@ -227,30 +215,30 @@ class _MainLayoutState extends State<MainLayout> {
 
   Widget _buildActionPillButton(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: () => _openQuickLogModal(context),
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(AppRadius.sheet),
         child: Container(
           height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 14.0),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
+            gradient: LinearGradient(
+              colors: [AppColors.of(context).info, AppColors.of(context).info],
             ),
-            borderRadius: BorderRadius.circular(25),
+            borderRadius: BorderRadius.circular(AppRadius.sheet),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, color: Colors.white, size: 18),
-              SizedBox(width: 4),
+              Icon(Icons.add, color: AppColors.of(context).onInfo, size: 18),
+              const SizedBox(width: AppSpace.xs),
               Text(
                 'Log',
-                style: TextStyle(
-                  color: Colors.white,
+                style: AppType.style(
+                  color: AppColors.of(context).onInfo,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: AppType.label,
                 ),
               ),
             ],

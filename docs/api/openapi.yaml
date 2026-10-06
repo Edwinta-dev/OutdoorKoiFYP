@@ -5,15 +5,9 @@ info:
   description: 'Digital twin API of OutdoorKoi: pond chemistry, evaporation and algae.
 
 
-    Every route is served under /v1. The old unversioned paths are deprecated
+    Every pond route is served under /v1. The retired mobile aliases are not served.
 
-    aliases of their /v1 route (same response, plus `Deprecation` and, where the
-
-    /v1 path can be built, `Link: rel="successor-version"`); they are removed
-
-    once the app calls /v1. /health and /ready are also served unversioned,
-
-    without deprecation, for probes. /metrics is Prometheus text.
+    /health and /ready are also served unversioned for probes. /metrics is Prometheus text.
 
 
     GET responses with a JSON body carry a strong `ETag` and
@@ -42,814 +36,6 @@ tags:
 - name: ratings
 - name: service
 paths:
-  /assessment/algae/{user_id}:
-    get:
-      operationId: legacy_get_latest_algae_assessment
-      summary: Latest algae assessment
-      tags:
-      - assessments
-      description: Deprecated alias of /v1/ponds/{pond}/assessments/algae. Most recent algae assessment.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id022
-                $ref: '#/components/schemas/AlgaeAssessment'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '401':
-          description: Not signed in
-          content: &id001
-            application/json:
-              schema: &id002
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '403':
-          description: Another account's pond
-          content: *id001
-        '404':
-          description: Pond or assessment not found
-          content: *id001
-        '500':
-          description: Unexpected server error
-          content: *id001
-        '503':
-          description: Storage or service not available
-          content: *id001
-      security:
-      - bearerAuth: []
-  /assessment/all/{user_id}:
-    get:
-      operationId: legacy_get_all_assessments
-      summary: All three latest assessments and the hypoxia flag
-      tags:
-      - assessments
-      description: Deprecated alias of /v1/ponds/{pond}/assessments. All three cached assessments in one
-        call - lets the dashboard populate every outcome card and its alert badge from a single request
-        instead of three - plus the night-time hypoxia flag.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id020
-                $ref: '#/components/schemas/AllAssessments'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '401':
-          description: Not signed in
-          content: &id003
-            application/json:
-              schema: *id002
-        '403':
-          description: Another account's pond
-          content: *id003
-        '404':
-          description: Pond or assessment not found
-          content: *id003
-        '500':
-          description: Unexpected server error
-          content: *id003
-        '503':
-          description: Storage or service not available
-          content: *id003
-      security:
-      - bearerAuth: []
-  /assessment/evaporation/{user_id}:
-    get:
-      operationId: legacy_get_latest_evaporation_assessment
-      summary: Latest evaporation assessment
-      tags:
-      - assessments
-      description: Deprecated alias of /v1/ponds/{pond}/assessments/evaporation. Most recent evaporation
-        and feed assessment.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id026
-                $ref: '#/components/schemas/EvaporationAssessment'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '401':
-          description: Not signed in
-          content: &id004
-            application/json:
-              schema: *id002
-        '403':
-          description: Another account's pond
-          content: *id004
-        '404':
-          description: Pond or assessment not found
-          content: *id004
-        '500':
-          description: Unexpected server error
-          content: *id004
-        '503':
-          description: Storage or service not available
-          content: *id004
-      security:
-      - bearerAuth: []
-  /assessment/{user_id}:
-    get:
-      operationId: legacy_get_latest_assessment
-      summary: Latest water chemistry assessment
-      tags:
-      - assessments
-      description: Deprecated alias of /v1/ponds/{pond}/assessments/chemistry. Most recent chemistry assessment,
-        whether produced by a poll tick or by an event endpoint's immediate re-assessment.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id024
-                $ref: '#/components/schemas/WaterChemistryAssessment'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '401':
-          description: Not signed in
-          content: &id005
-            application/json:
-              schema: *id002
-        '403':
-          description: Another account's pond
-          content: *id005
-        '404':
-          description: Pond or assessment not found
-          content: *id005
-        '500':
-          description: Unexpected server error
-          content: *id005
-        '503':
-          description: Storage or service not available
-          content: *id005
-      security:
-      - bearerAuth: []
-  /events/algae-rating:
-    post:
-      operationId: legacy_log_algae_rating
-      summary: Rate the algae in a camera frame
-      tags:
-      - events
-      description: 'Deprecated alias of /v1/ponds/{pond}/events/algae-rating. Body: {user_id, severity,
-        image_id?, green_ratio?, notes?} severity: "none" | "minor" | "moderate" | "severe" | "obstruction"
-        image_id identifies the frame being rated. Strongly preferred over letting the server guess "the
-        latest frame": if the user rates at 9pm and the newest photo is from 6pm, an implicit pairing
-        silently corrupts the calibration set. When omitted the server falls back to the newest frame
-        and says so in the response.'
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlgaeRatingEvent'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id033
-                $ref: '#/components/schemas/AlgaeRatingResult'
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id006
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id006
-        '403':
-          description: Another account's pond
-          content: *id006
-        '404':
-          description: Pond or assessment not found
-          content: *id006
-        '500':
-          description: Unexpected server error
-          content: *id006
-        '503':
-          description: Storage or service not available
-          content: *id006
-      security:
-      - bearerAuth: []
-  /events/algae-rating/undo:
-    post:
-      operationId: legacy_undo_algae_rating
-      summary: Undo the most recent algae rating
-      tags:
-      - events
-      description: 'Deprecated alias of /v1/ponds/{pond}/events/algae-rating/undo. Reverses the most recent
-        rating. Body: {user_id, rating_id?} Only the most recent rating is exactly reversible - that is
-        the mis-tap case the undo affordance exists for. The engine restores the level, thresholds, growth
-        fit and camera history it had beforehand, and the persisted row is deleted so it leaves the calibration
-        set too.'
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlgaeRatingUndo'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id035
-                $ref: '#/components/schemas/AlgaeRatingUndoResult'
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id007
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id007
-        '403':
-          description: Another account's pond
-          content: *id007
-        '404':
-          description: Pond or assessment not found
-          content: *id007
-        '409':
-          description: Conflict
-          content: *id007
-        '500':
-          description: Unexpected server error
-          content: *id007
-        '503':
-          description: Storage or service not available
-          content: *id007
-      security:
-      - bearerAuth: []
-  /events/algal-scrub:
-    post:
-      operationId: legacy_log_algal_scrub
-      summary: Log an algae scrub
-      tags:
-      - events
-      description: Deprecated alias of /v1/ponds/{pond}/events/algal-scrub. Knocks the algae level down,
-        re-assesses and returns all three assessments.
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlgalScrubEvent'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id009
-                $ref: '#/components/schemas/EventAssessments'
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id008
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id008
-        '403':
-          description: Another account's pond
-          content: *id008
-        '404':
-          description: Pond or assessment not found
-          content: *id008
-        '500':
-          description: Unexpected server error
-          content: *id008
-        '503':
-          description: Storage or service not available
-          content: *id008
-      security:
-      - bearerAuth: []
-  /events/feeding:
-    post:
-      operationId: legacy_log_feeding
-      summary: Log a feeding
-      tags:
-      - events
-      description: Deprecated alias of /v1/ponds/{pond}/events/feeding. Applies the feeding to every engine,
-        re-assesses and returns all three assessments.
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FeedingEvent'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: *id009
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id010
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id010
-        '403':
-          description: Another account's pond
-          content: *id010
-        '404':
-          description: Pond or assessment not found
-          content: *id010
-        '500':
-          description: Unexpected server error
-          content: *id010
-        '503':
-          description: Storage or service not available
-          content: *id010
-      security:
-      - bearerAuth: []
-  /events/top-up:
-    post:
-      operationId: legacy_log_top_up
-      summary: Log a top-up
-      tags:
-      - events
-      description: Deprecated alias of /v1/ponds/{pond}/events/top-up. Clears the evaporation engine's
-        accrued loss, re-assesses and returns all three assessments.
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: &id012
-              $ref: '#/components/schemas/VolumeEvent'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: *id009
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id011
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id011
-        '403':
-          description: Another account's pond
-          content: *id011
-        '404':
-          description: Pond or assessment not found
-          content: *id011
-        '500':
-          description: Unexpected server error
-          content: *id011
-        '503':
-          description: Storage or service not available
-          content: *id011
-      security:
-      - bearerAuth: []
-  /events/water-change:
-    post:
-      operationId: legacy_log_water_change
-      summary: Log a water change
-      tags:
-      - events
-      description: Deprecated alias of /v1/ponds/{pond}/events/water-change. Dilutes chemistry, resets
-        the water level and suspended algae, re-assesses and returns all three assessments.
-      deprecated: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: *id012
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: *id009
-          headers:
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-          content: &id013
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id013
-        '403':
-          description: Another account's pond
-          content: *id013
-        '404':
-          description: Pond or assessment not found
-          content: *id013
-        '500':
-          description: Unexpected server error
-          content: *id013
-        '503':
-          description: Storage or service not available
-          content: *id013
-      security:
-      - bearerAuth: []
-  /forecast/algae/{user_id}:
-    get:
-      operationId: legacy_get_algae_forecast
-      summary: Algae lookahead
-      tags:
-      - forecasts
-      description: Deprecated alias of /v1/ponds/{pond}/forecasts/algae. Algae lookahead for the Algal
-        & Solar screen. Projects from the engine's current green level - which the poller keeps corrected
-        against each new ESP32-CAM frame - using a growth rate fitted from that same camera history and
-        modulated by the NEA forecast. Nitrate comes from the chemistry engine so the two lookaheads stay
-        coupled.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: horizon_days
-        in: query
-        required: false
-        schema:
-          default: 21
-          maximum: 60
-          minimum: 1
-          title: Horizon Days
-          type: integer
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id042
-                $ref: '#/components/schemas/AlgaeForecast'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '400':
-          description: Invalid request
-          content: &id014
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id014
-        '403':
-          description: Another account's pond
-          content: *id014
-        '404':
-          description: Pond or assessment not found
-          content: *id014
-        '422':
-          description: Not enough history to project
-          content: *id014
-        '500':
-          description: Unexpected server error
-          content: *id014
-        '503':
-          description: Storage or service not available
-          content: *id014
-      security:
-      - bearerAuth: []
-  /forecast/evaporation/{user_id}:
-    get:
-      operationId: legacy_get_evaporation_forecast
-      summary: Evaporation and feed lookahead
-      tags:
-      - forecasts
-      description: Deprecated alias of /v1/ponds/{pond}/forecasts/evaporation. Evaporation + feed lookahead
-        for the Temperature & Feed screen. Projects forward from the engine's ACCUMULATED loss state -
-        the running integral the poller has been building against real weather - rather than re-estimating
-        it from a timestamp at request time.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: horizon_days
-        in: query
-        required: false
-        schema:
-          default: 14
-          maximum: 60
-          minimum: 1
-          title: Horizon Days
-          type: integer
-      - name: depth_m
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - exclusiveMinimum: 0
-            maximum: 10
-            type: number
-          - type: 'null'
-          default: null
-          title: Depth M
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id046
-                $ref: '#/components/schemas/EvaporationForecast'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '400':
-          description: Invalid request
-          content: &id015
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id015
-        '403':
-          description: Another account's pond
-          content: *id015
-        '404':
-          description: Pond or assessment not found
-          content: *id015
-        '500':
-          description: Unexpected server error
-          content: *id015
-        '503':
-          description: Storage or service not available
-          content: *id015
-      security:
-      - bearerAuth: []
-  /forecast/{user_id}:
-    get:
-      operationId: legacy_get_forecast
-      summary: Water chemistry lookahead
-      tags:
-      - forecasts
-      description: 'Deprecated alias of /v1/ponds/{pond}/forecasts/chemistry. Water chemistry lookahead:
-        projects TAN/NO2/NO3 assuming feeding continues at this pond''s recent average rate and no further
-        interventions occur.'
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: horizon_days
-        in: query
-        required: false
-        schema:
-          default: 21
-          maximum: 60
-          minimum: 1
-          title: Horizon Days
-          type: integer
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id044
-                $ref: '#/components/schemas/WaterChemistryForecast'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '400':
-          description: Invalid request
-          content: &id016
-            application/json:
-              schema: *id002
-        '401':
-          description: Not signed in
-          content: *id016
-        '403':
-          description: Another account's pond
-          content: *id016
-        '404':
-          description: Pond or assessment not found
-          content: *id016
-        '422':
-          description: Not enough history to project
-          content: *id016
-        '500':
-          description: Unexpected server error
-          content: *id016
-        '503':
-          description: Storage or service not available
-          content: *id016
-      security:
-      - bearerAuth: []
   /health:
     get:
       operationId: unversioned_health
@@ -869,7 +55,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id019
+              schema: &id003
                 $ref: '#/components/schemas/Health'
           headers:
             ETag:
@@ -886,7 +72,8 @@ paths:
           description: Unexpected server error
           content:
             application/json:
-              schema: *id002
+              schema: &id001
+                $ref: '#/components/schemas/ErrorEnvelope'
       security: []
   /metrics:
     get:
@@ -902,71 +89,6 @@ paths:
             text/plain:
               schema:
                 type: string
-  /ratings/algae/{user_id}:
-    get:
-      operationId: legacy_get_algae_ratings
-      summary: Algae rating history and calibration
-      tags:
-      - ratings
-      description: Deprecated alias of /v1/ponds/{pond}/ratings/algae. Rating history plus the calibration
-        state it produces. Drives the rating card's "last time you called this Moderate" anchor and its
-        progress hint.
-      deprecated: true
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      - name: If-None-Match
-        in: header
-        required: false
-        description: An ETag from an earlier response.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: &id051
-                $ref: '#/components/schemas/AlgaeRatingContext'
-          headers:
-            ETag:
-              description: Strong validator over the response body.
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-                const: private, no-cache
-            Deprecation:
-              description: 'RFC 9745: the date this path was deprecated.'
-              schema:
-                type: string
-        '304':
-          description: 'Not modified: If-None-Match matches the current ETag. No body.'
-        '401':
-          description: Not signed in
-          content: &id017
-            application/json:
-              schema: *id002
-        '403':
-          description: Another account's pond
-          content: *id017
-        '404':
-          description: Pond or assessment not found
-          content: *id017
-        '500':
-          description: Unexpected server error
-          content: *id017
-        '503':
-          description: Storage or service not available
-          content: *id017
-      security:
-      - bearerAuth: []
   /ready:
     get:
       operationId: unversioned_ready
@@ -987,7 +109,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id053
+              schema: &id035
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -1002,12 +124,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id018
+          content: &id002
             application/json:
-              schema: *id002
+              schema: *id001
         '503':
           description: Storage or service not available
-          content: *id018
+          content: *id002
       security: []
   /v1/health:
     get:
@@ -1028,7 +150,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id019
+              schema: *id003
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1044,7 +166,7 @@ paths:
           description: Unexpected server error
           content:
             application/json:
-              schema: *id002
+              schema: *id001
       security: []
   /v1/ponds/{pond}/assessments:
     get:
@@ -1074,7 +196,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id020
+              schema:
+                $ref: '#/components/schemas/AllAssessments'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1088,21 +211,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id021
+          content: &id004
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id021
+          content: *id004
         '404':
           description: Pond or assessment not found
-          content: *id021
+          content: *id004
         '500':
           description: Unexpected server error
-          content: *id021
+          content: *id004
         '503':
           description: Storage or service not available
-          content: *id021
+          content: *id004
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/assessments/algae:
@@ -1131,7 +254,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id022
+              schema:
+                $ref: '#/components/schemas/AlgaeAssessment'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1145,21 +269,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id023
+          content: &id005
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id023
+          content: *id005
         '404':
           description: Pond or assessment not found
-          content: *id023
+          content: *id005
         '500':
           description: Unexpected server error
-          content: *id023
+          content: *id005
         '503':
           description: Storage or service not available
-          content: *id023
+          content: *id005
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/assessments/chemistry:
@@ -1189,7 +313,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id024
+              schema:
+                $ref: '#/components/schemas/WaterChemistryAssessment'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1203,21 +328,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id025
+          content: &id006
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id025
+          content: *id006
         '404':
           description: Pond or assessment not found
-          content: *id025
+          content: *id006
         '500':
           description: Unexpected server error
-          content: *id025
+          content: *id006
         '503':
           description: Storage or service not available
-          content: *id025
+          content: *id006
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/assessments/evaporation:
@@ -1246,7 +371,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id026
+              schema:
+                $ref: '#/components/schemas/EvaporationAssessment'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1260,21 +386,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id027
+          content: &id007
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id027
+          content: *id007
         '404':
           description: Pond or assessment not found
-          content: *id027
+          content: *id007
         '500':
           description: Unexpected server error
-          content: *id027
+          content: *id007
         '503':
           description: Storage or service not available
-          content: *id027
+          content: *id007
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/camera/mask:
@@ -1304,7 +430,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id029
+              schema: &id009
                 $ref: '#/components/schemas/CameraMaskResponse'
           headers:
             ETag:
@@ -1319,18 +445,18 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id028
+          content: &id008
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id028
+          content: *id008
         '500':
           description: Unexpected server error
-          content: *id028
+          content: *id008
         '503':
           description: Storage or service not available
-          content: *id028
+          content: *id008
       security:
       - bearerAuth: []
     put:
@@ -1358,24 +484,24 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id029
+              schema: *id009
         '400':
           description: Invalid request
-          content: &id030
+          content: &id010
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id030
+          content: *id010
         '403':
           description: Another account's pond
-          content: *id030
+          content: *id010
         '500':
           description: Unexpected server error
-          content: *id030
+          content: *id010
         '503':
           description: Storage or service not available
-          content: *id030
+          content: *id010
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/dashboard:
@@ -1422,21 +548,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id031
+          content: &id011
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id031
+          content: *id011
         '404':
           description: Pond or assessment not found
-          content: *id031
+          content: *id011
         '500':
           description: Unexpected server error
-          content: *id031
+          content: *id011
         '503':
           description: Storage or service not available
-          content: *id031
+          content: *id011
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/devices:
@@ -1483,21 +609,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id032
+          content: &id012
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id032
+          content: *id012
         '404':
           description: Pond or assessment not found
-          content: *id032
+          content: *id012
         '500':
           description: Unexpected server error
-          content: *id032
+          content: *id012
         '503':
           description: Storage or service not available
-          content: *id032
+          content: *id012
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating:
@@ -1530,27 +656,28 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id033
+              schema:
+                $ref: '#/components/schemas/AlgaeRatingResult'
         '400':
           description: Invalid request
-          content: &id034
+          content: &id013
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id034
+          content: *id013
         '403':
           description: Another account's pond
-          content: *id034
+          content: *id013
         '404':
           description: Pond or assessment not found
-          content: *id034
+          content: *id013
         '500':
           description: Unexpected server error
-          content: *id034
+          content: *id013
         '503':
           description: Storage or service not available
-          content: *id034
+          content: *id013
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating/undo:
@@ -1582,30 +709,31 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id035
+              schema:
+                $ref: '#/components/schemas/AlgaeRatingUndoResult'
         '400':
           description: Invalid request
-          content: &id036
+          content: &id014
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id036
+          content: *id014
         '403':
           description: Another account's pond
-          content: *id036
+          content: *id014
         '404':
           description: Pond or assessment not found
-          content: *id036
+          content: *id014
         '409':
           description: Conflict
-          content: *id036
+          content: *id014
         '500':
           description: Unexpected server error
-          content: *id036
+          content: *id014
         '503':
           description: Storage or service not available
-          content: *id036
+          content: *id014
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algal-scrub:
@@ -1634,27 +762,28 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: &id016
+                $ref: '#/components/schemas/EventAssessments'
         '400':
           description: Invalid request
-          content: &id037
+          content: &id015
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id037
+          content: *id015
         '403':
           description: Another account's pond
-          content: *id037
+          content: *id015
         '404':
           description: Pond or assessment not found
-          content: *id037
+          content: *id015
         '500':
           description: Unexpected server error
-          content: *id037
+          content: *id015
         '503':
           description: Storage or service not available
-          content: *id037
+          content: *id015
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/feeding:
@@ -1683,27 +812,123 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: *id016
         '400':
           description: Invalid request
-          content: &id038
+          content: &id017
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id038
+          content: *id017
         '403':
           description: Another account's pond
-          content: *id038
+          content: *id017
         '404':
           description: Pond or assessment not found
-          content: *id038
+          content: *id017
         '500':
           description: Unexpected server error
-          content: *id038
+          content: *id017
         '503':
           description: Storage or service not available
-          content: *id038
+          content: *id017
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/events/filter-clean:
+    post:
+      operationId: log_filter_clean
+      summary: Log filter cleaning
+      tags:
+      - events
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilterCleanEventOnPond'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id016
+        '400':
+          description: Invalid request
+          content: &id018
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id018
+        '403':
+          description: Another account's pond
+          content: *id018
+        '404':
+          description: Pond or assessment not found
+          content: *id018
+        '500':
+          description: Unexpected server error
+          content: *id018
+        '503':
+          description: Storage or service not available
+          content: *id018
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/events/salt:
+    post:
+      operationId: log_salt
+      summary: Log salt addition (grams)
+      tags:
+      - events
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaltEventOnPond'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id016
+        '400':
+          description: Invalid request
+          content: &id019
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id019
+        '403':
+          description: Another account's pond
+          content: *id019
+        '404':
+          description: Pond or assessment not found
+          content: *id019
+        '500':
+          description: Unexpected server error
+          content: *id019
+        '503':
+          description: Storage or service not available
+          content: *id019
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/top-up:
@@ -1725,34 +950,34 @@ paths:
         required: true
         content:
           application/json:
-            schema: &id040
+            schema: &id021
               $ref: '#/components/schemas/VolumeEventOnPond'
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: *id016
         '400':
           description: Invalid request
-          content: &id039
+          content: &id020
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id039
+          content: *id020
         '403':
           description: Another account's pond
-          content: *id039
+          content: *id020
         '404':
           description: Pond or assessment not found
-          content: *id039
+          content: *id020
         '500':
           description: Unexpected server error
-          content: *id039
+          content: *id020
         '503':
           description: Storage or service not available
-          content: *id039
+          content: *id020
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/water-change:
@@ -1775,33 +1000,33 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id040
+            schema: *id021
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: *id016
         '400':
           description: Invalid request
-          content: &id041
+          content: &id022
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id041
+          content: *id022
         '403':
           description: Another account's pond
-          content: *id041
+          content: *id022
         '404':
           description: Pond or assessment not found
-          content: *id041
+          content: *id022
         '500':
           description: Unexpected server error
-          content: *id041
+          content: *id022
         '503':
           description: Storage or service not available
-          content: *id041
+          content: *id022
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/algae:
@@ -1842,7 +1067,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id042
+              schema:
+                $ref: '#/components/schemas/AlgaeForecast'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1856,27 +1082,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id043
+          content: &id023
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id043
+          content: *id023
         '403':
           description: Another account's pond
-          content: *id043
+          content: *id023
         '404':
           description: Pond or assessment not found
-          content: *id043
+          content: *id023
         '422':
           description: Not enough history to project
-          content: *id043
+          content: *id023
         '500':
           description: Unexpected server error
-          content: *id043
+          content: *id023
         '503':
           description: Storage or service not available
-          content: *id043
+          content: *id023
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/chemistry:
@@ -1915,7 +1141,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id044
+              schema:
+                $ref: '#/components/schemas/WaterChemistryForecast'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1929,27 +1156,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id045
+          content: &id024
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id045
+          content: *id024
         '403':
           description: Another account's pond
-          content: *id045
+          content: *id024
         '404':
           description: Pond or assessment not found
-          content: *id045
+          content: *id024
         '422':
           description: Not enough history to project
-          content: *id045
+          content: *id024
         '500':
           description: Unexpected server error
-          content: *id045
+          content: *id024
         '503':
           description: Storage or service not available
-          content: *id045
+          content: *id024
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/evaporation:
@@ -2000,7 +1227,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id046
+              schema:
+                $ref: '#/components/schemas/EvaporationForecast'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2014,24 +1242,131 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id047
+          content: &id025
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id047
+          content: *id025
         '403':
           description: Another account's pond
-          content: *id047
+          content: *id025
         '404':
           description: Pond or assessment not found
-          content: *id047
+          content: *id025
         '500':
           description: Unexpected server error
-          content: *id047
+          content: *id025
         '503':
           description: Storage or service not available
-          content: *id047
+          content: *id025
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/kit-readings:
+    post:
+      operationId: post_kit_reading
+      summary: Record a test-kit measurement
+      tags:
+      - validation
+      description: Store the kit result and an immutable model comparison at taken_at. Does not calibrate
+        the twin.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KitReadingBodyOnPond'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitReading'
+        '400':
+          description: Invalid request
+          content: &id026
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id026
+        '403':
+          description: Another account's pond
+          content: *id026
+        '404':
+          description: Pond or assessment not found
+          content: *id026
+        '500':
+          description: Unexpected server error
+          content: *id026
+        '503':
+          description: Storage or service not available
+          content: *id026
+      security:
+      - bearerAuth: []
+    get:
+      operationId: get_kit_readings
+      summary: List test-kit measurements
+      tags:
+      - validation
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitReadings'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id027
+            application/json:
+              schema: *id001
+        '403':
+          description: Another account's pond
+          content: *id027
+        '404':
+          description: Pond or assessment not found
+          content: *id027
+        '500':
+          description: Unexpected server error
+          content: *id027
+        '503':
+          description: Storage or service not available
+          content: *id027
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/profile:
@@ -2061,7 +1396,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id049
+              schema: &id029
                 $ref: '#/components/schemas/PondProfileResponse'
           headers:
             ETag:
@@ -2076,21 +1411,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id048
+          content: &id028
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id048
+          content: *id028
         '404':
           description: Pond or assessment not found
-          content: *id048
+          content: *id028
         '500':
           description: Unexpected server error
-          content: *id048
+          content: *id028
         '503':
           description: Storage or service not available
-          content: *id048
+          content: *id028
       security:
       - bearerAuth: []
     put:
@@ -2119,30 +1454,149 @@ paths:
           description: Created
           content:
             application/json:
-              schema: *id049
+              schema: *id029
         '400':
           description: Invalid request
-          content: &id050
+          content: &id030
             application/json:
-              schema: *id002
+              schema: *id001
         '401':
           description: Not signed in
-          content: *id050
+          content: *id030
         '403':
           description: Another account's pond
-          content: *id050
+          content: *id030
         '404':
           description: Pond or assessment not found
-          content: *id050
+          content: *id030
         '409':
           description: Conflict
-          content: *id050
+          content: *id030
         '500':
           description: Unexpected server error
-          content: *id050
+          content: *id030
         '503':
           description: Storage or service not available
-          content: *id050
+          content: *id030
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/prompts:
+    get:
+      operationId: get_prompts
+      summary: List unanswered TDS questions
+      tags:
+      - events
+      description: Off by default. Confidence describes a measured TDS signal, not its cause.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TdsPromptList'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id031
+            application/json:
+              schema: *id001
+        '403':
+          description: Another account's pond
+          content: *id031
+        '404':
+          description: Pond or assessment not found
+          content: *id031
+        '500':
+          description: Unexpected server error
+          content: *id031
+        '503':
+          description: Storage or service not available
+          content: *id031
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/prompts/{prompt_id}:
+    post:
+      operationId: answer_prompt
+      summary: Answer a TDS question
+      tags:
+      - events
+      description: Event answers need the usual measured amounts and are applied once through the ledger.
+        'none of these' remembers rejected guesses for this signal type and direction. 'dismiss' closes
+        this question without rejecting future explanations. A repeat of the same answer is a no-op; changing
+        an answered question returns 409.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: prompt_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptAnswerOnPond'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TdsPromptAnswer'
+        '400':
+          description: Invalid request
+          content: &id032
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id032
+        '403':
+          description: Another account's pond
+          content: *id032
+        '404':
+          description: Pond or assessment not found
+          content: *id032
+        '409':
+          description: Conflict
+          content: *id032
+        '500':
+          description: Unexpected server error
+          content: *id032
+        '503':
+          description: Storage or service not available
+          content: *id032
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/ratings/algae:
@@ -2172,7 +1626,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id051
+              schema:
+                $ref: '#/components/schemas/AlgaeRatingContext'
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2186,21 +1641,81 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id052
+          content: &id033
             application/json:
-              schema: *id002
+              schema: *id001
         '403':
           description: Another account's pond
-          content: *id052
+          content: *id033
         '404':
           description: Pond or assessment not found
-          content: *id052
+          content: *id033
         '500':
           description: Unexpected server error
-          content: *id052
+          content: *id033
         '503':
           description: Storage or service not available
-          content: *id052
+          content: *id033
+      security:
+      - bearerAuth: []
+  /v1/ponds/{pond}/validation:
+    get:
+      operationId: get_kit_validation
+      summary: Compare model estimates with test kits
+      tags:
+      - validation
+      description: Per-analyte paired counts, signed mean error, mean absolute error and measured/estimated
+        pairs. Error is model minus measurement. Missing measurements or estimates are excluded; an empty
+        analyte has count zero and null means. pH and KH have no model estimate.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitValidation'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id034
+            application/json:
+              schema: *id001
+        '403':
+          description: Another account's pond
+          content: *id034
+        '404':
+          description: Pond or assessment not found
+          content: *id034
+        '500':
+          description: Unexpected server error
+          content: *id034
+        '503':
+          description: Storage or service not available
+          content: *id034
       security:
       - bearerAuth: []
   /v1/ready:
@@ -2223,7 +1738,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id053
+              schema: *id035
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2237,12 +1752,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id054
+          content: &id036
             application/json:
-              schema: *id002
+              schema: *id001
         '503':
           description: Storage or service not available
-          content: *id054
+          content: *id036
       security: []
 components:
   schemas:
@@ -2495,6 +2010,10 @@ components:
     AlgaeForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -2609,6 +2128,7 @@ components:
           default: null
           title: Assimilated Camera Frames
       required:
+      - uncertainty
       - trajectory
       - thresholds
       - rate_source
@@ -2703,57 +2223,6 @@ components:
       - latest_image
       - severity_levels
       title: AlgaeRatingContext
-      type: object
-    AlgaeRatingEvent:
-      properties:
-        user_id:
-          exclusiveMinimum: 0
-          title: User Id
-          type: integer
-        timestamp:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          title: Timestamp
-        event_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
-            An event_id the pond has already applied is not applied again. Optional for older app builds.
-          title: Event Id
-        severity:
-          title: Severity
-          type: string
-        image_id:
-          anyOf:
-          - exclusiveMinimum: 0
-            type: integer
-          - type: 'null'
-          default: null
-          title: Image Id
-        green_ratio:
-          anyOf:
-          - maximum: 1
-            minimum: 0
-            type: number
-          - type: 'null'
-          default: null
-          title: Green Ratio
-        notes:
-          anyOf:
-          - maxLength: 1000
-            type: string
-          - type: 'null'
-          default: null
-          title: Notes
-      required:
-      - user_id
-      - severity
-      title: AlgaeRatingEvent
       type: object
     AlgaeRatingEventOnPond:
       properties:
@@ -2867,23 +2336,6 @@ components:
       - assessments
       title: AlgaeRatingResult
       type: object
-    AlgaeRatingUndo:
-      properties:
-        user_id:
-          exclusiveMinimum: 0
-          title: User Id
-          type: integer
-        rating_id:
-          anyOf:
-          - exclusiveMinimum: 0
-            type: integer
-          - type: 'null'
-          default: null
-          title: Rating Id
-      required:
-      - user_id
-      title: AlgaeRatingUndo
-      type: object
     AlgaeRatingUndoOnPond:
       properties:
         user_id:
@@ -2959,37 +2411,6 @@ components:
       - mode
       title: AlgaeThresholds
       type: object
-    AlgalScrubEvent:
-      properties:
-        user_id:
-          exclusiveMinimum: 0
-          title: User Id
-          type: integer
-        timestamp:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          title: Timestamp
-        event_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
-            An event_id the pond has already applied is not applied again. Optional for older app builds.
-          title: Event Id
-        scrub_type:
-          default: unspecified
-          maxLength: 64
-          minLength: 1
-          title: Scrub Type
-          type: string
-      required:
-      - user_id
-      title: AlgalScrubEvent
-      type: object
     AlgalScrubEventOnPond:
       properties:
         user_id:
@@ -3046,6 +2467,34 @@ components:
       - algae
       - hypoxia
       title: AllAssessments
+      type: object
+    AnalyteValidation:
+      additionalProperties: false
+      properties:
+        count:
+          title: Count
+          type: integer
+        mean_error:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mean Error
+        mean_absolute_error:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mean Absolute Error
+        pairs:
+          items:
+            $ref: '#/components/schemas/ValidationPair'
+          title: Pairs
+          type: array
+      required:
+      - count
+      - mean_error
+      - mean_absolute_error
+      - pairs
+      title: AnalyteValidation
       type: object
     BatteryTrend:
       additionalProperties: false
@@ -3305,6 +2754,32 @@ components:
       - channel
       - message
       title: ConfidenceReason
+      type: object
+    CrossingDayRange:
+      additionalProperties: false
+      properties:
+        low:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Earliest crossing; null when no run crosses within the horizon.
+          title: Low
+        high:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Latest crossing; null when any run does not cross within the horizon.
+          title: High
+        not_crossed_runs:
+          maximum: 3
+          minimum: 0
+          title: Not Crossed Runs
+          type: integer
+      required:
+      - low
+      - high
+      - not_crossed_runs
+      title: CrossingDayRange
       type: object
     DailyStats:
       additionalProperties: true
@@ -3849,6 +3324,10 @@ components:
     EvaporationForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -3933,6 +3412,7 @@ components:
         tds_cross_check:
           $ref: '#/components/schemas/TdsCrossCheck'
       required:
+      - uncertainty
       - trajectory
       - volume_litres
       - avg_loss_litres_per_day
@@ -3967,6 +3447,20 @@ components:
       additionalProperties: true
       description: What the twin did with the event (koi/models/event_ledger.py).
       properties:
+        salt_grams:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Logged added salt mass in grams, for SALT.
+          title: Salt Grams
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Logged intervention notes, when provided.
+          title: Notes
         event_id:
           description: The event's UUID; legacy:<n> when the request had none.
           title: Event Id
@@ -4003,43 +3497,6 @@ components:
       - replayed_from
       - placed_late
       title: EventOutcome
-      type: object
-    FeedingEvent:
-      properties:
-        user_id:
-          exclusiveMinimum: 0
-          title: User Id
-          type: integer
-        timestamp:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          default: null
-          title: Timestamp
-        event_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
-            An event_id the pond has already applied is not applied again. Optional for older app builds.
-          title: Event Id
-        food_grams:
-          maximum: 10000
-          minimum: 0
-          title: Food Grams
-          type: number
-        protein_percent:
-          maximum: 100
-          minimum: 0
-          title: Protein Percent
-          type: number
-      required:
-      - user_id
-      - food_grams
-      - protein_percent
-      title: FeedingEvent
       type: object
     FeedingEventOnPond:
       properties:
@@ -4080,6 +3537,40 @@ components:
       - food_grams
       - protein_percent
       title: FeedingEventOnPond
+      type: object
+    FilterCleanEventOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        timestamp:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      title: FilterCleanEventOnPond
       type: object
     ForecastDay:
       additionalProperties: true
@@ -4411,6 +3902,272 @@ components:
       - created_at
       title: ImageRow
       type: object
+    KitComparison:
+      additionalProperties: false
+      properties:
+        source:
+          enum:
+          - evaluation
+          - rebuild
+          - unavailable
+          title: Source
+          type: string
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        evaluation_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Evaluation Id
+        estimated_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Estimated At
+        rebuild_weather:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Rebuild Weather
+      required:
+      - source
+      - model_version
+      - evaluation_id
+      - estimated_at
+      - rebuild_weather
+      title: KitComparison
+      type: object
+    KitReading:
+      additionalProperties: false
+      properties:
+        ammonia_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Total ammonia (TAN), mg/L.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+        id:
+          title: Id
+          type: integer
+        pond:
+          title: Pond
+          type: integer
+        taken_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Taken At
+        kit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kit
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        estimates:
+          anyOf:
+          - $ref: '#/components/schemas/KitValues'
+          - type: 'null'
+        differences:
+          anyOf:
+          - $ref: '#/components/schemas/KitValues'
+          - type: 'null'
+          description: Model estimate minus kit measurement, in analyte units.
+        comparison:
+          anyOf:
+          - $ref: '#/components/schemas/KitComparison'
+          - type: 'null'
+      required:
+      - ammonia_mg_l
+      - nitrite_mg_l
+      - nitrate_mg_l
+      - ph
+      - kh_dkh
+      - id
+      - pond
+      - taken_at
+      - kit
+      - notes
+      - created_at
+      - estimates
+      - differences
+      - comparison
+      title: KitReading
+      type: object
+    KitReadingBodyOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        taken_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          description: Sample time; null means unknown, no comparison.
+          title: Taken At
+        kit:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          default: null
+          title: Kit
+        ammonia_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Total ammonia (TAN), mg/L; not free NH3.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - maximum: 14
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      title: KitReadingBodyOnPond
+      type: object
+    KitReadings:
+      additionalProperties: false
+      properties:
+        readings:
+          items:
+            $ref: '#/components/schemas/KitReading'
+          title: Readings
+          type: array
+      required:
+      - readings
+      title: KitReadings
+      type: object
+    KitValidation:
+      additionalProperties: false
+      properties:
+        analytes:
+          additionalProperties:
+            $ref: '#/components/schemas/AnalyteValidation'
+          title: Analytes
+          type: object
+      required:
+      - analytes
+      title: KitValidation
+      type: object
+    KitValues:
+      additionalProperties: false
+      properties:
+        ammonia_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Total ammonia (TAN), mg/L.
+          title: Ammonia Mg L
+        nitrite_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrite, mg/L.
+          title: Nitrite Mg L
+        nitrate_mg_l:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Nitrate, mg/L.
+          title: Nitrate Mg L
+        ph:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ph
+        kh_dkh:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Carbonate hardness, dKH.
+          title: Kh Dkh
+      required:
+      - ammonia_mg_l
+      - nitrite_mg_l
+      - nitrate_mg_l
+      - ph
+      - kh_dkh
+      title: KitValues
+      type: object
     OutlookDay:
       additionalProperties: false
       description: One day of NEA's 4-day outlook, from today (Singapore) onward.
@@ -4732,6 +4489,121 @@ components:
       - biomass_g
       title: ProfileUpdate
       type: object
+    ProjectionUncertainty:
+      additionalProperties: false
+      properties:
+        method:
+          const: three_scenario_sensitivity
+          title: Method
+          type: string
+        low:
+          description: Pointwise minima of numeric trajectory fields, in their original units.
+          items:
+            additionalProperties:
+              type: number
+            type: object
+          title: Low
+          type: array
+        high:
+          description: Pointwise maxima of numeric trajectory fields, in their original units.
+          items:
+            additionalProperties:
+              type: number
+            type: object
+          title: High
+          type: array
+        first_crossing_days:
+          additionalProperties:
+            $ref: '#/components/schemas/CrossingDayRange'
+          description: Ranges keyed by the central forecast's crossing field names. Day 0 means already
+            crossed. Sensitivity scenarios are model estimates, not statistical confidence intervals.
+          title: First Crossing Days
+          type: object
+      required:
+      - method
+      - low
+      - high
+      - first_crossing_days
+      title: ProjectionUncertainty
+      type: object
+    PromptAnswerOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        answer:
+          enum:
+          - water_change
+          - top_up
+          - algal_scrub
+          - feeding
+          - salt
+          - filter_clean
+          - none of these
+          - dismiss
+          title: Answer
+          type: string
+        volume_percent:
+          anyOf:
+          - exclusiveMinimum: 0
+            maximum: 100
+            type: number
+          - type: 'null'
+          default: null
+          title: Volume Percent
+        volume_litres:
+          anyOf:
+          - exclusiveMinimum: 0
+            maximum: 1000000
+            type: number
+          - type: 'null'
+          default: null
+          title: Volume Litres
+        salt_grams:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Salt Grams
+        food_grams:
+          anyOf:
+          - maximum: 10000
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Food Grams
+        protein_percent:
+          anyOf:
+          - maximum: 100
+            minimum: 0
+            type: number
+          - type: 'null'
+          default: null
+          title: Protein Percent
+        scrub_type:
+          default: unspecified
+          maxLength: 64
+          minLength: 1
+          title: Scrub Type
+          type: string
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      required:
+      - answer
+      title: PromptAnswerOnPond
+      type: object
     Ready:
       additionalProperties: true
       properties:
@@ -4782,6 +4654,47 @@ components:
       - code
       - at
       title: ResetReason
+      type: object
+    SaltEventOnPond:
+      properties:
+        user_id:
+          anyOf:
+          - exclusiveMinimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          description: Optional; when sent it must be the pond in the path.
+          title: User Id
+        timestamp:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Timestamp
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
+            An event_id the pond has already applied is not applied again. Optional for older app builds.
+          title: Event Id
+        salt_grams:
+          description: Added salt mass in grams.
+          exclusiveMinimum: 0
+          title: Salt Grams
+          type: number
+        notes:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          default: null
+          title: Notes
+      required:
+      - salt_grams
+      title: SaltEventOnPond
       type: object
     ScrubBenefit:
       additionalProperties: true
@@ -4962,6 +4875,112 @@ components:
       - verdict
       title: TdsCrossCheck
       type: object
+    TdsPrompt:
+      additionalProperties: true
+      properties:
+        id:
+          title: Id
+          type: string
+        detection:
+          enum:
+          - step
+          - slope
+          title: Detection
+          type: string
+        detected_at:
+          format: date-time
+          title: Detected At
+          type: string
+        event_at:
+          format: date-time
+          title: Event At
+          type: string
+        time_basis:
+          enum:
+          - ingestion
+          - sample
+          title: Time Basis
+          type: string
+        baseline_ppm:
+          title: Baseline Ppm
+          type: number
+        level_ppm:
+          title: Level Ppm
+          type: number
+        delta_ppm:
+          title: Delta Ppm
+          type: number
+        slope_ppm_hour:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Slope Ppm Hour
+        confidence:
+          description: Signal confidence; not an event-kind probability.
+          maximum: 1
+          minimum: 0
+          title: Confidence
+          type: number
+        event_kinds:
+          items:
+            type: string
+          title: Event Kinds
+          type: array
+        answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Answer
+        message:
+          title: Message
+          type: string
+      required:
+      - id
+      - detection
+      - detected_at
+      - event_at
+      - time_basis
+      - baseline_ppm
+      - level_ppm
+      - delta_ppm
+      - slope_ppm_hour
+      - confidence
+      - event_kinds
+      - answer
+      - message
+      title: TdsPrompt
+      type: object
+    TdsPromptAnswer:
+      additionalProperties: false
+      properties:
+        prompt:
+          $ref: '#/components/schemas/TdsPrompt'
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+      required:
+      - prompt
+      - event_id
+      title: TdsPromptAnswer
+      type: object
+    TdsPromptList:
+      additionalProperties: false
+      properties:
+        enabled:
+          title: Enabled
+          type: boolean
+        prompts:
+          items:
+            $ref: '#/components/schemas/TdsPrompt'
+          title: Prompts
+          type: array
+      required:
+      - enabled
+      - prompts
+      title: TdsPromptList
+      type: object
     UvIndex:
       additionalProperties: false
       description: NEA's hourly UV index for the current Singapore hour.
@@ -5014,47 +5033,35 @@ components:
       - ingested_at
       title: UvIndex
       type: object
-    VolumeEvent:
-      description: 'Water change or top-up: at least one of the two volumes.'
+    ValidationPair:
+      additionalProperties: false
       properties:
-        user_id:
-          exclusiveMinimum: 0
-          title: User Id
+        reading_id:
+          title: Reading Id
           type: integer
-        timestamp:
+        taken_at:
           anyOf:
           - format: date-time
             type: string
           - type: 'null'
-          default: null
-          title: Timestamp
-        event_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          description: The event's UUID, the same value the app writes to pondInterventions.event_id.
-            An event_id the pond has already applied is not applied again. Optional for older app builds.
-          title: Event Id
-        volume_percent:
-          anyOf:
-          - exclusiveMinimum: 0
-            maximum: 100
-            type: number
-          - type: 'null'
-          default: null
-          title: Volume Percent
-        volume_litres:
-          anyOf:
-          - exclusiveMinimum: 0
-            maximum: 1000000
-            type: number
-          - type: 'null'
-          default: null
-          title: Volume Litres
+          title: Taken At
+        measured:
+          title: Measured
+          type: number
+        estimated:
+          title: Estimated
+          type: number
+        error:
+          description: Model estimate minus kit measurement, in analyte units.
+          title: Error
+          type: number
       required:
-      - user_id
-      title: VolumeEvent
+      - reading_id
+      - taken_at
+      - measured
+      - estimated
+      - error
+      title: ValidationPair
       type: object
     VolumeEventOnPond:
       properties:
@@ -5240,6 +5247,10 @@ components:
     WaterChemistryForecast:
       additionalProperties: true
       properties:
+        uncertainty:
+          $ref: '#/components/schemas/ProjectionUncertainty'
+          description: Low/central/high constants from koi/models/uncertainty.json. The existing trajectory
+            remains central.
         model_version:
           anyOf:
           - type: string
@@ -5301,6 +5312,7 @@ components:
           - $ref: '#/components/schemas/DailyStats'
           - type: 'null'
       required:
+      - uncertainty
       - trajectory
       - avg_daily_tan_mg
       - temp_baseline

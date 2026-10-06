@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 void showNeaFullForecastModal(
@@ -7,9 +9,11 @@ void showNeaFullForecastModal(
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFF0A0E17),
+    backgroundColor: AppColors.of(context).surfaceInset,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppRadius.sheet),
+      ),
     ),
     builder: (ctx) => _NeaForecastSheetContent(forecastData: forecastData),
   );
@@ -51,218 +55,236 @@ class _NeaForecastSheetContent extends StatelessWidget {
         : [];
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle Bar
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.xxl,
+            AppSpace.lg,
+            AppSpace.xxl,
+            AppSpace.xxl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle Bar
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.of(context).outline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: AppSpace.xl),
 
-            // --- HEADER ---
-            const Text(
-              'Singapore Environmental Outlook',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+              // --- HEADER ---
+              Text(
+                'Singapore Environmental Outlook',
+                style: AppType.style(
+                  color: AppColors.of(context).text,
+                  fontSize: AppType.title,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              validPeriodText,
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                validPeriodText,
+                style: AppType.style(
+                  color: AppColors.of(context).textMuted,
+                  fontSize: AppType.label,
+                ),
+              ),
+              const SizedBox(height: AppSpace.lg),
 
-            // --- SECTION 1: 24-HOUR MACRO BASELINE (No Card Container) ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Expanded(
-                  child: Text(
-                    summary24,
-                    style: const TextStyle(
-                      color: Colors.cyanAccent,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+              // --- SECTION 1: 24-HOUR MACRO BASELINE (No Card Container) ---
+              AdaptiveRow(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Expanded(
+                    child: Text(
+                      summary24,
+                      style: AppType.style(
+                        color: AppColors.of(context).info,
+                        fontSize: AppType.heading,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  '$tempLow24–$tempHigh24°C',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                  Text(
+                    '$tempLow24–$tempHigh24°C',
+                    style: AppType.style(
+                      color: AppColors.of(context).text,
+                      fontSize: AppType.title,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // 24-Hour Parameter Row
-            Row(
-              children: [
-                _buildParamTag(
-                  Icons.water_drop_outlined,
-                  'Humidity: $rhLow24–$rhHigh24%',
-                ),
-                const SizedBox(width: 16),
-                _buildParamTag(
-                  Icons.air,
-                  'Wind: $windDir24 ($windLow24–$windHigh24 km/h)',
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            const Divider(color: Colors.white12, height: 1),
-            const SizedBox(height: 20),
-
-            // --- SECTION 2: 4-DAY EXTENDED OUTLOOK (Clean Table Stream) ---
-            const Text(
-              '4-DAY FORECAST BREAKDOWN',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
 
-            if (outlook4Day.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'No 4-day outlook available.',
-                  style: TextStyle(color: Colors.white38, fontSize: 13),
+              // 24-Hour Parameter Row
+              AdaptiveRow(
+                children: [
+                  _buildParamTag(
+                    context,
+                    Icons.water_drop_outlined,
+                    'Humidity: $rhLow24–$rhHigh24%',
+                  ),
+                  const SizedBox(width: AppSpace.lg),
+                  _buildParamTag(
+                    context,
+                    Icons.air,
+                    'Wind: $windDir24 ($windLow24–$windHigh24 km/h)',
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpace.xl),
+              Divider(color: AppColors.of(context).outline, height: 1),
+              const SizedBox(height: AppSpace.xl),
+
+              // --- SECTION 2: 4-DAY EXTENDED OUTLOOK (Clean Table Stream) ---
+              Text(
+                '4-DAY FORECAST BREAKDOWN',
+                style: AppType.style(
+                  color: AppColors.of(context).textMuted,
+                  fontSize: AppType.caption,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
                 ),
-              )
-            else
-              ...outlook4Day.map((item) {
-                final itemData = item['data'] is Map ? item['data'] : {};
-                final String dayName =
-                    itemData['day']?.toString() ??
-                    item['slot_id']?.toString() ??
-                    '--';
-                final String text =
-                    itemData['forecast']?['text']?.toString() ?? 'Fair';
-                final String tLow =
-                    itemData['temperature']?['low']?.toString() ?? '--';
-                final String tHigh =
-                    itemData['temperature']?['high']?.toString() ?? '--';
-                final String hLow =
-                    itemData['relativeHumidity']?['low']?.toString() ?? '60';
-                final String hHigh =
-                    itemData['relativeHumidity']?['high']?.toString() ?? '95';
-                final String wDir =
-                    itemData['wind']?['direction']?.toString() ?? '';
-                final String wLow =
-                    itemData['wind']?['speed']?['low']?.toString() ?? '10';
-                final String wHigh =
-                    itemData['wind']?['speed']?['high']?.toString() ?? '20';
+              ),
+              const SizedBox(height: AppSpace.md),
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Column 1: Day Name & Wind
-                      SizedBox(
-                        width: 96,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+              if (outlook4Day.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
+                  child: Text(
+                    'No 4-day outlook available.',
+                    style: AppType.style(
+                      color: AppColors.of(context).textMuted,
+                      fontSize: AppType.body,
+                    ),
+                  ),
+                )
+              else
+                ...outlook4Day.map((item) {
+                  final itemData = item['data'] is Map ? item['data'] : {};
+                  final String dayName =
+                      itemData['day']?.toString() ??
+                      item['slot_id']?.toString() ??
+                      '--';
+                  final String text =
+                      itemData['forecast']?['text']?.toString() ?? 'Fair';
+                  final String tLow =
+                      itemData['temperature']?['low']?.toString() ?? '--';
+                  final String tHigh =
+                      itemData['temperature']?['high']?.toString() ?? '--';
+                  final String hLow =
+                      itemData['relativeHumidity']?['low']?.toString() ?? '60';
+                  final String hHigh =
+                      itemData['relativeHumidity']?['high']?.toString() ?? '95';
+                  final String wDir =
+                      itemData['wind']?['direction']?.toString() ?? '';
+                  final String wLow =
+                      itemData['wind']?['speed']?['low']?.toString() ?? '10';
+                  final String wHigh =
+                      itemData['wind']?['speed']?['high']?.toString() ?? '20';
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
+                    child: AdaptiveRow(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Column 1: Day Name & Wind
+                        SizedBox(
+                          width: 96,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                dayName.toUpperCase(),
+                                style: AppType.style(
+                                  color: AppColors.of(context).text,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: AppType.body,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpace.xxs),
+                              Text(
+                                wDir.isNotEmpty
+                                    ? '$wDir • $wLow-$wHigh km/h'
+                                    : '$wLow-$wHigh km/h',
+                                style: AppType.style(
+                                  color: AppColors.of(context).textMuted,
+                                  fontSize: AppType.micro,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Column 2: Forecast Summary Text
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: AppType.style(
+                              color: AppColors.of(context).textSecondary,
+                              fontSize: AppType.body,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        // Column 3: Temp & Humidity Range
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              dayName.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                              '$tLow–$tHigh°C',
+                              style: AppType.style(
+                                color: AppColors.of(context).info,
+                                fontWeight: FontWeight.w600,
+                                fontSize: AppType.body,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: AppSpace.xxs),
                             Text(
-                              wDir.isNotEmpty
-                                  ? '$wDir • $wLow-$wHigh km/h'
-                                  : '$wLow-$wHigh km/h',
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 10,
+                              'RH $hLow–$hHigh%',
+                              style: AppType.style(
+                                color: AppColors.of(context).textMuted,
+                                fontSize: AppType.micro,
                               ),
                             ),
                           ],
                         ),
-                      ),
-
-                      // Column 2: Forecast Summary Text
-                      Expanded(
-                        child: Text(
-                          text,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-
-                      // Column 3: Temp & Humidity Range
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '$tLow–$tHigh°C',
-                            style: const TextStyle(
-                              color: Colors.cyanAccent,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'RH $hLow–$hHigh%',
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }),
-          ],
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildParamTag(IconData icon, String label) {
-    return Row(
+  Widget _buildParamTag(BuildContext context, IconData icon, String label) {
+    return AdaptiveRow(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.white54, size: 14),
-        const SizedBox(width: 6),
+        Icon(icon, color: AppColors.of(context).textMuted, size: 14),
+        const SizedBox(width: AppSpace.sm),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: AppType.style(
+            color: AppColors.of(context).textSecondary,
+            fontSize: AppType.label,
+          ),
         ),
       ],
     );

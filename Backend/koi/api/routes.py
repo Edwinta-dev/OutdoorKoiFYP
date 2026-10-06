@@ -49,8 +49,7 @@ pond linked to that account (koi/api/auth.py): 401 without a valid token,
 _parse_body checks the body's user_id.
 
 Versions: every route is declared with koi.api.spec.route, which serves
-it under /v1 (the pond in the path), keeps the old path as a deprecated
-alias, and records it for docs/api/openapi.yaml. Response models are in
+it under /v1 (the pond in the path) and records it for docs/api/openapi.yaml. Response models are in
 koi.api.responses. GET /v1/ponds/{pond}/dashboard is the one call the
 dashboard screen needs (koi/api/dashboard.py).
 """
@@ -65,6 +64,7 @@ from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 from pydantic import BaseModel
 
+from koi import kit_readings
 from koi.api import responses as res
 from koi.api import schemas
 from koi.api.auth import authenticate, require_pond
@@ -74,7 +74,7 @@ from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
-from koi.models import device_health, forecast_utils
+from koi.models import device_health, forecast_utils, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
@@ -305,10 +305,110 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
         outcome = twin.record_event(body.event_id, event, now=datetime.now(timezone.utc), history=history)
         log_event(log, "event_recorded", pond_id=user_id, event_id=outcome["event_id"], status=outcome["status"],
                   replayed=outcome["replayed"], placed_late=outcome["placed_late"])
+        entry = twin.ledger.get(outcome["event_id"])
+        if entry is not None and entry.event.kind in (EventKind.SALT, EventKind.FILTER_CLEAN):
+            outcome.update(salt_grams=entry.event.salt_grams, notes=entry.event.notes)
         applied = 1 if outcome["status"] == "applied" else 0
         return {**_recompute_and_push(user_id, twin, ctx, "event", events=applied), "event": outcome}
 
     return registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id))
+
+
+# ===================================================================
+# TDS owner questions
+# ===================================================================
+@route(bp, "GET", "/v1/ponds/<int:user_id>/prompts", summary="List unanswered TDS questions",
+       tag="events", response=res.TdsPromptList, errors=POND_ERRORS)
+def get_prompts(user_id: int):
+    """Off by default. Confidence describes a measured TDS signal, not its cause."""
+    _require_pond(user_id)
+    if not current_app.config["KOI_SETTINGS"].tds_prompts:
+        return jsonify({"enabled": False, "prompts": []})
+    return jsonify(_registry().with_twin(
+        user_id, lambda twin: {"enabled": True, "prompts": [p for p in twin.tds_prompts.prompts
+                                                            if p["answer"] is None]},
+        profiles=_profiles_for(user_id), persist=False))
+
+
+@route(bp, "POST", "/v1/ponds/<int:user_id>/prompts/<prompt_id>", summary="Answer a TDS question",
+       tag="events", body=schemas.on_pond_path(schemas.PromptAnswer), response=res.TdsPromptAnswer,
+       errors=(400, 409, *POND_ERRORS))
+def answer_prompt(user_id: int, prompt_id: str):
+    """Event answers need the usual measured amounts and are applied once through the ledger.
+
+    'none of these' remembers rejected guesses for this signal type and direction.
+    'dismiss' closes this question without rejecting future explanations. A repeat of
+    the same answer is a no-op; changing an answered question returns 409.
+    """
+    _require_pond(user_id)
+    if not current_app.config["KOI_SETTINGS"].tds_prompts:
+        raise ApiError("TDS questions are disabled.", code="prompts_disabled", status=404)
+    body = _parse_body(schemas.PromptAnswer, user_id)
+    _, ctx = _environment_for(user_id)
+    registry = _registry()
+    history = registry.sensor_history(user_id)
+
+    def mutate(twin):
+        prompt = next((p for p in twin.tds_prompts.prompts if p["id"] == prompt_id), None)
+        if prompt is None:
+            raise ApiError("TDS question not found.", code="prompt_not_found", status=404)
+        event_id = None
+        if prompt["answer"] is not None:
+            if prompt["answer"] != body.answer:
+                raise ApiError("This question was already answered.", code="prompt_answered", status=409)
+            return {"prompt": prompt, "event_id": prompt.get("event_id")}
+        if body.answer == "none of these":
+            twin.tds_prompts.reject(prompt)
+        elif body.answer != "dismiss":
+            fields = {"water_change": ("volume_percent", "volume_litres"),
+                      "top_up": ("volume_percent", "volume_litres"), "salt": ("salt_grams",),
+                      "feeding": ("food_grams", "protein_percent"), "algal_scrub": ("scrub_type",),
+                      "filter_clean": ()}
+            event_time = schemas.EventBody.model_validate(
+                {"user_id": user_id, "timestamp": prompt["event_at"]}).event_time()
+            event = PondEvent(kind=EventKind(body.answer), time=event_time,
+                              **body.model_dump(include=set(fields[body.answer]) | {"notes"}))
+            outcome = twin.record_event(prompt_id, event, now=datetime.now(timezone.utc), history=history)
+            event_id = outcome["event_id"]
+            _recompute_and_push(user_id, twin, ctx, "prompt", events=int(outcome["status"] == "applied"))
+        prompt["answer"] = body.answer
+        prompt["event_id"] = event_id
+        return {"prompt": prompt, "event_id": event_id}
+
+    return jsonify(registry.with_twin(user_id, mutate, profiles=_profiles_for(user_id)))
+
+
+# ===================================================================
+# Owner test-kit measurements
+# ===================================================================
+@route(bp, "POST", "/v1/ponds/<int:user_id>/kit-readings", summary="Record a test-kit measurement",
+       tag="validation", body=schemas.on_pond_path(schemas.KitReadingBody), response=res.KitReading,
+       status=201, errors=(400, *POND_ERRORS))
+def post_kit_reading(user_id: int):
+    """Store the kit result and an immutable model comparison at taken_at. Does not calibrate the twin."""
+    body = _parse_body(schemas.KitReadingBody, user_id)
+    _require_pond(user_id)
+    return jsonify(kit_readings.record(_storage(), current_app.config["KOI_SETTINGS"], user_id,
+                                      body.model_dump(mode="json", exclude={"user_id"}), body.taken_at)), 201
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/kit-readings", summary="List test-kit measurements",
+       tag="validation", response=res.KitReadings, errors=POND_ERRORS)
+def get_kit_readings(user_id: int):
+    _require_pond(user_id)
+    return jsonify({"readings": _storage().fetch_kit_readings(user_id)})
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/validation", summary="Compare model estimates with test kits",
+       tag="validation", response=res.KitValidation, errors=POND_ERRORS)
+def get_kit_validation(user_id: int):
+    """Per-analyte paired counts, signed mean error, mean absolute error and measured/estimated pairs.
+
+    Error is model minus measurement. Missing measurements or estimates are excluded;
+    an empty analyte has count zero and null means. pH and KH have no model estimate.
+    """
+    _require_pond(user_id)
+    return jsonify(kit_readings.validation(_storage().fetch_kit_readings(user_id)))
 
 
 # ===================================================================
@@ -322,8 +422,8 @@ def _handle_event(event: PondEvent, body: schemas.EventBody):
 
 def _event_route(name: str, summary: str, body: type[BaseModel], response: type[BaseModel] = res.EventAssessments,
                  errors: tuple[int, ...] = (400, *POND_ERRORS)):
-    return route(bp, "POST", f"/v1/ponds/<int:user_id>/events/{name}", legacy=f"/events/{name}",
-                 summary=summary, tag="events", body=schemas.on_pond_path(body), legacy_body=body,
+    return route(bp, "POST", f"/v1/ponds/<int:user_id>/events/{name}", summary=summary, tag="events",
+        body=schemas.on_pond_path(body),
                  response=response, errors=errors)
 
 
@@ -364,6 +464,20 @@ def log_top_up(user_id: Optional[int] = None):
     """Clears the evaporation engine's accrued loss, re-assesses and
     returns all three assessments."""
     return _log_volume_event(EventKind.TOP_UP, user_id)
+
+
+@_event_route("salt", "Log salt addition (grams)", schemas.SaltEvent)
+def log_salt(user_id: Optional[int] = None):
+    body = _parse_body(schemas.SaltEvent, user_id)
+    event = PondEvent(kind=EventKind.SALT, time=body.event_time(), salt_grams=body.salt_grams, notes=body.notes)
+    return jsonify(_handle_event(event, body)), 200
+
+
+@_event_route("filter-clean", "Log filter cleaning", schemas.FilterCleanEvent)
+def log_filter_clean(user_id: Optional[int] = None):
+    body = _parse_body(schemas.FilterCleanEvent, user_id)
+    event = PondEvent(kind=EventKind.FILTER_CLEAN, time=body.event_time(), notes=body.notes)
+    return jsonify(_handle_event(event, body)), 200
 
 
 @_event_route("algal-scrub", "Log an algae scrub", schemas.AlgalScrubEvent)
@@ -510,8 +624,8 @@ def undo_algae_rating(user_id: Optional[int] = None):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/ratings/algae", legacy="/ratings/algae/<int:user_id>",
-       summary="Algae rating history and calibration", tag="ratings", response=res.AlgaeRatingContext,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/ratings/algae",
+    summary="Algae rating history and calibration", tag="ratings", response=res.AlgaeRatingContext,
        errors=POND_ERRORS)
 def get_algae_ratings(user_id):
     """Rating history plus the calibration state it produces. Drives the
@@ -606,8 +720,8 @@ def _no_assessment(user_id: int, message: str):
     raise ApiError(message, status=404, code="no_assessment_yet")
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/chemistry", legacy="/assessment/<int:user_id>",
-       summary="Latest water chemistry assessment", tag="assessments", response=res.WaterChemistryAssessment,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/chemistry",
+    summary="Latest water chemistry assessment", tag="assessments", response=res.WaterChemistryAssessment,
        errors=POND_ERRORS)
 def get_latest_assessment(user_id):
     """Most recent chemistry assessment, whether produced by a poll tick
@@ -621,7 +735,7 @@ def get_latest_assessment(user_id):
 
 
 @route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/evaporation",
-       legacy="/assessment/evaporation/<int:user_id>", summary="Latest evaporation assessment", tag="assessments",
+       summary="Latest evaporation assessment", tag="assessments",
        response=res.EvaporationAssessment, errors=POND_ERRORS)
 def get_latest_evaporation_assessment(user_id):
     """Most recent evaporation and feed assessment."""
@@ -634,8 +748,8 @@ def get_latest_evaporation_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/algae", legacy="/assessment/algae/<int:user_id>",
-       summary="Latest algae assessment", tag="assessments", response=res.AlgaeAssessment, errors=POND_ERRORS)
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments/algae", summary="Latest algae assessment",
+    tag="assessments", response=res.AlgaeAssessment, errors=POND_ERRORS)
 def get_latest_algae_assessment(user_id):
     """Most recent algae assessment."""
     assessment = fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None)
@@ -647,8 +761,8 @@ def get_latest_algae_assessment(user_id):
     return jsonify(assessment), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments", legacy="/assessment/all/<int:user_id>",
-       summary="All three latest assessments and the hypoxia flag", tag="assessments",
+@route(bp, "GET", "/v1/ponds/<int:user_id>/assessments",
+    summary="All three latest assessments and the hypoxia flag", tag="assessments",
        response=res.AllAssessments, errors=POND_ERRORS)
 def get_all_assessments(user_id):
     """All three cached assessments in one call - lets the dashboard
@@ -701,8 +815,8 @@ def _provenance(cutoff: Optional[datetime]) -> dict:
     return {"model_version": model_version(), "input_cutoff": cutoff.isoformat() if cutoff else None}
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", legacy="/forecast/<int:user_id>",
-       summary="Water chemistry lookahead", tag="forecasts", query=schemas.ForecastQuery,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/chemistry", summary="Water chemistry lookahead",
+    tag="forecasts", query=schemas.ForecastQuery,
        response=res.WaterChemistryForecast, errors=(400, 422, *POND_ERRORS))
 def get_forecast(user_id):
     """Water chemistry lookahead: projects TAN/NO2/NO3 assuming feeding
@@ -739,7 +853,7 @@ def get_forecast(user_id):
     ]
 
     def run(twin):
-        return twin.chemistry.project_forward(
+        return uncertainty.project(twin.chemistry, "chemistry",
             avg_daily_tan_mg=avg_daily_tan_mg,
             daily_temp_forecast_c=daily["temp_c"],
             daily_lux_forecast=daily_lux_forecast,
@@ -750,7 +864,8 @@ def get_forecast(user_id):
         ), twin.input_cutoff()
 
     result, cutoff = _registry().with_twin(
-        user_id, run, profiles=_profiles_for(user_id), persist=False
+        user_id, run, profiles=_profiles_for(user_id), persist=False,
+        forecast_key=("chemistry", horizon_days)
     )
     result.update(_provenance(cutoff))
     result["avg_daily_tan_mg"] = avg_daily_tan_mg
@@ -759,8 +874,8 @@ def get_forecast(user_id):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/evaporation", legacy="/forecast/evaporation/<int:user_id>",
-       summary="Evaporation and feed lookahead", tag="forecasts", query=schemas.EvaporationForecastQuery,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/evaporation",
+    summary="Evaporation and feed lookahead", tag="forecasts", query=schemas.EvaporationForecastQuery,
        response=res.EvaporationForecast, errors=(400, *POND_ERRORS))
 def get_evaporation_forecast(user_id):
     """Evaporation + feed lookahead for the Temperature & Feed screen.
@@ -780,17 +895,20 @@ def get_evaporation_forecast(user_id):
         if query.depth_m is not None:
             twin.evaporation.config = dataclasses.replace(stored, pond_depth_m=query.depth_m)
         try:
-            return twin.evaporation.project_forward(
+            return uncertainty.project(twin.evaporation, "evaporation",
+                assumed_depth=query.depth_m is None and (
+                    twin.profiles is None or twin.profiles.at(datetime.now(timezone.utc)).depth_m is None),
                 daily_environment=env, horizon_days=query.horizon_days
-            ), twin.input_cutoff()
+            ), twin.input_cutoff(), list(twin.chemistry._events), twin.chemistry.config.time_zone
         finally:
             twin.evaporation.config = stored
 
-    result, cutoff = _registry().with_twin(
+    result, cutoff, events, time_zone = _registry().with_twin(
         user_id,
         run,
         profiles=_profiles_for(user_id),
         persist=False,
+        forecast_key=("evaporation", query.horizon_days, query.depth_m),
     )
     result.update(_provenance(cutoff))
 
@@ -798,6 +916,11 @@ def get_evaporation_forecast(user_id):
     # independent sources, so agreement is real corroboration.
     tds_series = _storage().fetch_daily_sensor_series(user_id, "TDS", days=30) or \
         _storage().fetch_daily_sensor_series(user_id, "tds", days=30)
+    from koi.models.event_ledger import event_from_row
+
+    stored_events = [event_from_row(r) for r in _storage().fetch_interventions(user_id, None)]
+    events.extend(e for e in stored_events if e is not None)
+    tds_series = forecast_utils.tds_series_after_events(tds_series, events, time_zone)
     observed_slope = forecast_utils.slope_per_day(tds_series)
     current_tds = ctx["now"].get("tds")
     result["tds_cross_check"] = ev.cross_check_against_tds(
@@ -809,8 +932,8 @@ def get_evaporation_forecast(user_id):
     return jsonify(result), 200
 
 
-@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/algae", legacy="/forecast/algae/<int:user_id>",
-       summary="Algae lookahead", tag="forecasts", query=schemas.ForecastQuery, response=res.AlgaeForecast,
+@route(bp, "GET", "/v1/ponds/<int:user_id>/forecasts/algae", summary="Algae lookahead", tag="forecasts",
+    query=schemas.ForecastQuery, response=res.AlgaeForecast,
        errors=(400, 422, *POND_ERRORS))
 def get_algae_forecast(user_id):
     """Algae lookahead for the Algal & Solar screen.
@@ -842,13 +965,14 @@ def get_algae_forecast(user_id):
         fresh = ae.parse_image_rows(_storage().fetch_image_history(user_id, limit=50))
         assimilated = twin.algae.ingest_camera_samples(fresh)
 
-        no3_series = []
+        no3_scenarios = [[], [], []]
         if avg_tan is not None:
-            no3_series = twin.no3_projection(
-                avg_daily_tan_mg=avg_tan,
-                fallback_temp_c=baseline_temp,
-                horizon_days=horizon_days,
+            runs = uncertainty.scenarios(
+                twin.chemistry, "chemistry", avg_daily_tan_mg=avg_tan,
+                fallback_temp_c=baseline_temp, horizon_days=horizon_days,
             )
+            no3_scenarios = [[d["no3_ppm"] for d in r["trajectory"]] for r in runs]
+        no3_series = no3_scenarios[1]
         no3_now = no3_series[0] if no3_series else None
 
         if assimilated:
@@ -860,21 +984,21 @@ def get_algae_forecast(user_id):
                 history_samples=twin.algae._last_history_samples,
             )
 
-        env = _algae_env(ctx, baseline_lux, baseline_temp, no3_series, no3_now)
-        projection = twin.algae.project_forward(
+        environments = [_algae_env(ctx, baseline_lux, baseline_temp, series, series[0] if series else None)
+                        for series in no3_scenarios]
+        env = environments[1]
+        projection = uncertainty.project(twin.algae, "algae",
+            include_scrub_benefit=True, scenario_environments=environments,
             daily_environment=env, horizon_days=horizon_days
         )
-        if "error" not in projection:
-            projection["scrub_benefit"] = twin.algae.project_scrub_benefit(
-                daily_environment=env, horizon_days=horizon_days
-            )
         return projection, assimilated, twin.input_cutoff()
 
     # persist=True here: unlike the other forecast endpoints this one can
     # genuinely mutate state, because it assimilates any camera frames
     # that landed since the last poll. Those must be durable.
     result, assimilated, cutoff = _registry().with_twin(
-        user_id, run, profiles=_profiles_for(user_id), persist=True
+        user_id, run, profiles=_profiles_for(user_id), persist=True,
+        forecast_key=("algae", horizon_days)
     )
 
     if "error" in result:

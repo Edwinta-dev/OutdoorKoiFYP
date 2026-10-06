@@ -41,19 +41,13 @@ def test_openapi_documents_every_route_the_app_serves(app, document):
 
 def test_openapi_every_route_is_under_v1_or_an_alias_of_one(document):
     unversioned = {"/health", "/ready", "/metrics"}
-    for path, item in document["paths"].items():
-        if path.startswith("/v1/") or path in unversioned:
-            continue
-        for method, op in item.items():
-            assert op.get("deprecated") is True, f"{method} {path} is not under /v1 and not deprecated"
-            successor = op["description"].split("Deprecated alias of ")[1].split(". ")[0].rstrip(".")
-            assert successor.startswith("/v1/") and method in document["paths"][successor], (path, successor)
+    assert all(path.startswith("/v1/") or path in unversioned for path in document["paths"])
     for alias in ("/health", "/ready"):
         assert "deprecated" not in document["paths"][alias]["get"]
         assert f"/v1{alias}" in document["paths"]
 
 
-def test_openapi_old_paths_cover_every_route_the_app_called(document):
+def test_openapi_retired_app_paths_are_absent(document):
     # The paths the app and the README used before /v1.
     for path, method in [("/assessment/{user_id}", "get"), ("/assessment/evaporation/{user_id}", "get"),
                          ("/assessment/algae/{user_id}", "get"), ("/assessment/all/{user_id}", "get"),
@@ -62,7 +56,7 @@ def test_openapi_old_paths_cover_every_route_the_app_called(document):
                          ("/events/feeding", "post"), ("/events/water-change", "post"), ("/events/top-up", "post"),
                          ("/events/algal-scrub", "post"), ("/events/algae-rating", "post"),
                          ("/events/algae-rating/undo", "post")]:
-        assert document["paths"][path][method]["deprecated"] is True, path
+        assert path not in document["paths"], (method, path)
 
 
 def test_openapi_gets_document_etag_and_304(document):

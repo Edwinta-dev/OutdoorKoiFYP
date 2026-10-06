@@ -54,7 +54,7 @@ void main() {
 
       // Both sources are asked for the stored user id.
       expect(fake.callsTo('fetchDashboardPayload').single.args['userId'], '7');
-      expect(fake.callsTo('fetchLatestAssessment').single.args['userId'], 7);
+      expect(fake.callsTo('fetchLatestAssessment'), isEmpty);
       await unmount(tester);
     },
   );

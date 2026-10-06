@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class TimelineHeaderSelector extends StatelessWidget {
@@ -14,14 +16,15 @@ class TimelineHeaderSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return AdaptiveRow(
+      minWidth: 300,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           '${metricType.toUpperCase()} Timeline',
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
+          style: AppType.style(
+            color: AppColors.of(context).textSecondary,
+            fontSize: AppType.label,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -30,25 +33,31 @@ class TimelineHeaderSelector extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.selected)) {
-                return Colors.cyanAccent.withValues(alpha: 0.2);
+                return AppColors.of(context).info.withValues(alpha: 0.2);
               }
-              return Colors.transparent;
+              return AppColors.transparent;
             }),
             foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.selected)) {
-                return Colors.cyanAccent;
+                return AppColors.of(context).info;
               }
-              return Colors.white54;
+              return AppColors.of(context).textMuted;
             }),
           ),
-          segments: const [
+          segments: [
             ButtonSegment(
               value: 7,
-              label: Text('7D', style: TextStyle(fontSize: 11)),
+              label: Text(
+                '7D',
+                style: AppType.style(fontSize: AppType.caption),
+              ),
             ),
             ButtonSegment(
               value: 30,
-              label: Text('30D', style: TextStyle(fontSize: 11)),
+              label: Text(
+                '30D',
+                style: AppType.style(fontSize: AppType.caption),
+              ),
             ),
           ],
           selected: {selectedDays},

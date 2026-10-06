@@ -1,3 +1,5 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/detail_graph/algae_status_card.dart
 //
 // Lookahead card for the Algal & Solar detail graph screen.
@@ -13,37 +15,26 @@
 // evidence for is one they can calibrate their trust against.
 
 import 'package:flutter/material.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
 
-class AlgaeStatusCard extends StatefulWidget {
+class AlgaeStatusCard extends ConsumerStatefulWidget {
   final int userId;
 
   const AlgaeStatusCard({super.key, required this.userId});
 
   @override
-  State<AlgaeStatusCard> createState() => _AlgaeStatusCardState();
+  ConsumerState<AlgaeStatusCard> createState() => _AlgaeStatusCardState();
 }
 
-class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
-  late Future<({AlgaeForecast? forecast, String? error})> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
-  }
-
-  void _retry() {
-    setState(() {
-      _future = PondDataScope.of(context).fetchAlgaeForecastOrError(widget.userId);
-    });
-  }
+class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
+  void _retry() => ref.invalidate(algaeForecastProvider(widget.userId));
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<({AlgaeForecast? forecast, String? error})>(
-      future: _future,
+      future: ref.watch(algaeForecastProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(child: _loadingState());
@@ -63,62 +54,24 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _loadingState() => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 24),
+  Widget _loadingState() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: AppSpace.xxl),
     child: Center(
       child: SizedBox(
         width: 22,
         height: 22,
         child: CircularProgressIndicator(
           strokeWidth: 2.4,
-          color: Colors.tealAccent,
+          color: AppColors.of(context).water,
         ),
       ),
     ),
   );
 
-  Widget _unavailableState(String reason) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.grass_outlined, color: Colors.white38, size: 18),
-            SizedBox(width: 8),
-            Text(
-              'Algae Growth Outlook',
-              style: TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          reason,
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 11,
-            height: 1.4,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: _retry,
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.tealAccent,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(0, 32),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Retry', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    ),
+  Widget _unavailableState(String reason) => PondErrorState(
+    title: 'Algae Growth Outlook',
+    message: reason,
+    onRetry: _retry,
   );
 
   // ------------------------------------------------------------------
@@ -127,39 +80,30 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     final days = f.predictedScrubDaysFromNow;
     final accent = _urgencyColor(days);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return OutcomeCardShell(
+      accent: accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          AdaptiveRow(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
-                child: Row(
+              Expanded(
+                child: AdaptiveRow(
                   children: [
-                    Icon(Icons.grass_outlined, color: Colors.tealAccent, size: 18),
-                    SizedBox(width: 8),
+                    Icon(
+                      Icons.grass_outlined,
+                      color: AppColors.of(context).water,
+                      size: 18,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
                     Expanded(
                       child: Text(
                         'Algae Growth Outlook',
-                        style: TextStyle(
-                          color: Colors.white,
+                        style: AppType.style(
+                          color: AppColors.of(context).text,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: AppType.body,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -170,38 +114,38 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
               _pill(_urgencyLabel(days), accent),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.lg),
 
           // --- Camera frame + headline, side by side. The thumbnail is
           //     the whole point: this forecast has a photo behind it.
-          Row(
+          AdaptiveRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _cameraThumbnail(f),
-              const SizedBox(width: 14),
+              const SizedBox(width: AppSpace.lg),
               Expanded(child: _headline(days, accent)),
             ],
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.lg),
 
           // --- Coverage meter against this pond's own threshold ---
           _coverageMeter(f, accent),
 
-          const SizedBox(height: 14),
-          const Divider(color: Colors.white10, height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.lg),
+          Divider(color: AppColors.of(context).outline, height: 1),
+          const SizedBox(height: AppSpace.md),
 
-          Row(
+          AdaptiveRow(
             children: [
               Expanded(
                 child: _metricBox(
                   'Coverage',
                   '${(f.currentGreenRatio * 100).toStringAsFixed(2)}%',
-                  Colors.tealAccent,
+                  AppColors.of(context).water,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: _metricBox(
                   'Growth',
@@ -209,16 +153,16 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
                       ? '${(f.realisedRatePerDay! * 100).toStringAsFixed(1)}%/d'
                       : '--',
                   f.realisedRatePerDay != null && f.realisedRatePerDay! > 0
-                      ? Colors.amberAccent
-                      : Colors.greenAccent,
+                      ? AppColors.of(context).warning
+                      : AppColors.of(context).healthy,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: _metricBox(
                   'Frames',
                   '${f.sampleCount}',
-                  Colors.white70,
+                  AppColors.of(context).textSecondary,
                 ),
               ),
             ],
@@ -226,27 +170,35 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
 
           // --- "Scrubbing today buys you N days" ---
           if (f.scrubDaysBought != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.tealAccent.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.35)),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.md,
+                vertical: AppSpace.sm,
               ),
-              child: Row(
+              decoration: BoxDecoration(
+                color: AppColors.of(context).water.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(
+                  color: AppColors.of(context).water.withValues(alpha: 0.35),
+                ),
+              ),
+              child: AdaptiveRow(
                 children: [
-                  const Icon(Icons.cleaning_services_outlined,
-                      color: Colors.tealAccent, size: 15),
-                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.cleaning_services_outlined,
+                    color: AppColors.of(context).water,
+                    size: 15,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: Text(
                       'Scrubbing today buys about ${f.scrubDaysBought} '
                       'clear day${f.scrubDaysBought == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        color: Colors.tealAccent,
-                        fontSize: 11,
+                      style: AppType.style(
+                        color: AppColors.of(context).water,
+                        fontSize: AppType.caption,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -257,11 +209,11 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
           ],
 
           // --- Grounding provenance ---
-          const SizedBox(height: 12),
-          _groundingRow(f),
+          const SizedBox(height: AppSpace.md),
+          _groundingAdaptiveRow(f),
 
           // --- Threshold-mode disclosure ---
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpace.md),
           Text(
             f.thresholds.isBaselineRelative
                 ? 'Alert level is set relative to this pond\'s own observed '
@@ -270,9 +222,9 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
                       'camera is framed.'
                 : 'Alert level uses absolute coverage thresholds - not enough '
                       'camera history yet to establish this pond\'s own baseline.',
-            style: const TextStyle(
-              color: Colors.white24,
-              fontSize: 9.5,
+            style: AppType.style(
+              color: AppColors.of(context).textMuted,
+              fontSize: AppType.micro,
               height: 1.4,
             ),
           ),
@@ -284,18 +236,18 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
   // ------------------------------------------------------------------
 
   Widget _cameraThumbnail(AlgaeForecast f) {
-    const double size = 72;
+    final double size = 72;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.control),
       child: SizedBox(
         width: size,
         height: size,
         child: f.latestImageUrl == null
             ? Container(
-                color: Colors.white.withValues(alpha: 0.04),
-                child: const Icon(
+                color: AppColors.of(context).text.withValues(alpha: 0.04),
+                child: Icon(
                   Icons.photo_camera_outlined,
-                  color: Colors.white24,
+                  color: AppColors.of(context).outline,
                   size: 24,
                 ),
               )
@@ -306,24 +258,24 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
                 // but a phone on mobile data may not reach either - fail
                 // to a placeholder rather than a broken-image glyph.
                 errorBuilder: (_, _, _) => Container(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  child: const Icon(
+                  color: AppColors.of(context).text.withValues(alpha: 0.04),
+                  child: Icon(
                     Icons.broken_image_outlined,
-                    color: Colors.white24,
+                    color: AppColors.of(context).outline,
                     size: 22,
                   ),
                 ),
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
                   return Container(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    child: const Center(
+                    color: AppColors.of(context).text.withValues(alpha: 0.04),
+                    child: Center(
                       child: SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.tealAccent,
+                          color: AppColors.of(context).water,
                         ),
                       ),
                     ),
@@ -351,18 +303,21 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 10.5)),
-        const SizedBox(height: 2),
-        FittedBox(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            big,
-            style: TextStyle(
-              color: accent,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
-            ),
+        Text(
+          sub,
+          style: AppType.style(
+            color: AppColors.of(context).textMuted,
+            fontSize: AppType.caption,
+          ),
+        ),
+        const SizedBox(height: AppSpace.xxs),
+        Text(
+          big,
+          style: AppType.style(
+            color: accent,
+            fontSize: AppType.heading,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.5,
           ),
         ),
       ],
@@ -373,31 +328,34 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        AdaptiveRow(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Green coverage vs alert level',
-              style: TextStyle(color: Colors.white54, fontSize: 10),
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.micro,
+              ),
             ),
             Text(
               '${(f.currentGreenRatio * 100).toStringAsFixed(2)}% '
               'of ${(f.thresholds.action * 100).toStringAsFixed(1)}%',
-              style: TextStyle(
+              style: AppType.style(
                 color: accent,
-                fontSize: 10,
+                fontSize: AppType.micro,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpace.sm),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(AppRadius.small),
           child: LinearProgressIndicator(
             value: f.thresholdProgress,
             minHeight: 6,
-            backgroundColor: Colors.white.withValues(alpha: 0.06),
+            backgroundColor: AppColors.of(context).text.withValues(alpha: 0.06),
             valueColor: AlwaysStoppedAnimation<Color>(accent),
           ),
         ),
@@ -405,13 +363,13 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     );
   }
 
-  Widget _groundingRow(AlgaeForecast f) {
+  Widget _groundingAdaptiveRow(AlgaeForecast f) {
     final grounded = f.isCameraGrounded;
     final color = grounded
-        ? Colors.greenAccent
+        ? AppColors.of(context).healthy
         : (f.rateSource == 'measured_declining'
-              ? Colors.cyanAccent
-              : Colors.white38);
+              ? AppColors.of(context).info
+              : AppColors.of(context).textMuted);
 
     final String label;
     switch (f.rateSource) {
@@ -426,26 +384,29 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: AdaptiveRow(
         children: [
           Icon(
             grounded ? Icons.verified_outlined : Icons.photo_camera_outlined,
             color: color,
             size: 14,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpace.sm),
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
+              style: AppType.style(
                 color: color,
-                fontSize: 10.5,
+                fontSize: AppType.caption,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -454,15 +415,21 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
             Tooltip(
               message:
                   '${f.obstructedSampleCount} frame(s) rejected as obstructed',
-              child: Row(
+              child: AdaptiveRow(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.visibility_off_outlined,
-                      color: Colors.white38, size: 12),
-                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.visibility_off_outlined,
+                    color: AppColors.of(context).textMuted,
+                    size: 12,
+                  ),
+                  const SizedBox(width: AppSpace.xs),
                   Text(
                     '${f.obstructedSampleCount}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 9.5),
+                    style: AppType.style(
+                      color: AppColors.of(context).textMuted,
+                      fontSize: AppType.micro,
+                    ),
                   ),
                 ],
               ),
@@ -474,66 +441,33 @@ class _AlgaeStatusCardState extends State<AlgaeStatusCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF131B2A),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-    ),
-    child: child,
+  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
+
+  Widget _pill(String text, Color color) => StatusChip(
+    status: color == AppColors.of(context).danger
+        ? PondStatus.danger
+        : color == AppColors.of(context).warning
+        ? PondStatus.warning
+        : PondStatus.healthy,
+    label: text,
   );
 
-  Widget _pill(String text, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withValues(alpha: 0.5)),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
-    ),
-  );
-
-  Widget _metricBox(String label, String value, Color valueColor) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.03),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white38, fontSize: 9),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 4),
-        FittedBox(
-          child: Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ),
-      ],
-    ),
+  Widget _metricBox(String label, String value, Color valueColor) => MetricTile(
+    label: label,
+    value: value,
+    color: valueColor,
+    status: valueColor == AppColors.of(context).danger
+        ? PondStatus.danger
+        : valueColor == AppColors.of(context).warning
+        ? PondStatus.warning
+        : null,
   );
 
   Color _urgencyColor(int? days) {
-    if (days == null) return Colors.greenAccent;
-    if (days <= 0) return Colors.redAccent;
-    if (days <= 3) return Colors.amberAccent;
-    return Colors.tealAccent;
+    if (days == null) return AppColors.of(context).healthy;
+    if (days <= 0) return AppColors.of(context).danger;
+    if (days <= 3) return AppColors.of(context).warning;
+    return AppColors.of(context).water;
   }
 
   String _urgencyLabel(int? days) {

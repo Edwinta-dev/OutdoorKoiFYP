@@ -159,6 +159,15 @@ class Storage(Protocol):
         """updated_at of every stored engine snapshot, by user id (as text)."""
         ...
 
+    # --- owner test-kit measurements (migration 0020) ------------------
+    def insert_kit_reading(self, user_id: int, reading: dict) -> dict: ...
+
+    def fetch_kit_readings(self, user_id: int) -> list[dict]: ...
+
+    def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
+        """Newest evaluation at exactly this instant; no stale or future pairing."""
+        ...
+
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None: ...
 
@@ -353,7 +362,7 @@ CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
 
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
-                        "food_grams", "protein_percentage", "algae_method", "created_at")
+                        "food_grams", "protein_percentage", "algae_method", "created_at", "salt_grams", "notes")
 
 # Provenance columns of the three evaluation tables (migration 0016).
 # Every evaluation push carries all four (koi/provenance.py); rows written

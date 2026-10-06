@@ -14,6 +14,26 @@ class Fixtures {
 
   /// get_bundled_dashboard_payload for a pond with a full set of readings.
   static Map<String, dynamic> dashboardPayload() => {
+    'pond_id': 7,
+    'readings': {
+      for (final (channel, value) in [
+        ('ph', 7.3),
+        ('tds', 185.0),
+        ('water_temp', 27.4),
+        ('lux', 12000.0),
+      ])
+        channel: {'channel': channel, 'status': 'ok', 'value': value},
+    },
+    'assessments': <String, dynamic>{},
+    'weather': {
+      'air_temperature': {'value': 31.2},
+      'rainfall': {'value': 0.0},
+      'wind_speed': {'value': 9.0},
+      'uv_index': {'value': 6},
+    },
+    'forecast': {
+      'two_hour': {'text': 'Partly Cloudy (Day)'},
+    },
     'raw_sensor': {'temp': 27.4, 'pH': '7.3', 'TDS': '185', 'LUX': '12000'},
     'nea_forecasts': {
       'forecast_2hr': {'forecast': 'Partly Cloudy (Day)'},

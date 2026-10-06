@@ -47,6 +47,56 @@ Future<FakePondDataSource> _openSheet(
 }
 
 void main() {
+  testWidgets('salt: saves grams with the same stable ID in history and API', (
+    tester,
+  ) async {
+    final fake = await _openSheet(tester, 'SALT', 'Salt Addition');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Salt added (g)'),
+      '1',
+    );
+    await tester.tap(find.text('Save Salt Addition'));
+    await tester.pumpAndSettle();
+    final insert = fake.callsTo('insertIntervention').single.args;
+    final posted = fake.callsTo('logSalt').single.args;
+    expect(insert['salt_grams'], 1.0);
+    expect(insert['event_type'], 'SALT');
+    expect(posted['saltGrams'], 1.0);
+    expect(posted['eventId'], insert['event_id']);
+  });
+
+  testWidgets('salt: rejects nonpositive mass before writing', (tester) async {
+    final fake = await _openSheet(tester, 'SALT', 'Salt Addition');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Salt added (g)'),
+      '0',
+    );
+    await tester.tap(find.text('Save Salt Addition'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter valid value'), findsOneWidget);
+    expect(fake.callsTo('insertIntervention'), isEmpty);
+  });
+
+  for (final notes in ['', 'Rinsed media']) {
+    testWidgets('filter: saves optional notes "$notes" with stable ID', (
+      tester,
+    ) async {
+      final fake = await _openSheet(tester, 'FILTER_CLEAN', 'Filter Cleaning');
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Notes (optional)'),
+        notes,
+      );
+      await tester.tap(find.text('Save Filter Cleaning'));
+      await tester.pumpAndSettle();
+      final insert = fake.callsTo('insertIntervention').single.args;
+      final posted = fake.callsTo('logFilterClean').single.args;
+      expect(insert['event_type'], 'FILTER_CLEAN');
+      expect(insert['notes'], notes.isEmpty ? null : notes);
+      expect(posted['notes'], insert['notes']);
+      expect(posted['eventId'], insert['event_id']);
+    });
+  }
+
   testWidgets(
     'empty: the feeding form opens with defaults and the fixed time',
     (tester) async {

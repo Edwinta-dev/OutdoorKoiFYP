@@ -19,6 +19,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.sensor_inputs import IngestConfig
+from koi.models.tds_prompts import PromptConfig
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -76,6 +77,18 @@ class Settings(BaseSettings):
     sensor_ingest_batch_rows: int = Field(
         default=2000, gt=0,
         validation_alias=AliasChoices("KOI_SENSOR_INGEST_BATCH_ROWS", "sensor_ingest_batch_rows"))
+
+    # TDS owner questions (issue #35). Off until the owner enables them.
+    tds_prompts: bool = Field(default=False, validation_alias=AliasChoices("KOI_TDS_PROMPTS", "tds_prompts"))
+    tds_prompt_min_step_ppm: float = Field(
+        default=20.0, gt=0, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_TDS_PROMPT_MIN_STEP_PPM", "tds_prompt_min_step_ppm"))
+    tds_prompt_confidence_threshold: float = Field(
+        default=0.8, ge=0, le=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_TDS_PROMPT_CONFIDENCE_THRESHOLD", "tds_prompt_confidence_threshold"))
+    tds_prompt_cooldown_hours: float = Field(
+        default=24.0, ge=0, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_TDS_PROMPT_COOLDOWN_HOURS", "tds_prompt_cooldown_hours"))
 
     # Evaluation retention (koi/worker/retention.py, migration 0017): the
     # worker's daily job folds the detailed evaluation rows of every local
@@ -251,6 +264,11 @@ class Settings(BaseSettings):
     @property
     def hypoxia_thresholds(self) -> HypoxiaThresholds:
         return HypoxiaThresholds(self.hypoxia_watch_temp_c, self.hypoxia_high_temp_c)
+
+    @property
+    def tds_prompt_config(self) -> PromptConfig:
+        return PromptConfig(self.tds_prompts, self.tds_prompt_min_step_ppm,
+                            self.tds_prompt_confidence_threshold, self.tds_prompt_cooldown_hours)
 
     @property
     def sensor_ingest(self) -> IngestConfig:

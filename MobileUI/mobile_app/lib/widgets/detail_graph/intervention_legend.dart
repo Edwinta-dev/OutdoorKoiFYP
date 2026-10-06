@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class InterventionLegend extends StatelessWidget {
@@ -8,51 +9,70 @@ class InterventionLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpace.lg),
       decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: AppColors.of(context).surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.06),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Timeline Intervention Legend',
-            style: TextStyle(
-              color: Colors.white,
+            style: AppType.style(
+              color: AppColors.of(context).text,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: AppType.label,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpace.md),
           Wrap(
             spacing: 12,
             runSpacing: 8,
             children: [
               _legendItem(
+                context,
+                'Salt Addition',
+                AppColors.of(context).intervention,
+                isHighlighted: primaryEventType == 'SALT',
+              ),
+              _legendItem(
+                context,
+                'Filter Cleaning',
+                AppColors.of(context).warning,
+                isHighlighted: primaryEventType == 'FILTER_CLEAN',
+              ),
+              _legendItem(
+                context,
                 'Major Flush Reset',
-                Colors.greenAccent,
+                AppColors.of(context).healthy,
                 isHighlighted: true,
               ),
               _legendItem(
+                context,
                 'Water Change',
-                Colors.lightBlueAccent,
+                AppColors.of(context).info,
                 isHighlighted: primaryEventType == 'WATER_CHANGE',
               ),
               _legendItem(
+                context,
                 'Water Top-Up',
-                Colors.cyanAccent,
+                AppColors.of(context).info,
                 isHighlighted: primaryEventType == 'WATER_TOPUP',
               ),
               _legendItem(
+                context,
                 'Algae Scrub',
-                Colors.tealAccent,
+                AppColors.of(context).water,
                 isHighlighted: primaryEventType == 'ALGAE_SCRUB',
               ),
               _legendItem(
+                context,
                 'Feeding Session',
-                Colors.orangeAccent,
+                AppColors.of(context).feeding,
                 isHighlighted: primaryEventType == 'FEEDING',
               ),
             ],
@@ -62,7 +82,12 @@ class InterventionLegend extends StatelessWidget {
     );
   }
 
-  Widget _legendItem(String label, Color color, {required bool isHighlighted}) {
+  Widget _legendItem(
+    BuildContext context,
+    String label,
+    Color color, {
+    required bool isHighlighted,
+  }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -70,16 +95,18 @@ class InterventionLegend extends StatelessWidget {
           width: isHighlighted ? 10 : 6,
           height: isHighlighted ? 10 : 6,
           decoration: BoxDecoration(
-            color: isHighlighted ? color : Colors.white24,
+            color: isHighlighted ? color : AppColors.of(context).outline,
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: AppSpace.sm),
         Text(
           label,
-          style: TextStyle(
-            color: isHighlighted ? Colors.white : Colors.white38,
-            fontSize: 10,
+          style: AppType.style(
+            color: isHighlighted
+                ? AppColors.of(context).text
+                : AppColors.of(context).textMuted,
+            fontSize: AppType.micro,
             fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
           ),
         ),

@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -92,7 +93,10 @@ class HistoricalLineChart extends StatelessWidget {
     final List<VerticalLine> verticalLines = [];
     for (var ev in interventions) {
       final String eType = ev['event_type'] ?? '';
-      final bool isPrimary = (eType == primaryDomainEvent);
+      final bool isPrimary =
+          (eType == primaryDomainEvent) ||
+          ((eType == 'SALT' || eType == 'FILTER_CLEAN') &&
+              ['tds', 'ph'].contains(primarySensorType.toLowerCase()));
       final bool isMajorReset = (ev['is_major_reset'] == true);
 
       final String rawTs = ev['timestamp'] ?? '';
@@ -110,19 +114,29 @@ class HistoricalLineChart extends StatelessWidget {
         double strokeW;
 
         if (isMajorReset) {
-          lineCol = Colors.greenAccent;
+          lineCol = AppColors.of(context).healthy;
           strokeW = 2.0;
         } else if (isPrimary) {
-          lineCol = _getEventColor(eType);
+          lineCol = _getEventColor(context, eType);
           strokeW = 1.5;
         } else {
-          lineCol = Colors.white.withValues(alpha: 0.12);
+          lineCol = AppColors.of(context).text.withValues(alpha: 0.12);
           strokeW = 1.0;
         }
 
         verticalLines.add(
           VerticalLine(
             x: dayOffset,
+            label: VerticalLineLabel(
+              show: eType == 'SALT' || eType == 'FILTER_CLEAN',
+              style: AppType.style(
+                color: AppColors.of(context).textSecondary,
+                fontSize: AppType.micro,
+              ),
+              labelResolver: (_) => eType == 'SALT'
+                  ? 'Salt ${ev["salt_grams"] ?? "?"} g'
+                  : 'Filter cleaning${ev["notes"] == null ? "" : ": ${ev["notes"]}"}',
+            ),
             color: lineCol,
             strokeWidth: strokeW,
             dashArray: isPrimary || isMajorReset ? null : [4, 4],
@@ -131,19 +145,26 @@ class HistoricalLineChart extends StatelessWidget {
       }
     }
 
-    final lineColor = _getMetricLineColor(primarySensorType);
+    final lineColor = _getMetricLineColor(context, primarySensorType);
 
     return Container(
       height: 290,
       width: double.infinity,
-      padding: const EdgeInsets.only(right: 20, left: 8, top: 24, bottom: 12),
+      padding: const EdgeInsets.only(
+        right: AppSpace.xl,
+        left: AppSpace.sm,
+        top: AppSpace.xxl,
+        bottom: AppSpace.md,
+      ),
       decoration: BoxDecoration(
-        color: const Color(0xFF131B2A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppColors.of(context).surface,
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+        border: Border.all(
+          color: AppColors.of(context).text.withValues(alpha: 0.08),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: AppColors.of(context).shadow.withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -161,21 +182,24 @@ class HistoricalLineChart extends StatelessWidget {
             enabled: true,
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (spot) =>
-                  const Color(0xFF0F172A).withValues(alpha: 0.92),
-              tooltipBorder: BorderSide(color: lineColor.withValues(alpha: 0.5)),
+                  AppColors.of(context).surfaceInset.withValues(alpha: 0.92),
+              tooltipBorder: BorderSide(
+                color: lineColor.withValues(alpha: 0.5),
+              ),
               tooltipPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
+                horizontal: AppSpace.md,
+                vertical: AppSpace.sm,
               ),
               tooltipMargin: 12,
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
                   return LineTooltipItem(
-                    '${_formatValue(spot.y, isLuxOrAlgae)} ${_getMetricUnit(primarySensorType)}',
-                    TextStyle(
+                    '${_formatValue(spot.y, isLuxOrAlgae)} ${_getMetricUnit(primarySensorType)}'
+                    '${points[spot.x.toInt()]['after_maintenance'] == true ? '\nAfter maintenance' : ''}',
+                    AppType.style(
                       color: lineColor,
                       fontWeight: FontWeight.bold,
-                      fontSize: 11,
+                      fontSize: AppType.caption,
                     ),
                   );
                 }).toList();
@@ -197,7 +221,7 @@ class HistoricalLineChart extends StatelessWidget {
                               radius: 5,
                               color: lineColor,
                               strokeWidth: 2,
-                              strokeColor: Colors.white,
+                              strokeColor: AppColors.of(context).text,
                             ),
                       ),
                     );
@@ -209,8 +233,10 @@ class HistoricalLineChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) =>
-                FlLine(color: Colors.white.withValues(alpha: 0.03), strokeWidth: 1),
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: AppColors.of(context).text.withValues(alpha: 0.03),
+              strokeWidth: 1,
+            ),
           ),
 
           // Titles & Axis Formatting
@@ -232,9 +258,9 @@ class HistoricalLineChart extends StatelessWidget {
                   }
                   return Text(
                     _formatValue(val, isLuxOrAlgae),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 9,
+                    style: AppType.style(
+                      color: AppColors.of(context).text.withValues(alpha: 0.35),
+                      fontSize: AppType.micro,
                       fontWeight: FontWeight.w500,
                     ),
                   );
@@ -249,12 +275,14 @@ class HistoricalLineChart extends StatelessWidget {
                 getTitlesWidget: (val, meta) {
                   final idx = val.toInt();
                   return Padding(
-                    padding: const EdgeInsets.only(top: 6.0),
+                    padding: const EdgeInsets.only(top: AppSpace.sm),
                     child: Text(
                       dateLabels[idx] ?? '',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 9,
+                      style: AppType.style(
+                        color: AppColors.of(
+                          context,
+                        ).text.withValues(alpha: 0.35),
+                        fontSize: AppType.micro,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -315,26 +343,30 @@ class HistoricalLineChart extends StatelessWidget {
     return '';
   }
 
-  Color _getEventColor(String eventType) {
+  Color _getEventColor(BuildContext context, String eventType) {
     switch (eventType) {
       case 'WATER_CHANGE':
-        return Colors.lightBlueAccent;
+        return AppColors.of(context).info;
       case 'WATER_TOPUP':
-        return Colors.cyanAccent;
+        return AppColors.of(context).info;
       case 'ALGAE_SCRUB':
-        return Colors.tealAccent;
+        return AppColors.of(context).water;
+      case 'SALT':
+        return AppColors.of(context).intervention;
+      case 'FILTER_CLEAN':
+        return AppColors.of(context).warning;
       case 'FEEDING':
-        return Colors.orangeAccent;
+        return AppColors.of(context).feeding;
       default:
-        return Colors.white54;
+        return AppColors.of(context).textMuted;
     }
   }
 
-  Color _getMetricLineColor(String sensorType) {
+  Color _getMetricLineColor(BuildContext context, String sensorType) {
     final lower = sensorType.toLowerCase();
-    if (lower.contains('ph')) return const Color(0xFF50C878);
-    if (lower.contains('lux')) return const Color(0xFFFF8A65);
-    if (lower.contains('tds')) return Colors.lightBlueAccent;
-    return Colors.cyanAccent;
+    if (lower.contains('ph')) return AppColors.of(context).healthy;
+    if (lower.contains('lux')) return AppColors.of(context).feeding;
+    if (lower.contains('tds')) return AppColors.of(context).info;
+    return AppColors.of(context).info;
   }
 }

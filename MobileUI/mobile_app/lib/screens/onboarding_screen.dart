@@ -1,24 +1,13 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'main_layout.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
-import '../data/pond_data_source.dart';
+import '../data/providers.dart';
 import '../utils/app_log.dart';
-
-/// The live write behind PondDataSource.upsertUserProfile. It lives next
-/// to the `profile` map built in _saveAndContinue so the schema check can
-/// match its keys to UserData columns.
-Future<Map<String, dynamic>> upsertUserProfileRow(
-  Map<String, dynamic> profile,
-) async {
-  return await Supabase.instance.client
-      .from('UserData')
-      .upsert(profile)
-      .select()
-      .single();
-}
 
 // --- Data Model for Fish Inhabitant Items ---
 class FishEntry {
@@ -42,14 +31,14 @@ class FishEntry {
   };
 }
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool useCurrentLocation = true;
   final TextEditingController _volumeController = TextEditingController();
   final TextEditingController _locationcontroller = TextEditingController();
@@ -59,18 +48,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final TextEditingController _fishWeightController = TextEditingController();
   String _currentSelectedSpecies = '';
 
-  // Fish Species Dictionary downloaded from Supabase
-  List<String> _speciesDictionary = [];
-  bool _isLoadingSpecies = true;
-
-  // Active user's added fish inventory
+  List<String> get _speciesDictionary =>
+      ref.read(speciesProvider).asData?.value ??
+      [
+        'Japanese Koi (Kohaku)',
+        'Japanese Koi (Taisho Sanke)',
+        'Japanese Koi (Showa Sanshoku)',
+        'Butterfly Koi',
+        'Comet Goldfish',
+        'Shubunkin Goldfish',
+        'Fantail Goldfish',
+        'Plecostomus (Algae Eater)',
+      ];
+  bool get _isLoadingSpecies => ref.read(speciesProvider).isLoading;
   final List<FishEntry> _addedFishList = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchFishSpeciesDictionary();
-  }
 
   /// Opens a full-screen/bottom-sheet modal with a live search bar
   /// Opens a full-screen/bottom-sheet modal with a live search bar
@@ -81,9 +72,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // Key for keyboard responsiveness
-      backgroundColor: const Color(0xFF1A323C), // Dark aquatic panel color
+      backgroundColor: AppColors.of(
+        context,
+      ).surfaceRaised, // Dark aquatic panel color
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.panel),
+        ),
       ),
       builder: (BuildContext modalContext) {
         return StatefulBuilder(
@@ -101,42 +96,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 1. Header Row
-                    Row(
+                    AdaptiveRow(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Select Fish Species',
-                          style: TextStyle(
-                            fontSize: 18,
+                          style: AppType.style(
+                            fontSize: AppType.title,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.of(context).text,
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white70),
+                          icon: Icon(
+                            Icons.close,
+                            color: AppColors.of(context).textSecondary,
+                          ),
                           onPressed: () => Navigator.pop(modalContext),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpace.sm),
 
                     // 2. Search Field
                     TextField(
                       controller: searchController,
                       autofocus: true,
-                      style: const TextStyle(color: Colors.white),
+                      style: AppType.style(color: AppColors.of(context).text),
                       decoration: InputDecoration(
                         hintText: 'Search or type custom species name...',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        prefixIcon: const Icon(
+                        hintStyle: AppType.style(
+                          color: AppColors.of(context).textMuted,
+                        ),
+                        prefixIcon: Icon(
                           Icons.search,
-                          color: Colors.tealAccent,
+                          color: AppColors.of(context).water,
                         ),
                         suffixIcon: searchController.text.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.clear,
-                                  color: Colors.white54,
+                                  color: AppColors.of(context).textMuted,
                                 ),
                                 onPressed: () {
                                   searchController.clear();
@@ -149,9 +149,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               )
                             : null,
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.08),
+                        fillColor: AppColors.of(
+                          context,
+                        ).text.withValues(alpha: 0.08),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
                         ),
                       ),
                       onChanged: (query) {
@@ -166,7 +170,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpace.md),
 
                     // 3. FLEXIBLE SCROLLABLE CONTAINER (Prevents 4.4px Overflow)
                     Flexible(
@@ -179,33 +183,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? SingleChildScrollView(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
+                                    vertical: AppSpace.lg,
                                   ),
                                   child: Center(
                                     child: Column(
                                       children: [
-                                        const Text(
+                                        Text(
                                           'No matching species found in database.',
-                                          style: TextStyle(
-                                            color: Colors.white70,
+                                          style: AppType.style(
+                                            color: AppColors.of(
+                                              context,
+                                            ).textSecondary,
                                           ),
                                         ),
-                                        const SizedBox(height: 10),
+                                        const SizedBox(height: AppSpace.md),
                                         if (searchController.text.isNotEmpty)
                                           ElevatedButton.icon(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(
-                                                0xFF00E676,
-                                              ),
+                                              backgroundColor: AppColors.of(
+                                                context,
+                                              ).primary,
                                             ),
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.add,
-                                              color: Colors.black,
+                                              color: AppColors.of(
+                                                context,
+                                              ).onPrimary,
                                             ),
                                             label: Text(
                                               'Use "${searchController.text.trim()}"',
-                                              style: const TextStyle(
-                                                color: Colors.black,
+                                              style: AppType.style(
+                                                color: AppColors.of(
+                                                  context,
+                                                ).onPrimary,
                                               ),
                                             ),
                                             onPressed: () {
@@ -226,20 +236,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 shrinkWrap: true,
                                 itemCount: filteredList.length,
                                 separatorBuilder: (_, _) => Divider(
-                                  color: Colors.white.withValues(alpha: 0.1),
+                                  color: AppColors.of(
+                                    context,
+                                  ).text.withValues(alpha: 0.1),
                                 ),
                                 itemBuilder: (context, index) {
                                   final speciesName = filteredList[index];
                                   return ListTile(
                                     dense: true,
-                                    leading: const Icon(
+                                    leading: Icon(
                                       Icons.set_meal_rounded,
-                                      color: Color(0xFF00E676),
+                                      color: AppColors.of(context).primary,
                                     ),
                                     title: Text(
                                       speciesName,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: AppType.style(
+                                        color: AppColors.of(context).text,
                                       ),
                                     ),
                                     onTap: () {
@@ -253,7 +265,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpace.md),
                   ],
                 ),
               ),
@@ -262,39 +274,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       },
     );
-  }
-
-  /// Fetch species dictionary list from Supabase
-  Future<void> _fetchFishSpeciesDictionary() async {
-    try {
-      final names = await PondDataScope.of(context).fetchSpeciesNames();
-
-      if (!mounted) return;
-
-      setState(() {
-        _speciesDictionary = names;
-        _isLoadingSpecies = false;
-      });
-    } catch (e) {
-      debugPrint("Failed to fetch species from Supabase: $e");
-
-      // Fallback to local default array on network/configuration failure
-      if (mounted) {
-        setState(() {
-          _speciesDictionary = [
-            'Japanese Koi (Kohaku)',
-            'Japanese Koi (Taisho Sanke)',
-            'Japanese Koi (Showa Sanshoku)',
-            'Butterfly Koi',
-            'Comet Goldfish',
-            'Shubunkin Goldfish',
-            'Fantail Goldfish',
-            'Plecostomus (Algae Eater)',
-          ];
-          _isLoadingSpecies = false;
-        });
-      }
-    }
   }
 
   /// Calculates sum of total fish biomass across all added entries
@@ -340,8 +319,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _saveAndContinue() async {
-    final source = PondDataScope.of(context);
-    final prefs = await SharedPreferences.getInstance();
+    final source = ref.read(pondProfileRepositoryProvider);
     final volume = _volumeController.text;
     final totalBiomassKg = _totalCalculatedBiomass.toStringAsFixed(2);
     final userID = _userIDcontroller.text;
@@ -384,14 +362,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
 
     // Writing onboarding data locally into Shared Preferences
-    await prefs.setString('tankVolume', volume);
-    await prefs.setString('fishBiomass', totalBiomassKg);
-    await prefs.setStringList('ownedFishSpecies', uniqueOwnedSpecies);
-    await prefs.setString('fishCount', totalFishCount.toString());
-    await prefs.setBool('isOnboarded', true);
-    await prefs.setString('latitude', latitude);
-    await prefs.setString('longitude', longitude);
-    await prefs.setString('userID', userID);
+    await ref.read(localProfileRepositoryProvider).save({
+      'tankVolume': volume,
+      'fishBiomass': totalBiomassKg,
+      'ownedFishSpecies': uniqueOwnedSpecies,
+      'fishCount': totalFishCount,
+      'isOnboarded': true,
+      'latitude': latitude,
+      'longitude': longitude,
+      'userID': int.parse(userID),
+    });
+    if (!mounted) return;
+    ref.invalidate(localProfileProvider);
     log("Tank Volume: $volume");
     log("Total Biomass: $totalBiomassKg");
     log("Owned Fish Species: $uniqueOwnedSpecies");
@@ -409,12 +391,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'userID': userID,
       };
       final response = await source.upsertUserProfile(profile);
+      if (!mounted) return;
       final Map<String, dynamic>? closestStations = response['ClosestStations'];
       if (closestStations != null) {
         log("Assigned NEA Stations: $closestStations");
-        // 2. Encode the JSON map to a string and persist to SharedPreferences
+        // 2. Encode the JSON map to a string and persist to local profile storage
         final String jsonString = jsonEncode(closestStations);
-        await prefs.setString('assignedStationsJson', jsonString);
+        await ref.read(localProfileRepositoryProvider).save({
+          'assignedStationsJson': jsonString,
+        });
       } else {
         log("No assigned stations returned from database.");
       }
@@ -443,19 +428,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(speciesProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Koi Pond Setup')),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(AppSpace.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Let's baseline your ecosystem.",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: AppType.style(
+                  fontSize: AppType.metric,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpace.xxl),
 
               // Tank Volume Input
               TextField(
@@ -467,19 +456,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   prefixIcon: Icon(Icons.water_rounded),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpace.xxl),
 
               // --- AUGMENTED FISH BIOMASS & STOCK SECTION ---
-              const Text(
+              Text(
                 "Pond Inhabitants & Fish Stock",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: AppType.style(
+                  fontSize: AppType.title,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 4),
-              const Text(
+              const SizedBox(height: AppSpace.xs),
+              Text(
                 "Search or manually enter species, quantities, and average weights.",
-                style: TextStyle(fontSize: 12, color: Colors.white70),
+                style: AppType.style(
+                  fontSize: AppType.label,
+                  color: AppColors.of(context).textSecondary,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
 
               // 1. Searchable Autocomplete Fish Species Input
               _isLoadingSpecies
@@ -489,56 +484,62 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onTap: _isLoadingSpecies
                           ? null
                           : _openSearchableFishPicker,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
+                          horizontal: AppSpace.lg,
+                          vertical: AppSpace.lg,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.07),
-                          borderRadius: BorderRadius.circular(12),
+                          color: AppColors.of(
+                            context,
+                          ).text.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.control,
+                          ),
                           border: Border.all(
                             color: _currentSelectedSpecies.isNotEmpty
-                                ? Colors.tealAccent
-                                : Colors.white.withValues(alpha: 0.2),
+                                ? AppColors.of(context).water
+                                : AppColors.of(
+                                    context,
+                                  ).text.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.search_rounded,
-                              color: Colors.tealAccent,
+                              color: AppColors.of(context).water,
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: AppSpace.md),
                             Expanded(
                               child: Text(
                                 _currentSelectedSpecies.isEmpty
                                     ? 'Tap to Search or Select Fish Species'
                                     : _currentSelectedSpecies,
-                                style: TextStyle(
+                                style: AppType.style(
                                   color: _currentSelectedSpecies.isEmpty
-                                      ? Colors.white54
-                                      : Colors.white,
-                                  fontSize: 16,
+                                      ? AppColors.of(context).textMuted
+                                      : AppColors.of(context).text,
+                                  fontSize: AppType.body,
                                   fontWeight: _currentSelectedSpecies.isEmpty
                                       ? FontWeight.normal
                                       : FontWeight.bold,
                                 ),
                               ),
                             ),
-                            const Icon(
+                            Icon(
                               Icons.arrow_drop_down_rounded,
-                              color: Colors.white70,
+                              color: AppColors.of(context).textSecondary,
                             ),
                           ],
                         ),
                       ),
                     ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
 
               // 2. Quantity & Average Weight Input Row
-              Row(
+              AdaptiveRow(
                 children: [
                   Expanded(
                     child: TextField(
@@ -551,7 +552,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppSpace.md),
                   Expanded(
                     child: TextField(
                       controller: _fishWeightController,
@@ -567,7 +568,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
 
               // 3. Add Fish Button
               OutlinedButton.icon(
@@ -578,39 +579,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   minimumSize: const Size(double.infinity, 45),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               // 4. Added Fish Entries List & Total Calculated Biomass Card
               if (_addedFishList.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppSpace.md),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
+                    color: AppColors.of(context).water.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(
+                      color: AppColors.of(context).water.withValues(alpha: 0.4),
+                    ),
                   ),
-                  child: Row(
+                  child: AdaptiveRow(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Total Biomass Estimate:",
-                        style: TextStyle(
+                        style: AppType.style(
                           fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          fontSize: AppType.body,
                         ),
                       ),
                       Text(
                         "${_totalCalculatedBiomass.toStringAsFixed(2)} kg",
-                        style: const TextStyle(
+                        style: AppType.style(
                           fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: Color(0xFF00E676),
+                          fontSize: AppType.title,
+                          color: AppColors.of(context).primary,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpace.md),
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -618,28 +621,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   itemBuilder: (context, index) {
                     final item = _addedFishList[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      margin: const EdgeInsets.symmetric(vertical: AppSpace.xs),
                       child: ListTile(
                         dense: true,
-                        leading: const CircleAvatar(
-                          backgroundColor: Colors.teal,
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.of(context).water,
                           child: Icon(
                             Icons.set_meal_rounded,
                             size: 18,
-                            color: Colors.white,
+                            color: AppColors.of(
+                              context,
+                            ).foregroundOn(AppColors.of(context).water),
                           ),
                         ),
                         title: Text(
                           item.speciesName,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: AppType.style(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
                           "${item.count} fish × ${item.avgWeightKg} kg = ${item.totalWeight.toStringAsFixed(2)} kg total",
                         ),
                         trailing: IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.delete_outline,
-                            color: Colors.redAccent,
+                            color: AppColors.of(context).danger,
                           ),
                           onPressed: () => _removeFishEntry(index),
                         ),
@@ -648,7 +653,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   },
                 ),
               ],
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpace.xxl),
 
               // Location Mode Toggle
               SwitchListTile(
@@ -657,14 +662,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   "Automatically find your nearest NEA station",
                 ),
                 value: useCurrentLocation,
-                activeThumbColor: Colors.teal,
+                activeThumbColor: AppColors.of(context).water,
                 onChanged: (bool value) {
                   setState(() {
                     useCurrentLocation = value;
                   });
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               if (!useCurrentLocation) ...[
                 TextField(
@@ -675,7 +680,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
               ],
               TextField(
                 controller: _userIDcontroller,
@@ -685,16 +690,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
               // Save Button
-              SizedBox(
+              Container(
                 width: double.infinity,
-                height: 50,
+                constraints: const BoxConstraints(minHeight: 50),
                 child: ElevatedButton(
                   onPressed: _saveAndContinue,
-                  child: const Text(
+                  child: Text(
                     'Save & Go to Dashboard',
-                    style: TextStyle(fontSize: 18),
+                    style: AppType.style(fontSize: AppType.title),
                   ),
                 ),
               ),

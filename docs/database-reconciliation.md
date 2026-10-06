@@ -11,6 +11,11 @@ rehearsal and SQL tests pass on the local Supabase stack (section 10).
 verified backup, a rehearsal on a restored copy of live and a tested
 rollback (section 11).
 
+This report records the state on 2026-10-01. Which migrations live has
+now is kept in the "Live status" column of
+[supabase/README.md](../supabase/README.md) (on 2026-10-05 live's history
+showed `0001`-`0018`).
+
 ## 1. Observed source
 
 | Item | Value |

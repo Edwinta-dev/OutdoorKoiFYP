@@ -55,7 +55,7 @@ def test_ledger_api_duplicate_post_returns_the_current_assessment_once(app, stor
 
 
 def test_ledger_api_post_without_event_id_is_a_legacy_entry(app, storage):
-    resp = api_client(app).post("/events/feeding", json={**FEED, "user_id": USER})
+    resp = api_client(app).post(f"/v1/ponds/{USER}/events/feeding", json={**FEED, "user_id": USER})
     assert resp.status_code == 200
     assert resp.get_json()["event"]["event_id"].startswith("legacy:")
     assert entries(storage, USER)[0]["legacy"] is True
@@ -85,7 +85,7 @@ def test_ledger_api_identical_event_id_across_ponds_never_reaches_the_other_pond
     before = storage.load_engine_snapshot(USER)
 
     # Another account cannot post to this pond, with or without the id.
-    for path in (f"/v1/ponds/{USER}/events/feeding", "/events/feeding"):
+    for path in (f"/v1/ponds/{USER}/events/feeding", f"/v1/ponds/{USER}/events/feeding"):
         resp = other(app).post(path, json={**FEED, "user_id": USER, "event_id": event_id, "food_grams": 999.0})
         assert resp.status_code == 403
     # Posting the same id to its own pond is its own event: applied there,

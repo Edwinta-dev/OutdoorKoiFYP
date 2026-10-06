@@ -1,75 +1,92 @@
+import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/modals/quick_log_modals.dart
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../data/pond_data_source.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/providers.dart';
+import '../../data/repositories.dart';
 import '../../utils/digital_twin_api.dart';
 import '../../utils/event_id.dart';
-
-/// The live write behind PondDataSource.insertIntervention. It lives next
-/// to the payload built in _InterventionLogSheetState._save so the schema
-/// check can match the payload keys to pondInterventions columns.
-Future<void> insertPondIntervention(Map<String, dynamic> payload) async {
-  await Supabase.instance.client.from('pondInterventions').insert(payload);
-}
 
 /// Main Entry Point: Opens the Quick Action Option Selector
 void showQuickActionSelector(BuildContext context) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF131B2A),
+    isScrollControlled: true,
+    backgroundColor: AppColors.of(context).surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppRadius.panel),
+      ),
     ),
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Log Pond Intervention',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+    builder: (ctx) => SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Log Pond Intervention',
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.body,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _actionTile(
-            ctx,
-            Icons.water_drop,
-            Colors.lightBlueAccent,
-            'Water Change',
-            'Resets pH & TDS mineral accumulation',
-            'WATER_CHANGE',
-          ),
-          _actionTile(
-            ctx,
-            Icons.opacity,
-            Colors.cyanAccent,
-            'Water Top-Up',
-            'Restores volume lost to evaporation',
-            'WATER_TOPUP',
-          ),
-          _actionTile(
-            ctx,
-            Icons.cleaning_services_outlined,
-            Colors.tealAccent,
-            'Algae Scrub',
-            'Resets visual greenery & photo solar buildup',
-            'ALGAE_SCRUB',
-          ),
-          _actionTile(
-            ctx,
-            Icons.set_meal_outlined,
-            Colors.orangeAccent,
-            'Feeding Session',
-            'Logs food grams & protein content',
-            'FEEDING',
-          ),
-        ],
+            const SizedBox(height: AppSpace.md),
+            _actionTile(
+              ctx,
+              Icons.grain,
+              AppColors.of(context).intervention,
+              'Salt Addition',
+              'Logs added salt in grams',
+              'SALT',
+            ),
+            _actionTile(
+              ctx,
+              Icons.filter_alt_outlined,
+              AppColors.of(context).warning,
+              'Filter Cleaning',
+              'Marks pH and TDS after maintenance for 24 hours',
+              'FILTER_CLEAN',
+            ),
+            _actionTile(
+              ctx,
+              Icons.water_drop,
+              AppColors.of(context).info,
+              'Water Change',
+              'Resets pH & TDS mineral accumulation',
+              'WATER_CHANGE',
+            ),
+            _actionTile(
+              ctx,
+              Icons.opacity,
+              AppColors.of(context).info,
+              'Water Top-Up',
+              'Restores volume lost to evaporation',
+              'WATER_TOPUP',
+            ),
+            _actionTile(
+              ctx,
+              Icons.cleaning_services_outlined,
+              AppColors.of(context).water,
+              'Algae Scrub',
+              'Resets visual greenery & photo solar buildup',
+              'ALGAE_SCRUB',
+            ),
+            _actionTile(
+              ctx,
+              Icons.set_meal_outlined,
+              AppColors.of(context).feeding,
+              'Feeding Session',
+              'Logs food grams & protein content',
+              'FEEDING',
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -91,24 +108,29 @@ Widget _actionTile(
     ),
     title: Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
+      style: AppType.style(
+        color: AppColors.of(ctx).text,
         fontWeight: FontWeight.w600,
-        fontSize: 13,
+        fontSize: AppType.body,
       ),
     ),
     subtitle: Text(
       sub,
-      style: const TextStyle(color: Colors.white54, fontSize: 11),
+      style: AppType.style(
+        color: AppColors.of(ctx).textMuted,
+        fontSize: AppType.caption,
+      ),
     ),
     onTap: () {
       Navigator.pop(ctx);
       showModalBottomSheet(
         context: ctx,
         isScrollControlled: true,
-        backgroundColor: const Color(0xFF131B2A),
+        backgroundColor: AppColors.of(ctx).surface,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.panel),
+          ),
         ),
         builder: (_) => InterventionLogSheet(
           eventType: type,
@@ -123,7 +145,7 @@ Widget _actionTile(
 // ============================================================================
 // UNIFIED, DRY INTERVENTION LOG SHEET (~100 LINES FOR ALL 4 EVENT TYPES)
 // ============================================================================
-class InterventionLogSheet extends StatefulWidget {
+class InterventionLogSheet extends ConsumerStatefulWidget {
   final String eventType;
   final String title;
   final Color accentColor;
@@ -141,10 +163,11 @@ class InterventionLogSheet extends StatefulWidget {
   });
 
   @override
-  State<InterventionLogSheet> createState() => _InterventionLogSheetState();
+  ConsumerState<InterventionLogSheet> createState() =>
+      _InterventionLogSheetState();
 }
 
-class _InterventionLogSheetState extends State<InterventionLogSheet> {
+class _InterventionLogSheetState extends ConsumerState<InterventionLogSheet> {
   final _formKey = GlobalKey<FormState>();
   final _val1Ctrl = TextEditingController(text: '25'); // Pct or Grams
   final _val2Ctrl = TextEditingController(); // Volume or Protein %
@@ -170,17 +193,17 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final source = PondDataScope.of(context);
+    final source = ref.read(eventsRepositoryProvider);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = int.tryParse(prefs.getString('userID') ?? '0') ?? 0;
+      final prefs = await ref.read(localProfileRepositoryProvider).load();
+      final userId = int.tryParse(prefs.pondId?.toString() ?? '0') ?? 0;
 
-      // Fish stock was captured at onboarding into SharedPreferences (not
+      // Fish stock was captured at onboarding into local profile storage (not
       // synced to Supabase's UserData table), so it rides along on each
       // event push for the DigitalTwin engine to use as PondConfig context.
-      final ownedSpecies = prefs.getStringList('ownedFishSpecies') ?? [];
+      final ownedSpecies = prefs.species;
       final fishType = ownedSpecies.isEmpty ? null : ownedSpecies.join(', ');
-      final fishCount = int.tryParse(prefs.getString('fishCount') ?? '');
+      final fishCount = prefs.fishCount;
 
       final hour24 = (_hour % 12) + (_isPm ? 12 : 0);
       final timestamp = DateTime(
@@ -194,13 +217,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
       // One id for the row and the post, so the twin applies the event
       // once however it arrives (the post, a retry or its poller).
       final eventId = newEventId();
-      final Map<String, dynamic> payload = {
-        'userID': userId,
-        'event_id': eventId,
-        'event_type': widget.eventType,
-        'event_timestamp': timestamp.toIso8601String(),
-      };
-
+      double? saltGrams;
+      String? notes;
       double? volumePercent;
       double? volumeLitres;
       double? foodGrams;
@@ -211,29 +229,23 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
           widget.eventType == 'WATER_TOPUP') {
         volumePercent = double.parse(_val1Ctrl.text.trim());
         volumeLitres = double.tryParse(_val2Ctrl.text.trim());
-        payload['volume_percentage'] = volumePercent;
-        payload['volume_litres'] = volumeLitres;
       } else if (widget.eventType == 'FEEDING') {
         foodGrams = double.parse(_val1Ctrl.text.trim());
         proteinPercent = double.tryParse(_val2Ctrl.text.trim()) ?? 40.0;
-        payload['food_grams'] = foodGrams;
-        payload['protein_percentage'] = proteinPercent;
-      } else if (widget.eventType == 'ALGAE_SCRUB') {
-        payload['algae_method'] = _selectedOption;
-      }
+      } else if (widget.eventType == 'SALT') {
+        saltGrams = double.parse(_val1Ctrl.text.trim());
+      } else if (widget.eventType == 'FILTER_CLEAN') {
+        notes = _val2Ctrl.text.trim().isEmpty ? null : _val2Ctrl.text.trim();
+      } else if (widget.eventType == 'ALGAE_SCRUB') {}
 
-      // Historical intervention record - feeds the timeline graph markers.
-      await source.insertIntervention(payload);
-
-      // Push the same event into the DigitalTwin chemistry engine so its
-      // TAN/NO2/NO3 pools and the water buffer status card reflect it.
-      // Best-effort: the Supabase insert above already succeeded, so a
-      // slow/unreachable Flask host must not fail this save.
+      // The repository records chart history and sends the same ID to /v1.
       final assessment = await _pushToDigitalTwin(
         source,
         userId: userId,
         timestamp: timestamp,
         eventId: eventId,
+        saltGrams: saltGrams,
+        notes: notes,
         volumePercent: volumePercent,
         volumeLitres: volumeLitres,
         foodGrams: foodGrams,
@@ -242,6 +254,12 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         fishCount: fishCount,
       );
 
+      if (!mounted) return;
+      ref.invalidate(pondDashboardProvider);
+      ref.invalidate(assessmentProvider(userId));
+      ref.invalidate(evaporationForecastProvider(userId));
+      ref.invalidate(algaeForecastProvider(userId));
+      ref.invalidate(historyProvider);
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -261,7 +279,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppColors.of(context).danger,
           ),
         );
       }
@@ -269,10 +287,12 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   }
 
   Future<WaterChemistryAssessment?> _pushToDigitalTwin(
-    PondDataSource source, {
+    EventsRepository source, {
     required int userId,
     required DateTime timestamp,
     required String eventId,
+    double? saltGrams,
+    String? notes,
     double? volumePercent,
     double? volumeLitres,
     double? foodGrams,
@@ -281,6 +301,20 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     int? fishCount,
   }) {
     switch (widget.eventType) {
+      case 'SALT':
+        return source.logSalt(
+          userId: userId,
+          saltGrams: saltGrams!,
+          timestamp: timestamp,
+          eventId: eventId,
+        );
+      case 'FILTER_CLEAN':
+        return source.logFilterClean(
+          userId: userId,
+          notes: notes,
+          timestamp: timestamp,
+          eventId: eventId,
+        );
       case 'FEEDING':
         return source.logFeeding(
           userId: userId,
@@ -330,6 +364,8 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
     final isWater =
         widget.eventType == 'WATER_CHANGE' || widget.eventType == 'WATER_TOPUP';
+    final isSalt = widget.eventType == 'SALT';
+    final isFilter = widget.eventType == 'FILTER_CLEAN';
     final isFeed = widget.eventType == 'FEEDING';
     final isAlgae = widget.eventType == 'ALGAE_SCRUB';
 
@@ -337,10 +373,10 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
       physics: const BouncingScrollPhysics(),
       child: Padding(
         padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: bottomPad + 20,
+          left: AppSpace.xl,
+          right: AppSpace.xl,
+          top: AppSpace.xl,
+          bottom: bottomPad + AppSpace.xl,
         ),
         child: Form(
           key: _formKey,
@@ -348,44 +384,62 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              AdaptiveRow(
+                minWidth: 300,
                 children: [
                   Icon(
                     Icons.cleaning_services,
                     color: widget.accentColor,
                     size: 20,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   Text(
                     'Log ${widget.title}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
+                    style: AppType.style(
+                      color: AppColors.of(context).text,
+                      fontSize: AppType.body,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               // DYNAMIC FIELD 1 (Water % or Food Grams)
-              if (isWater || isFeed) ...[
+              if (isWater || isFeed || isSalt) ...[
                 _inputField(
                   ctrl: _val1Ctrl,
                   label: isWater
                       ? 'Volume Percentage (%)'
+                      : isSalt
+                      ? 'Salt added (g)'
                       : 'Food per session (g)',
                   suffix: isWater ? '%' : 'g',
                   color: widget.accentColor,
-                  validator: (v) => (v == null || double.tryParse(v) == null)
+                  validator: (v) =>
+                      (v == null ||
+                          double.tryParse(v) == null ||
+                          (isSalt &&
+                              (!double.parse(v).isFinite ||
+                                  double.parse(v) <= 0)))
                       ? 'Enter valid value'
                       : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpace.md),
               ],
 
               // DYNAMIC FIELD 2 (Litres or Protein %)
-              if (isWater)
+              if (isFilter)
+                TextFormField(
+                  controller: _val2Ctrl,
+                  maxLength: 1000,
+                  style: AppType.style(color: AppColors.of(context).text),
+                  decoration: _inputDeco(
+                    'Notes (optional)',
+                    widget.accentColor,
+                  ),
+                )
+              else if (isWater)
                 _inputField(
                   ctrl: _val2Ctrl,
                   label: 'Volume (Litres) [Optional]',
@@ -402,8 +456,11 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
               else if (isAlgae)
                 DropdownButtonFormField<String>(
                   initialValue: _selectedOption,
-                  dropdownColor: const Color(0xFF131B2A),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  dropdownColor: AppColors.of(context).surface,
+                  style: AppType.style(
+                    color: AppColors.of(context).text,
+                    fontSize: AppType.label,
+                  ),
                   decoration: _inputDeco('Scrub Method', widget.accentColor),
                   items: ['Manual Scrub', 'UV Clarifier', 'Chemical Treatment']
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
@@ -411,15 +468,19 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
                   onChanged: (v) => setState(() => _selectedOption = v!),
                 ),
 
-              const SizedBox(height: 16),
-              const Text(
+              const SizedBox(height: AppSpace.lg),
+              Text(
                 'Event Timestamp',
-                style: TextStyle(color: Colors.white54, fontSize: 11),
+                style: AppType.style(
+                  color: AppColors.of(context).textMuted,
+                  fontSize: AppType.caption,
+                ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpace.sm),
 
               // COMPACT TIME/DATE SELECTOR
-              Row(
+              AdaptiveRow(
+                minWidth: 300,
                 children: [
                   InkWell(
                     onTap: () async {
@@ -433,61 +494,67 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                        horizontal: AppSpace.md,
+                        vertical: AppSpace.sm,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24),
+                        color: AppColors.of(
+                          context,
+                        ).text.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                        border: Border.all(
+                          color: AppColors.of(context).outline,
+                        ),
                       ),
                       child: Text(
                         '${_date.day}/${_date.month}/${_date.year}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                        style: AppType.style(
+                          color: AppColors.of(context).text,
+                          fontSize: AppType.label,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   _timeDropdown(
                     _hour,
                     12,
                     1,
                     (v) => setState(() => _hour = v!),
                   ),
-                  const Text(
+                  Text(
                     ' : ',
-                    style: TextStyle(
-                      color: Colors.white70,
+                    style: AppType.style(
+                      color: AppColors.of(context).textSecondary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   _timeDropdown(_min, 60, 0, (v) => setState(() => _min = v!)),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpace.sm),
                   ToggleButtons(
                     isSelected: [!_isPm, _isPm],
                     constraints: const BoxConstraints(
                       minWidth: 32,
                       minHeight: 32,
                     ),
-                    borderRadius: BorderRadius.circular(6),
-                    selectedColor: Colors.black,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    selectedColor: AppColors.of(
+                      context,
+                    ).foregroundOn(widget.accentColor),
                     fillColor: widget.accentColor,
-                    children: const [
+                    children: [
                       Text(
                         'AM',
-                        style: TextStyle(
-                          fontSize: 10,
+                        style: AppType.style(
+                          fontSize: AppType.micro,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         'PM',
-                        style: TextStyle(
-                          fontSize: 10,
+                        style: AppType.style(
+                          fontSize: AppType.micro,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -496,30 +563,34 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpace.xl),
 
               // SAVE BUTTON
-              SizedBox(
+              Container(
                 width: double.infinity,
-                height: 46,
+                constraints: const BoxConstraints(minHeight: 46),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: widget.accentColor,
                   ),
                   onPressed: _isSaving ? null : _save,
                   child: _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.black,
+                            color: AppColors.of(
+                              context,
+                            ).foregroundOn(widget.accentColor),
                           ),
                         )
                       : Text(
                           'Save ${widget.title}',
-                          style: const TextStyle(
-                            color: Colors.black,
+                          style: AppType.style(
+                            color: AppColors.of(
+                              context,
+                            ).foregroundOn(widget.accentColor),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -542,7 +613,7 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
     return TextFormField(
       controller: ctrl,
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.white),
+      style: AppType.style(color: AppColors.of(context).text),
       decoration: _inputDeco(label, color, suffix: suffix),
       validator: validator,
     );
@@ -551,11 +622,11 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   InputDecoration _inputDeco(String label, Color color, {String? suffix}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white60),
+      labelStyle: AppType.style(color: AppColors.of(context).textSecondary),
       suffixText: suffix,
-      suffixStyle: TextStyle(color: color),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white24),
+      suffixStyle: AppType.style(color: color),
+      enabledBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: AppColors.of(context).outline),
       ),
       focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: color)),
     );
@@ -569,10 +640,10 @@ class _InterventionLogSheetState extends State<InterventionLogSheet> {
   ) {
     return DropdownButton<int>(
       value: val,
-      dropdownColor: const Color(0xFF131B2A),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 12,
+      dropdownColor: AppColors.of(context).surface,
+      style: AppType.style(
+        color: AppColors.of(context).text,
+        fontSize: AppType.label,
         fontWeight: FontWeight.bold,
       ),
       items: List.generate(count, (i) => i + offset)

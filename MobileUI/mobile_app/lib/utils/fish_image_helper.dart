@@ -1,25 +1,28 @@
+import 'package:mobile_app/theme/app_theme.dart';
 // lib/utils/fish_image_helper.dart
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/providers.dart';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 
 class FishImageHelper {
-  static Future<String> getUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('userID') ??
-        prefs.getInt('userID')?.toString() ??
-        '1';
+  static Future<String> getUserId(BuildContext context) async {
+    final profile = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(localProfileProvider.future);
+    return '${profile.pondId ?? 0}';
   }
 
   static void showLoadingDialog(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+      builder: (_) => Center(
+        child: CircularProgressIndicator(color: AppColors.of(context).info),
       ),
     );
   }
@@ -30,6 +33,7 @@ class FishImageHelper {
     required String speciesTitle,
     required VoidCallback onDataRefresh,
   }) async {
+    final colors = AppColors.of(context);
     try {
       final picker = ImagePicker();
       final XFile? pickedFile = await picker.pickImage(
@@ -43,13 +47,13 @@ class FishImageHelper {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Refocus Image Viewport',
-            toolbarColor: const Color(0xFF131B2A),
-            toolbarWidgetColor: Colors.white,
+            toolbarColor: colors.surface,
+            toolbarWidgetColor: colors.text,
             initAspectRatio: CropAspectRatioPreset.ratio16x9,
             lockAspectRatio: false,
-            activeControlsWidgetColor: const Color(0xFF38BDF8),
-            statusBarLight: false,
-            backgroundColor: const Color(0xFF070B12),
+            activeControlsWidgetColor: colors.info,
+            statusBarLight: !colors.isDark,
+            backgroundColor: colors.canvas,
           ),
           IOSUiSettings(title: 'Refocus Image Viewport'),
         ],
@@ -60,7 +64,7 @@ class FishImageHelper {
       if (!context.mounted) return;
       showLoadingDialog(context);
 
-      final userId = await getUserId();
+      final userId = await getUserId(context);
       final fileBytes = await croppedFile.readAsBytes();
       final formattedTitle = speciesTitle.replaceAll(' ', '_');
 
@@ -68,16 +72,10 @@ class FishImageHelper {
       final storagePath =
           '$userId/${formattedTitle}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      await Supabase.instance.client.storage
-          .from('pond-images')
-          .uploadBinary(
-            storagePath,
-            fileBytes,
-            fileOptions: const FileOptions(
-              contentType: 'image/jpeg',
-              upsert: true,
-            ),
-          );
+      if (!context.mounted) return;
+      await ProviderScope.containerOf(context, listen: false)
+          .read(pondProfileRepositoryProvider)
+          .uploadSpeciesPhoto(storagePath, fileBytes);
 
       if (context.mounted) Navigator.pop(context);
       onDataRefresh();
@@ -108,9 +106,10 @@ class FishImageHelper {
     try {
       showLoadingDialog(context);
 
-      await Supabase.instance.client.storage.from('pond-images').remove([
-        fullStoragePath,
-      ]);
+      await ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(pondProfileRepositoryProvider).deleteSpeciesPhoto(fullStoragePath);
 
       if (context.mounted) Navigator.pop(context);
       onDataRefresh();
@@ -137,36 +136,41 @@ class FishImageHelper {
   }) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF131B2A),
+      backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
       ),
       builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(AppSpace.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Manage Species Gallery',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.title,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.add_photo_alternate_outlined,
-                color: Color(0xFF38BDF8),
+                color: AppColors.of(context).info,
               ),
-              title: const Text(
+              title: Text(
                 'Add Another Photo',
-                style: TextStyle(color: Colors.white),
+                style: AppType.style(color: AppColors.of(context).text),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Upload new image for this species',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
+                style: AppType.style(
+                  color: AppColors.of(context).textSecondary,
+                  fontSize: AppType.label,
+                ),
               ),
               onTap: () async {
                 Navigator.pop(sheetContext);

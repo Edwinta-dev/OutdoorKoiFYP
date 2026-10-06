@@ -214,6 +214,7 @@ class Worker:
     def __init__(self, settings: Settings, registry: EngineRegistry, holder: Optional[str] = None):
         self.settings = settings
         self.registry = registry
+        self.registry.tds_prompt_config = settings.tds_prompt_config
         self.holder = holder or default_holder()
         self.failures_total: dict[str, int] = {}
         self.last_success_at: Optional[str] = None
@@ -409,6 +410,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         events = (_events_report(twin.reconcile_events(intervention_rows, now=now, history=history))
                   if intervention_rows is not None else {"reconciled": False})
         provenance, sensor_warnings = twin.ingest_sensor_inputs(discovery.inputs, history=history, now=now)
+        twin.tds_prompts.observe(discovery.inputs, twin.ledger, registry.tds_prompt_config)
 
         # The newest reading of each channel, used while it is fresh. A
         # stale or missing water temperature is not measured: the air

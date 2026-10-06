@@ -221,3 +221,27 @@ def slope_per_day(rows: list[dict], value_key: str = "avg_value") -> float | Non
     num = sum((xs[i] - x_mean) * (ys[i] - y_mean) for i in range(n))
     den = sum((xs[i] - x_mean) ** 2 for i in range(n))
     return None if den == 0 else num / den
+
+
+def tds_series_after_events(rows: list[dict], events: list, time_zone: str) -> list[dict]:
+    """Fit only complete days after the latest salt step; omit maintenance days.
+
+    Daily averages cannot locate a step within a day. Keeping the post-salt
+    segment avoids treating added dissolved mass as evaporation. Fewer than
+    three remaining days makes the existing cross-check report insufficient data.
+    """
+    from datetime import timedelta
+
+    from koi.models.engine import EventKind
+    from koi.models.local_time import local_date
+
+    salt_days = [local_date(e.time, time_zone) for e in events if e.kind == EventKind.SALT]
+    latest_salt = max(salt_days) if salt_days else None
+    maintenance_days = set()
+    for e in events:
+        if e.kind == EventKind.FILTER_CLEAN:
+            maintenance_days.add(local_date(e.time, time_zone))
+            maintenance_days.add(local_date(e.time + timedelta(hours=24, microseconds=-1), time_zone))
+    return [r for r in rows if r.get("record_date") is not None
+            and (latest_salt is None or datetime.fromisoformat(str(r["record_date"])).date() > latest_salt)
+            and datetime.fromisoformat(str(r["record_date"])).date() not in maintenance_days]

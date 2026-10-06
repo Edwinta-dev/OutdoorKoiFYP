@@ -1,3 +1,4 @@
+import 'package:mobile_app/theme/app_theme.dart';
 // Builds any screen or widget with a fake data source and seeded
 // SharedPreferences, so widget tests never reach Supabase or the
 // DigitalTwin service.
@@ -5,7 +6,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/data/pond_data_source.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_app/data/providers.dart';
+import 'package:mobile_app/data/local_profile_repository.dart';
 
 import 'fake_pond_data_source.dart';
 
@@ -23,11 +26,29 @@ const Map<String, Object> onboardedPrefs = {
 const Size phoneSize = Size(412, 1400);
 
 /// Wraps [child] in the data scope and a dark MaterialApp.
-Widget wrapWithSource(Widget child, PondDataSource source) => PondDataScope(
-  source: source,
+Widget wrapWithSource(
+  Widget child,
+  PondDataSource source, {
+  Map<String, Object> prefs = onboardedPrefs,
+  Brightness brightness = Brightness.dark,
+  double textScale = 1,
+}) => ProviderScope(
+  retry: (_, _) => null,
+  overrides: [
+    pondDataSourceProvider.overrideWithValue(source),
+    localProfileRepositoryProvider.overrideWithValue(
+      FakeLocalProfileRepository(prefs),
+    ),
+  ],
   child: MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
+    theme: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: child,
   ),
 );
@@ -42,13 +63,22 @@ Future<FakePondDataSource> pumpScreen(
   FakePondDataSource? source,
   Map<String, Object> prefs = onboardedPrefs,
   Size size = phoneSize,
+  Brightness brightness = Brightness.dark,
+  double textScale = 1,
 }) async {
-  SharedPreferences.setMockInitialValues(Map.of(prefs));
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   final fake = source ?? FakePondDataSource();
-  await tester.pumpWidget(wrapWithSource(screen, fake));
+  await tester.pumpWidget(
+    wrapWithSource(
+      screen,
+      fake,
+      prefs: prefs,
+      brightness: brightness,
+      textScale: textScale,
+    ),
+  );
   return fake;
 }
 

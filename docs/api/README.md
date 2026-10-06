@@ -20,13 +20,9 @@ read is a property of the matching schema.
 ## Versions and the old paths
 
 Every route is served under `/v1`, with the pond in the path. The paths
-the app calls today are kept as deprecated aliases of their `/v1` route.
-They give the same response with two extra headers: `Deprecation:
-@1790985600` (RFC 9745, 2026-10-03) and, when the pond is in the path,
-`Link: </v1/...>; rel="successor-version"`. They are removed by the
-mobile repositories issue, once the app calls `/v1`.
+the app previously called have been removed. The app uses `/v1`.
 
-| Old path (deprecated) | `/v1` path |
+| Retired path (returns 404) | `/v1` path |
 |---|---|
 | `GET /assessment/{id}` | `GET /v1/ponds/{pond}/assessments/chemistry` |
 | `GET /assessment/evaporation/{id}` | `GET /v1/ponds/{pond}/assessments/evaporation` |
@@ -36,7 +32,7 @@ mobile repositories issue, once the app calls `/v1`.
 | `GET /forecast/evaporation/{id}` | `GET /v1/ponds/{pond}/forecasts/evaporation` |
 | `GET /forecast/algae/{id}` | `GET /v1/ponds/{pond}/forecasts/algae` |
 | `GET /ratings/algae/{id}` | `GET /v1/ponds/{pond}/ratings/algae` |
-| `POST /events/{feeding,water-change,top-up,algal-scrub}` | `POST /v1/ponds/{pond}/events/{...}` |
+| `POST /events/{feeding,water-change,top-up,algal-scrub,salt,filter-clean}` | `POST /v1/ponds/{pond}/events/{...}` |
 | `POST /events/algae-rating`, `/events/algae-rating/undo` | `POST /v1/ponds/{pond}/events/algae-rating`, `.../undo` |
 | (new) | `GET /v1/ponds/{pond}/dashboard` |
 
@@ -48,6 +44,26 @@ and `/v1/ready` and unversioned, without deprecation, because probes call
 them. `/metrics` stays unversioned (Prometheus text).
 
 ## Conditional GET and caching
+
+The three pond forecast endpoints include `uncertainty.low` and
+`uncertainty.high`: pointwise envelopes of numeric trajectory fields in
+their original units. `trajectory` is the existing central projection.
+`uncertainty.first_crossing_days` maps each crossing field to `low`,
+`high` and `not_crossed_runs`. Day 0 means already crossed. A null low
+means none of the runs crosses within the requested horizon; a null high
+means at least one run does not cross within it. Scrub benefit includes
+its own crossing range under `scrub_benefit_days_bought`.
+
+These are model sensitivity estimates, not statistical confidence
+intervals. Each domain runs at most three scenarios per request, using
+`koi/models/uncertainty.json`. Algae uses the paired nitrate trajectories
+from three chemistry runs, and computes scrub benefit within its own
+three runs. The registry caches by pond, domain, horizon and depth query
+until the next poll or event; profile changes and a newer stored snapshot
+also invalidate it. The cache is process-local and uses the existing
+snapshot-version protocol for both storage adapters. No schema change is
+needed. A concurrent snapshot save conflict ends the forecast rather than
+re-running it beyond the cost cap.
 
 Every GET that returns 200 JSON has a strong `ETag` computed over the
 response body, `Cache-Control: private, no-cache` and `Vary:
@@ -92,7 +108,8 @@ be corrected from outside the function. `pond_dashboard_sources` returns
 the rows with their times instead.
 
 The two history RPCs (`get_pond_telemetry_history`,
-`get_historical_graph_payload`) are unchanged and not used by `/v1`.
+`get_historical_graph_payload`) are not used by `/v1`; migration 0019
+extends graph history with salt, notes and maintenance markers.
 `get_historical_graph_payload` runs `aggregate_daily_sensor_data()` on
 every call, for every pond, as security definer, and the app still calls
 it directly. A `/v1` history endpoint, with bounded windows and the
@@ -181,3 +198,97 @@ the dashboard) carries `data_confidence`: `level` `high`, `reduced` or
 falls while the node is silent although the stored assessment does not
 change. It is named apart from the algae assessment's own `confidence`,
 which describes its growth-rate fit.
+
+## Salt and filter cleaning events (issue #29)
+
+`POST /v1/ponds/{pond}/events/salt` requires positive finite `salt_grams`
+(grams), with optional `notes` (up to 1000 characters). `filter-clean`
+accepts optional `notes`. Both share `timestamp` and stable UUID `event_id`
+with other events; duplicate IDs are applied once and backdated events
+use the existing replay window. Their retired `/events/...` paths
+return 404. Responses contain all three assessments and the event
+outcome, including `event_id`.
+
+Migration 0019 adds nullable `salt_grams numeric` and `notes text` to
+`pondInterventions`. The app writes event types `SALT` and `FILTER_CLEAN`
+and posts the same UUID to the API. `pond_interventions_since` returns
+both fields, null on old rows. `get_historical_graph_payload` returns them
+with stable `event_id` in intervention history and derives the boolean
+`after_maintenance` on pH/TDS daily rows for Singapore days overlapping
+the next 24 hours after filter cleaning. Other channels are false. RPC
+signatures and access rules are unchanged. The app shows maintenance in
+chart tooltips. See [model assumptions](../models.md).
+
+## Owner test-kit readings (issue #30)
+
+`POST /v1/ponds/{pond}/kit-readings` returns 201 with the stored reading.
+It accepts nullable `taken_at` (an ISO 8601 instant with a time zone),
+`kit`, `ammonia_mg_l`, `nitrite_mg_l`, `nitrate_mg_l`, `ph`, `kh_dkh` and
+`notes`. Concentrations are mg/L and carbonate hardness is dKH. Ammonia
+means total ammonia (TAN), the quantity the chemistry engine estimates;
+a free NH3 badge result is not the same measurement. Numbers must be
+finite and nonnegative; pH must be in 0..14. Future sample times are
+rejected. There is no past-age limit. A null sample time stays unknown.
+
+The response stores `estimates`, `differences` (model minus measurement)
+and `comparison` provenance with the reading. An evaluation at exactly
+the sample instant is used, choosing the higher row ID on a tie.
+Otherwise the existing rebuild runs in memory up to that instant using
+ingested sensors, logged events and retained weather history. Its model
+version and missing-weather intervals are recorded. No current snapshot
+or later evaluation is substituted for a historical estimate. With no
+sample time or replayable sensors, estimates and differences stay null.
+The model has no pH or KH estimate, so those comparisons always stay null.
+Kit entries never change snapshots, evaluations or the ingest ledger.
+
+`GET /v1/ponds/{pond}/kit-readings` returns `readings`, ordered by sample
+time then ID, unknown times first. Stored comparisons remain unchanged
+when later model runs occur. `GET /v1/ponds/{pond}/validation` returns
+`analytes`, keyed by the five measurement names. Each has `count`,
+`mean_error`, `mean_absolute_error` and `pairs` containing the reading
+ID, sample time, measured value, estimated value and signed error in the
+analyte's units. Only measured/estimated pairs count; zero is a value.
+An analyte without pairs has count 0, null means and an empty list.
+Both GETs use the usual authentication, pond access and ETag rules.
+
+Apply migration `0020_kit_readings.sql` before redeploying the API.
+It adds a backend-only table with nullable measurement and comparison
+fields; existing engine state and model constants are unchanged.
+## TDS owner questions (issue #35)
+
+`GET /v1/ponds/{pond}/prompts` returns `enabled` and unanswered `prompts`,
+with the usual authentication, pond isolation and ETag rules. With
+`KOI_TDS_PROMPTS=false` (default) it returns `enabled: false` and an empty
+list, without collecting readings or writing snapshots. Enable the same
+setting on the API and worker. The worker produces questions after sensor
+ingestion and event reconciliation. No schema migration is required.
+
+Each question contains its UUID `id`, `detection` (`step` or `slope`),
+`event_at`, `detected_at`, reading `time_basis`, measured `baseline_ppm`,
+`level_ppm`, `delta_ppm`, nullable `slope_ppm_hour`, signal `confidence`,
+possible `event_kinds`, nullable `answer` and owner-facing `message`.
+Confidence describes the signal, not the likelihood of a particular cause.
+Thresholds and suppression rules are in [models.md](../models.md).
+
+`POST /v1/ponds/{pond}/prompts/{prompt_id}` takes `answer`: `water_change`,
+`top_up`, `algal_scrub`, `feeding`, `salt`, `filter_clean`, `none of these`
+or `dismiss`. Owners may choose an event outside the offered guesses.
+Event answers require the same fields as event endpoints: water change
+and top-up need `volume_percent` or `volume_litres`, salt needs positive
+`salt_grams`, feeding needs `food_grams` and `protein_percent`; scrub has
+optional `scrub_type`, and `notes` are optional. Values must be finite.
+The signal's first timestamp is the event time and must fall in the existing
+30-day replay window. Old questions can still be rejected or dismissed.
+
+The response contains `prompt` and nullable `event_id`. An event uses the
+prompt UUID in the ledger and re-assesses the pond. A repeated answer is
+a no-op; a different answer to a closed question returns 409. Rejections
+persist across restarts; dismissals do not reject later guesses. A missing
+question or an answer while the feature is disabled returns 404. No separate
+`pondInterventions` row is written, matching existing API event behavior.
+
+Owner actions: redeploy the API and worker; optionally enable
+`KOI_TDS_PROMPTS` and configure `KOI_TDS_PROMPT_MIN_STEP_PPM` (20),
+`KOI_TDS_PROMPT_CONFIDENCE_THRESHOLD` (0.8) and
+`KOI_TDS_PROMPT_COOLDOWN_HOURS` (24) on both. No credentials or hardware
+changes are needed.

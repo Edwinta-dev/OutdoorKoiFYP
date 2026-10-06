@@ -1,126 +1,47 @@
-// lib/data/pond_data_source.dart
-//
-// Every remote read and write the dashboard, detail screens, log sheet,
-// rating card and onboarding make, behind one interface.
-//
-// The app uses LivePondDataSource, which forwards to the Supabase client
-// and DigitalTwinApi exactly as those screens did before. Tests wrap a
-// screen in a PondDataScope holding a fake (test/helpers/), so a screen
-// can be built in each state - loading, empty, data, error - without a
-// network or an initialised Supabase client.
-//
-// The two writes whose payload is built in a screen (the intervention
-// insert and the onboarding profile upsert) are implemented next to that
-// payload, in quick_log_modals.dart and onboarding_screen.dart: the schema
-// check in Backend/tests/storage/test_schema.py matches a write's map
-// keys to table columns within one file.
-
-import 'package:flutter/widgets.dart';
+import 'pond_profile.dart';
+import 'dart:typed_data';
+import 'repositories.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../screens/onboarding_screen.dart' show upsertUserProfileRow;
 import '../utils/digital_twin_api.dart';
 import '../utils/pond_camera_storage.dart';
-import '../widgets/modals/quick_log_modals.dart' show insertPondIntervention;
 
-abstract class PondDataSource {
+abstract class PondDataSource
+    implements
+        DashboardRepository,
+        TelemetryHistoryRepository,
+        PondProfileRepository,
+        CameraFramesRepository,
+        AssessmentsRepository,
+        ForecastsRepository,
+        RatingsRepository,
+        EventsRepository {
   const PondDataSource();
-
-  /// Supabase RPC get_bundled_dashboard_payload.
-  Future<Map<String, dynamic>?> fetchDashboardPayload(String userId);
-
-  /// Supabase RPC get_historical_graph_payload.
-  Future<Map<String, dynamic>?> fetchHistoricalGraphPayload(
-    int userId,
-    int days,
-  );
-
-  /// Row insert into pondInterventions.
-  Future<void> insertIntervention(Map<String, dynamic> payload);
-
-  /// Species names from Fish_Database, for onboarding.
-  Future<List<String>> fetchSpeciesNames();
-
-  /// UserData upsert at onboarding; returns the written row.
-  Future<Map<String, dynamic>> upsertUserProfile(Map<String, dynamic> row);
-
-  Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
-    int userId,
-  );
-
-  Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId);
-
-  Future<({EvaporationForecast? forecast, String? error})>
-  fetchEvaporationForecastOrError(int userId);
-
-  Future<({AlgaeForecast? forecast, String? error})> fetchAlgaeForecastOrError(
-    int userId,
-  );
-
-  Future<AlgaeRatingContext?> fetchAlgaeRatingContext(int userId);
-
-  Future<({AlgaeRatingResult? result, String? error})> submitAlgaeRating({
-    required int userId,
-    required AlgaeSeverity severity,
-    int? imageId,
-    double? greenRatio,
-  });
-
-  Future<bool> undoAlgaeRating({required int userId, int? ratingId});
-
-  Future<WaterChemistryAssessment?> logFeeding({
-    required int userId,
-    required double foodGrams,
-    required double proteinPercent,
-    DateTime? timestamp,
-    String? eventId,
-    String? fishType,
-    int? fishCount,
-  });
-
-  Future<WaterChemistryAssessment?> logWaterChange({
-    required int userId,
-    double? volumePercent,
-    double? volumeLitres,
-    DateTime? timestamp,
-    String? eventId,
-    String? fishType,
-    int? fishCount,
-  });
-
-  Future<WaterChemistryAssessment?> logTopUp({
-    required int userId,
-    double? volumePercent,
-    double? volumeLitres,
-    DateTime? timestamp,
-    String? eventId,
-    String? fishType,
-    int? fishCount,
-  });
-
-  Future<WaterChemistryAssessment?> logAlgalScrub({
-    required int userId,
-    String? scrubType,
-    DateTime? timestamp,
-    String? eventId,
-    String? fishType,
-    int? fishCount,
-  });
 }
 
 /// The production data source: Supabase plus the DigitalTwin service.
 class LivePondDataSource extends PondDataSource {
-  const LivePondDataSource();
+  final DigitalTwinApi api;
+  final SupabaseClient? client;
+  LivePondDataSource({DigitalTwinApi? api, this.client})
+    : api =
+          api ??
+          DigitalTwinApi(
+            accessToken: () =>
+                (client ?? Supabase.instance.client).auth.currentSession?.accessToken,
+          );
 
-  SupabaseClient get _client => Supabase.instance.client;
+  @override
+  Future<PondProfileResponse> fetchPondProfile(int pondId) async =>
+      PondProfileResponse.fromJson(
+        await api.request('GET', '/v1/ponds/$pondId/profile'),
+      );
+
+  SupabaseClient get _client => client ?? Supabase.instance.client;
 
   @override
   Future<Map<String, dynamic>?> fetchDashboardPayload(String userId) async {
-    final response = await _client.rpc(
-      'get_bundled_dashboard_payload',
-      params: {'p_user_id': userId},
-    );
-    return response == null ? null : Map<String, dynamic>.from(response as Map);
+    return api.request('GET', '/v1/ponds/$userId/dashboard');
   }
 
   @override
@@ -137,7 +58,7 @@ class LivePondDataSource extends PondDataSource {
 
   @override
   Future<void> insertIntervention(Map<String, dynamic> payload) =>
-      insertPondIntervention(payload);
+      _client.from('pondInterventions').insert(payload);
 
   @override
   Future<List<String>> fetchSpeciesNames() async {
@@ -148,31 +69,44 @@ class LivePondDataSource extends PondDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> upsertUserProfile(Map<String, dynamic> row) =>
-      upsertUserProfileRow(row);
+  Future<Map<String, dynamic>> upsertUserProfile(
+    Map<String, dynamic> row,
+  ) async {
+    // Location and account linkage have no /v1 write endpoint.
+    final written = await _client
+        .from('UserData')
+        .upsert(row)
+        .select()
+        .single();
+    await api.request('PUT', "/v1/ponds/${row['userID']}/profile", {
+      'volume_l': double.parse('${row['volume']}'),
+      'biomass_g': double.parse('${row['biomass']}') * 1000,
+    });
+    return written;
+  }
 
   @override
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
-  ) => PondCameraStorage.fetchLatestFrame(userId: userId);
+  ) => PondCameraStorage.fetchLatestFrame(userId: userId, client: _client);
 
   @override
   Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) =>
-      DigitalTwinApi.fetchLatestAssessment(userId);
+      api.fetchLatestAssessment(userId);
 
   @override
   Future<({EvaporationForecast? forecast, String? error})>
   fetchEvaporationForecastOrError(int userId) =>
-      DigitalTwinApi.fetchEvaporationForecastOrError(userId);
+      api.fetchEvaporationForecastOrError(userId);
 
   @override
   Future<({AlgaeForecast? forecast, String? error})> fetchAlgaeForecastOrError(
     int userId,
-  ) => DigitalTwinApi.fetchAlgaeForecastOrError(userId);
+  ) => api.fetchAlgaeForecastOrError(userId);
 
   @override
   Future<AlgaeRatingContext?> fetchAlgaeRatingContext(int userId) =>
-      DigitalTwinApi.fetchAlgaeRatingContext(userId);
+      api.fetchAlgaeRatingContext(userId);
 
   @override
   Future<({AlgaeRatingResult? result, String? error})> submitAlgaeRating({
@@ -180,7 +114,7 @@ class LivePondDataSource extends PondDataSource {
     required AlgaeSeverity severity,
     int? imageId,
     double? greenRatio,
-  }) => DigitalTwinApi.submitAlgaeRating(
+  }) => api.submitAlgaeRating(
     userId: userId,
     severity: severity,
     imageId: imageId,
@@ -189,7 +123,49 @@ class LivePondDataSource extends PondDataSource {
 
   @override
   Future<bool> undoAlgaeRating({required int userId, int? ratingId}) =>
-      DigitalTwinApi.undoAlgaeRating(userId: userId, ratingId: ratingId);
+      api.undoAlgaeRating(userId: userId, ratingId: ratingId);
+
+  @override
+  Future<WaterChemistryAssessment?> logSalt({
+    required int userId,
+    required double saltGrams,
+    String? notes,
+    DateTime? timestamp,
+    required String eventId,
+  }) => _recordEvent(
+    userId,
+    'SALT',
+    timestamp,
+    eventId,
+    {'salt_grams': saltGrams, 'notes': notes},
+    () => api.logSalt(
+      userId: userId,
+      saltGrams: saltGrams,
+      notes: notes,
+      timestamp: timestamp,
+      eventId: eventId,
+    ),
+  );
+
+  @override
+  Future<WaterChemistryAssessment?> logFilterClean({
+    required int userId,
+    String? notes,
+    DateTime? timestamp,
+    required String eventId,
+  }) => _recordEvent(
+    userId,
+    'FILTER_CLEAN',
+    timestamp,
+    eventId,
+    {'notes': notes},
+    () => api.logFilterClean(
+      userId: userId,
+      notes: notes,
+      timestamp: timestamp,
+      eventId: eventId,
+    ),
+  );
 
   @override
   Future<WaterChemistryAssessment?> logFeeding({
@@ -197,17 +173,24 @@ class LivePondDataSource extends PondDataSource {
     required double foodGrams,
     required double proteinPercent,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
-  }) => DigitalTwinApi.logFeeding(
-    userId: userId,
-    foodGrams: foodGrams,
-    proteinPercent: proteinPercent,
-    timestamp: timestamp,
-    eventId: eventId,
-    fishType: fishType,
-    fishCount: fishCount,
+  }) => _recordEvent(
+    userId,
+    'FEEDING',
+    timestamp,
+    eventId,
+    {'food_grams': foodGrams, 'protein_percentage': proteinPercent},
+    () => api.logFeeding(
+      userId: userId,
+      foodGrams: foodGrams,
+      proteinPercent: proteinPercent,
+      timestamp: timestamp,
+      eventId: eventId,
+      fishType: fishType,
+      fishCount: fishCount,
+    ),
   );
 
   @override
@@ -216,17 +199,24 @@ class LivePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
-  }) => DigitalTwinApi.logWaterChange(
-    userId: userId,
-    volumePercent: volumePercent,
-    volumeLitres: volumeLitres,
-    timestamp: timestamp,
-    eventId: eventId,
-    fishType: fishType,
-    fishCount: fishCount,
+  }) => _recordEvent(
+    userId,
+    'WATER_CHANGE',
+    timestamp,
+    eventId,
+    {'volume_percentage': volumePercent, 'volume_litres': volumeLitres},
+    () => api.logWaterChange(
+      userId: userId,
+      volumePercent: volumePercent,
+      volumeLitres: volumeLitres,
+      timestamp: timestamp,
+      eventId: eventId,
+      fishType: fishType,
+      fishCount: fishCount,
+    ),
   );
 
   @override
@@ -235,17 +225,24 @@ class LivePondDataSource extends PondDataSource {
     double? volumePercent,
     double? volumeLitres,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
-  }) => DigitalTwinApi.logTopUp(
-    userId: userId,
-    volumePercent: volumePercent,
-    volumeLitres: volumeLitres,
-    timestamp: timestamp,
-    eventId: eventId,
-    fishType: fishType,
-    fishCount: fishCount,
+  }) => _recordEvent(
+    userId,
+    'WATER_TOPUP',
+    timestamp,
+    eventId,
+    {'volume_percentage': volumePercent, 'volume_litres': volumeLitres},
+    () => api.logTopUp(
+      userId: userId,
+      volumePercent: volumePercent,
+      volumeLitres: volumeLitres,
+      timestamp: timestamp,
+      eventId: eventId,
+      fishType: fishType,
+      fishCount: fishCount,
+    ),
   );
 
   @override
@@ -253,34 +250,106 @@ class LivePondDataSource extends PondDataSource {
     required int userId,
     String? scrubType,
     DateTime? timestamp,
-    String? eventId,
+    required String eventId,
     String? fishType,
     int? fishCount,
-  }) => DigitalTwinApi.logAlgalScrub(
-    userId: userId,
-    scrubType: scrubType,
-    timestamp: timestamp,
-    eventId: eventId,
-    fishType: fishType,
-    fishCount: fishCount,
+  }) => _recordEvent(
+    userId,
+    'ALGAE_SCRUB',
+    timestamp,
+    eventId,
+    {'algae_method': scrubType},
+    () => api.logAlgalScrub(
+      userId: userId,
+      scrubType: scrubType,
+      timestamp: timestamp,
+      eventId: eventId,
+      fishType: fishType,
+      fishCount: fishCount,
+    ),
   );
-}
 
-/// Supplies a PondDataSource to the widgets below it. Without one in the
-/// tree, [PondDataScope.of] returns the live source, so the app itself
-/// does not need to install a scope.
-class PondDataScope extends InheritedWidget {
-  const PondDataScope({super.key, required this.source, required super.child});
-
-  final PondDataSource source;
-
-  static const PondDataSource _live = LivePondDataSource();
-
-  /// Safe to call from initState: it does not register a dependency.
-  static PondDataSource of(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<PondDataScope>()?.source ?? _live;
+  Future<WaterChemistryAssessment?> _recordEvent(
+    int pond,
+    String kind,
+    DateTime? timestamp,
+    String eventId,
+    Map<String, dynamic> fields,
+    Future<WaterChemistryAssessment?> Function() push,
+  ) async {
+    final payload = {
+      'userID': pond,
+      'event_type': kind,
+      'event_id': eventId,
+      'event_timestamp': (timestamp ?? DateTime.now())
+          .toUtc()
+          .toIso8601String(),
+      ...fields,
+    };
+    await insertIntervention(payload);
+    // The worker can apply the saved event if the immediate API call fails.
+    try {
+      return await push();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
-  bool updateShouldNotify(PondDataScope oldWidget) =>
-      source != oldWidget.source;
+  Future<void> deletePond(int pondId) async {
+    // The API has no account/profile deletion endpoint.
+    await _client.from('UserData').delete().eq('userID', pondId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchFishProfiles(
+    int pondId,
+    List<String> species,
+  ) async {
+    if (species.isEmpty) return [];
+    final response = await _client
+        .from('Fish_Database')
+        .select()
+        .inFilter('Title', species);
+    final profiles = List<Map<String, dynamic>>.from(response);
+    final bucket = _client.storage.from('pond-images');
+    List<FileObject> files = [];
+    try {
+      files = await bucket.list(path: '$pondId');
+    } catch (_) {
+      /* Legacy gallery may be empty. */
+    }
+    for (final profile in profiles) {
+      final title = '${profile['Title']}'.replaceAll(' ', '_');
+      final pattern = RegExp('^${RegExp.escape(title)}_[0-9]+\\.jpg\$');
+      final urls = files
+          .where((f) => pattern.hasMatch(f.name))
+          .map((f) => bucket.getPublicUrl('$pondId/${f.name}'))
+          .toList();
+      if (urls.isEmpty && profile['Image URL'] != null) {
+        urls.add('${profile['Image URL']}');
+      }
+      profile['ImageUrls'] = urls;
+    }
+    return profiles;
+  }
+
+  @override
+  Future<void> uploadSpeciesPhoto(String path, Uint8List bytes) async {
+    await _client.storage
+        .from('pond-images')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
+  }
+
+  @override
+  Future<void> deleteSpeciesPhoto(String path) async {
+    await _client.storage.from('pond-images').remove([path]);
+  }
 }

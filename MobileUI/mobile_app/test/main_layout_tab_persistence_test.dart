@@ -5,6 +5,7 @@
 // every tab switch - this test fails against that old code (the captured
 // State identity changes) and passes against the fix.
 import 'package:flutter/material.dart';
+import 'helpers/pump_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/screens/dashboard_view.dart';
 import 'package:mobile_app/screens/main_layout.dart';
@@ -13,8 +14,9 @@ void main() {
   testWidgets(
     'DashboardViewState survives switching away to another tab and back',
     (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: MainLayout()));
-      await tester.pump(); // let the initial (network-failing, caught) fetch settle
+      await pumpScreen(tester, const MainLayout());
+      await tester
+          .pump(); // let the initial (network-failing, caught) fetch settle
 
       final dashboardStateBefore = tester.state<DashboardViewState>(
         find.byType(DashboardView, skipOffstage: false),
@@ -33,7 +35,8 @@ void main() {
       expect(
         find.byType(DashboardView, skipOffstage: false),
         findsOneWidget,
-        reason: 'IndexedStack should keep DashboardView mounted even while '
+        reason:
+            'IndexedStack should keep DashboardView mounted even while '
             'a different tab is showing',
       );
 

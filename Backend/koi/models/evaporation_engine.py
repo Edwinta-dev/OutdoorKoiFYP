@@ -558,6 +558,7 @@ class EvaporationFeedEngine:
         *,
         daily_environment: list,
         horizon_days: int = 14,
+        shelter_factor: float = POND_SHELTER_FACTOR,
     ) -> dict:
         """Projects cumulative loss forward from the CURRENT accumulated
         state (no longer from a retroactive estimate). Operates on local
@@ -604,6 +605,7 @@ class EvaporationFeedEngine:
                 air_temp_c=env.air_temp_c,
                 relative_humidity_pct=env.relative_humidity_pct,
                 wind_speed_ms=env.wind_speed_ms,
+                shelter_factor=shelter_factor,
             )
             rain_mm = _RAIN_MM_BY_CATEGORY.get(env.rain_category, 0.0)
 
@@ -648,7 +650,7 @@ class EvaporationFeedEngine:
             "starting_loss_pct": round(start_pct, 3),
             "surface_area_m2": round(area, 3),
             "assumed_depth_m": self.config.pond_depth_m,
-            "wind_shelter_factor": POND_SHELTER_FACTOR,
+            "wind_shelter_factor": shelter_factor,
             "water_air_offset_c": self._water_air_offset_c,
             "days_using_real_forecast": min(len(daily_environment), horizon_days),
             "volume_litres": volume,

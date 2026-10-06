@@ -307,7 +307,7 @@ def test_api_registry_picks_up_a_snapshot_the_worker_saved():
     config_row = storage.fetch_active_pond_configs()[0]
 
     poller._poll_user(worker_registry, USER, config_row)
-    first = client.get(f"/forecast/evaporation/{USER}").get_json()["starting_loss_litres"]
+    first = client.get(f"/v1/ponds/{USER}/forecasts/evaporation").get_json()["starting_loss_litres"]
     assert api_registry._twins[USER].version == storage.fetch_snapshot_version(USER)
 
     for _ in range(3):
@@ -315,14 +315,14 @@ def test_api_registry_picks_up_a_snapshot_the_worker_saved():
         poller._poll_user(worker_registry, USER, config_row)
     assert stored_loss(storage) > first, "the worker advanced evaporation"
 
-    second = client.get(f"/forecast/evaporation/{USER}").get_json()["starting_loss_litres"]
+    second = client.get(f"/v1/ponds/{USER}/forecasts/evaporation").get_json()["starting_loss_litres"]
     # starting_loss_litres is rounded to 0.01 L for transport.
     assert second == pytest.approx(stored_loss(storage), abs=0.005), \
         f"API served the worker's newer snapshot, not its cached twin: {second} vs {stored_loss(storage)}"
     assert api_registry._twins[USER].version == storage.fetch_snapshot_version(USER)
 
     # And the other way: a top-up logged through the API reaches the worker.
-    r = client.post("/events/top-up", json={"user_id": USER, "volume_percent": 25.0})
+    r = client.post(f"/v1/ponds/{USER}/events/top-up", json={"user_id": USER, "volume_percent": 25.0})
     assert r.status_code == 200
     assert stored_loss(storage) == 0.0
     poller._poll_user(worker_registry, USER, config_row)

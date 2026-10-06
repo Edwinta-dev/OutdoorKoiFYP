@@ -33,6 +33,83 @@ class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TdsPrompt(_Open):
+    id: str
+    detection: Literal["step", "slope"]
+    detected_at: datetime
+    event_at: datetime
+    time_basis: Literal["ingestion", "sample"]
+    baseline_ppm: float
+    level_ppm: float
+    delta_ppm: float
+    slope_ppm_hour: Optional[float]
+    confidence: float = Field(ge=0, le=1, description="Signal confidence; not an event-kind probability.")
+    event_kinds: list[str]
+    answer: Optional[str]
+    message: str
+
+
+class TdsPromptList(_Closed):
+    enabled: bool
+    prompts: list[TdsPrompt]
+
+
+class TdsPromptAnswer(_Closed):
+    prompt: TdsPrompt
+    event_id: Optional[str]
+
+
+class KitValues(_Closed):
+    ammonia_mg_l: Optional[float] = Field(description="Total ammonia (TAN), mg/L.")
+    nitrite_mg_l: Optional[float] = Field(description="Nitrite, mg/L.")
+    nitrate_mg_l: Optional[float] = Field(description="Nitrate, mg/L.")
+    ph: Optional[float]
+    kh_dkh: Optional[float] = Field(description="Carbonate hardness, dKH.")
+
+
+class KitComparison(_Closed):
+    source: Literal["evaluation", "rebuild", "unavailable"]
+    model_version: Optional[str]
+    evaluation_id: Optional[int]
+    estimated_at: Optional[datetime]
+    rebuild_weather: Optional[dict[str, Any]]
+
+
+class KitReading(KitValues):
+    id: int
+    pond: int
+    taken_at: Optional[datetime]
+    kit: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    estimates: Optional[KitValues]
+    differences: Optional[KitValues] = Field(description="Model estimate minus kit measurement, in analyte units.")
+    comparison: Optional[KitComparison]
+
+
+class KitReadings(_Closed):
+    readings: list[KitReading]
+
+
+class ValidationPair(_Closed):
+    reading_id: int
+    taken_at: Optional[datetime]
+    measured: float
+    estimated: float
+    error: float = Field(description="Model estimate minus kit measurement, in analyte units.")
+
+
+class AnalyteValidation(_Closed):
+    count: int
+    mean_error: Optional[float]
+    mean_absolute_error: Optional[float]
+    pairs: list[ValidationPair]
+
+
+class KitValidation(_Closed):
+    analytes: dict[str, AnalyteValidation]
+
+
 # ---------------------------------------------------------------------
 # Errors (koi/errors.py)
 # ---------------------------------------------------------------------
@@ -158,6 +235,9 @@ class HypoxiaFlag(_Open):
 class EventOutcome(_Open):
     """What the twin did with the event (koi/models/event_ledger.py)."""
 
+    salt_grams: Optional[float] = Field(default=None, description="Logged added salt mass in grams, for SALT.")
+    notes: Optional[str] = Field(default=None, description="Logged intervention notes, when provided.")
+
     event_id: str = Field(description="The event's UUID; legacy:<n> when the request had none.")
     status: Literal["applied", "duplicate", "deleted"] = Field(description=(
         "duplicate: this event_id was already applied, nothing changed. deleted: it was applied and later "
@@ -207,7 +287,26 @@ class ForecastDay(_Open):
     lux_assumed: Optional[float] = None
 
 
+class CrossingDayRange(_Closed):
+    low: Optional[int] = Field(description="Earliest crossing; null when no run crosses within the horizon.")
+    high: Optional[int] = Field(description="Latest crossing; null when any run does not cross within the horizon.")
+    not_crossed_runs: int = Field(ge=0, le=3)
+
+
+class ProjectionUncertainty(_Closed):
+    method: Literal["three_scenario_sensitivity"]
+    low: list[dict[str, float]] = Field(
+        description="Pointwise minima of numeric trajectory fields, in their original units.")
+    high: list[dict[str, float]] = Field(
+        description="Pointwise maxima of numeric trajectory fields, in their original units.")
+    first_crossing_days: dict[str, CrossingDayRange] = Field(description=(
+        "Ranges keyed by the central forecast's crossing field names. Day 0 means already crossed. "
+        "Sensitivity scenarios are model estimates, not statistical confidence intervals."))
+
+
 class _ForecastProvenance(_Open):
+    uncertainty: ProjectionUncertainty = Field(description=(
+        "Low/central/high constants from koi/models/uncertainty.json. The existing trajectory remains central."))
     model_version: Optional[str] = Field(default=None, description=(
         "Backend version that computed the forecast: the package version, plus +g<commit> when known."))
     input_cutoff: Optional[str] = Field(default=None, description=(
