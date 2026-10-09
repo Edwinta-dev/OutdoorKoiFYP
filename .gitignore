@@ -25,3 +25,7 @@ PythonSimulatorProject/NEAClimateScraper/*.log
 
 # Host-side build output (firmware tests)
 /build/
+
+# Agent/tool configuration (local only)
+.mcp.json
+.claude/

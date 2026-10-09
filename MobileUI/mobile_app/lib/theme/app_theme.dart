@@ -50,6 +50,7 @@ class AppColors {
   Color get warningOnImage => const Color(0xFFFFAB40);
   Color get onImage => const Color(0xFFFFFFFF);
   static const transparent = Color(0x00000000);
+  static const waterMaskPreview = Color(0xAA00FF00);
 }
 
 class AppSpace {

@@ -42,9 +42,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers.dart';
 import '../../data/rating_card_data.dart';
 import '../../utils/digital_twin_api.dart';
+import '../../utils/pond_camera_storage.dart';
 
 class AlgaeSeverityRatingCard extends ConsumerStatefulWidget {
   final int userId;
+
+  /// A gallery selection stays pinned even when the latest frame changes.
+  final PondCameraFrame? frame;
 
   /// Called after a successful submit or undo so the parent can refresh
   /// the chart and the forecast card - a rating moves the model, so
@@ -54,6 +58,7 @@ class AlgaeSeverityRatingCard extends ConsumerStatefulWidget {
   const AlgaeSeverityRatingCard({
     super.key,
     required this.userId,
+    this.frame,
     this.onRatingChanged,
   });
 
@@ -133,7 +138,14 @@ class _AlgaeSeverityRatingCardState
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<RatingCardData>(
-      future: ref.watch(ratingCardProvider(widget.userId).future),
+      future: widget.frame == null
+          ? ref.watch(ratingCardProvider(widget.userId).future)
+          : ref.watch(
+              selectedFrameRatingProvider((
+                pond: widget.userId,
+                frame: widget.frame!,
+              )).future,
+            ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _shell(
@@ -198,7 +210,7 @@ class _AlgaeSeverityRatingCardState
 
           const SizedBox(height: AppSpace.lg),
           Text(
-            frame?.imageUrl == null
+            frame?.id == null && frame?.imageUrl == null
                 ? 'How does the pond look right now?'
                 : 'How does the pond look in this photo?',
             style: AppType.style(
@@ -209,7 +221,7 @@ class _AlgaeSeverityRatingCardState
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            frame?.imageUrl == null
+            frame?.id == null && frame?.imageUrl == null
                 ? 'No camera frame available, so this rating will correct the '
                       'model but will not join the calibration set.'
                 : 'Your answer corrects the model directly - it counts for more '
@@ -321,7 +333,9 @@ class _AlgaeSeverityRatingCardState
                             ),
                             const SizedBox(height: AppSpace.sm),
                             Text(
-                              'No camera frame yet',
+                              frame?.id == null
+                                  ? 'No camera frame yet'
+                                  : 'Camera image unavailable',
                               style: AppType.style(
                                 color: AppColors.of(context).textMuted,
                                 fontSize: AppType.label,
@@ -334,7 +348,9 @@ class _AlgaeSeverityRatingCardState
                               // especially while the ESP32 is still
                               // writing under a different id.
                               data.frameError ??
-                                  'Waiting for the pond camera to report.',
+                                  (frame?.id == null
+                                      ? 'Waiting for the pond camera to report.'
+                                      : 'This rating stays attached to the selected frame.'),
                               textAlign: TextAlign.center,
                               style: AppType.style(
                                 color: AppColors.of(context).textMuted,

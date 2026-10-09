@@ -1,4 +1,5 @@
 import 'rating_card_data.dart';
+import '../utils/pond_camera_storage.dart';
 import 'telemetry_history.dart';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,6 +85,21 @@ final cameraFrameProvider = FutureProvider.family(
   (ref, int pond) =>
       ref.watch(cameraFramesRepositoryProvider).fetchLatestFrame(pond),
 );
+final cameraDayProvider = FutureProvider.autoDispose.family(
+  (ref, ({int pond, DateTime day}) query) => ref
+      .watch(cameraFramesRepositoryProvider)
+      .fetchFramesForDay(query.pond, query.day),
+);
+final selectedFrameRatingProvider = FutureProvider.autoDispose.family((
+  ref,
+  ({int pond, PondCameraFrame frame}) query,
+) async {
+  // A service failure must not hide the frame already chosen in the gallery.
+  final context = await ref
+      .watch(ratingContextProvider(query.pond).future)
+      .catchError((_) => null);
+  return RatingCardData(frame: query.frame, frameError: null, context: context);
+});
 final ratingContextProvider = FutureProvider.family(
   (ref, int pond) =>
       ref.watch(ratingsRepositoryProvider).fetchAlgaeRatingContext(pond),

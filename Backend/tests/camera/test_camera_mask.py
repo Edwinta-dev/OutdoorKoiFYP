@@ -22,7 +22,7 @@ from koi.storage import MemoryStorage
 SIZE = 320
 WATER = (110, 90, 60)   # BGR, hue ~200 degrees: not green
 ALGAE = (40, 160, 140)  # BGR, hue ~70 degrees: inside the HSV green band
-PLANT = (40, 140, 110)  # BGR, hue ~78 degrees: inside the HSV green band
+PLANT = (80, 140, 120)  # BGR, green within both HSV and GCC quality bands
 USER_ID = "15"
 TOL = 0.005  # JPEG error on a generated frame's green ratio
 

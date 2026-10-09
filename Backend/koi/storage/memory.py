@@ -94,7 +94,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
     "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL", "mask_version",
-                   "baseline_reset", "quality", "thumbnail_path"),
+                   "baseline_reset", "quality", "thumbnail_path", "gcc", "colour"),
     "camera_config": CAMERA_CONFIG_COLUMNS,
     "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
@@ -604,12 +604,13 @@ class MemoryStorage:
 
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
-                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None) -> None:
+                     quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
+                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
         self._check("insert_image")
         row = {"user_ID": user_id, "green_ratio": green_ratio, "current_state": current_state,
                "imageURL": image_url}
         optional = {"mask_version": mask_version, "baseline_reset": baseline_reset, "quality": quality,
-                    "thumbnail_path": thumbnail_path}
+                    "thumbnail_path": thumbnail_path, "gcc": gcc, "colour": colour}
         row.update({k: v for k, v in optional.items() if v is not None})
         self._insert("insert_image", "imageTable", [row])
 

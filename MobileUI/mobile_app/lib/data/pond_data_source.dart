@@ -27,8 +27,10 @@ class LivePondDataSource extends PondDataSource {
     : api =
           api ??
           DigitalTwinApi(
-            accessToken: () =>
-                (client ?? Supabase.instance.client).auth.currentSession?.accessToken,
+            accessToken: () => (client ?? Supabase.instance.client)
+                .auth
+                .currentSession
+                ?.accessToken,
           );
 
   @override
@@ -86,9 +88,34 @@ class LivePondDataSource extends PondDataSource {
   }
 
   @override
+  Future<List<List<double>>?> fetchCameraMask(int userId) async {
+    final data = await api.request('GET', '/v1/ponds/$userId/camera/mask');
+    return (data['mask'] as List?)
+        ?.map(
+          (point) => (point as List).map((v) => (v as num).toDouble()).toList(),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> saveCameraMask(int userId, List<List<double>> polygon) async {
+    await api.request('PUT', '/v1/ponds/$userId/camera/mask', {
+      'polygon': polygon,
+    });
+  }
+
+  @override
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
   ) => PondCameraStorage.fetchLatestFrame(userId: userId, client: _client);
+
+  @override
+  Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day) =>
+      PondCameraStorage.fetchFramesForDay(
+        userId: userId,
+        day: day,
+        client: _client,
+      );
 
   @override
   Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) =>

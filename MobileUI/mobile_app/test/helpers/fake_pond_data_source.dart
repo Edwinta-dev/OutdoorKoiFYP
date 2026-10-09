@@ -40,6 +40,7 @@ class FakePondDataSource extends PondDataSource {
     List<String>? speciesNames,
     this.userProfileResponse = const {'ClosestStations': null},
     this.frame,
+    this.frames = const [],
     this.frameError,
     this.assessment,
     this.evaporationForecast,
@@ -63,6 +64,7 @@ class FakePondDataSource extends PondDataSource {
   List<String> speciesNames;
   Map<String, dynamic> userProfileResponse;
   PondCameraFrame? frame;
+  List<PondCameraFrame> frames;
   String? frameError;
   WaterChemistryAssessment? assessment;
   EvaporationForecast? evaporationForecast;
@@ -82,6 +84,16 @@ class FakePondDataSource extends PondDataSource {
   final Set<String> failing;
 
   final List<FakeCall> calls = [];
+
+  List<List<double>>? cameraMask;
+
+  @override
+  Future<List<List<double>>?> fetchCameraMask(int userId) =>
+      _answer('fetchCameraMask', {'userId': userId}, cameraMask);
+
+  @override
+  Future<void> saveCameraMask(int userId, List<List<double>> polygon) =>
+      _answer('saveCameraMask', {'userId': userId, 'polygon': polygon}, null);
 
   Iterable<FakeCall> callsTo(String name) => calls.where((c) => c.name == name);
 
@@ -195,6 +207,10 @@ class FakePondDataSource extends PondDataSource {
     {'userId': userId},
     (frame: frame, error: frameError),
   );
+
+  @override
+  Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day) =>
+      _answer('fetchFramesForDay', {'userId': userId, 'day': day}, frames);
 
   @override
   Future<WaterChemistryAssessment?> fetchLatestAssessment(int userId) =>

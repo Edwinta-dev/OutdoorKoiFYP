@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
+import 'camera_gallery_screen.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/detail_graph/algae_status_card.dart';
 import '../widgets/detail_graph/evaporation_status_card.dart';
@@ -126,6 +127,16 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          if (isAlgaeDomain)
+            IconButton(
+              tooltip: 'Camera gallery',
+              icon: const Icon(Icons.photo_library_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CameraGalleryScreen(userId: _userId),
+                ),
+              ),
+            ),
           IconButton(
             icon: Icon(Icons.refresh, color: AppColors.of(context).info),
             onPressed: _loadUserPreferencesAndPayload,
