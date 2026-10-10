@@ -26,8 +26,9 @@ import json
 import math
 import os
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
-from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from koi.models import algae_engine as ae
@@ -158,10 +159,13 @@ def sensor_input(time: datetime, values: dict) -> SensorInput:
     return SensorInput(time, "ingestion", dict(values), {})
 
 
-def run_twin(config: PondConfig, plan) -> PondTwin:
+def run_twin(config: PondConfig, plan, *, record_events: bool = False) -> PondTwin:
     twin = PondTwin.create(config)
     for kind, time, payload in plan:
-        apply_step(twin, kind, time, payload)
+        if kind == "event" and record_events:
+            twin.record_event(str(UUID(int=len(twin.ledger.entries) + 1)), payload, now=time)
+        else:
+            apply_step(twin, kind, time, payload)
     return twin
 
 
@@ -185,6 +189,11 @@ def twin_state(twin: PondTwin) -> dict:
     snap = as_json(twin.to_snapshot())
     snap.pop("saved_at")
     return snap
+
+
+def initialise_camera(twin: PondTwin, time: datetime, green: float) -> None:
+    """Ensure algae projections exercise growth rather than the no-frame error."""
+    twin.algae.ingest_camera_samples([ae.GreenSample(time, green, state="base")])
 
 
 class RecordingEngine(WaterChemistryEngine):
@@ -299,10 +308,12 @@ def test_property_pools_losses_and_algae_never_go_negative(config, plan):
 @given(config=configs, plan=steps(max_size=15), avg_daily_tan_mg=floats(0.0, 20000.0),
        lux=maybe(floats(0.0, 150000.0)), temp=floats(-5.0, 45.0),
        evaporation_days=st.lists(evaporation_envs, min_size=1, max_size=5),
-       algae_days=st.lists(algae_envs, min_size=1, max_size=5), horizon_days=st.integers(1, 30))
+       algae_days=st.lists(algae_envs, min_size=1, max_size=5), horizon_days=st.integers(1, 30),
+       green=floats(0.0, 1.0))
 def test_property_projections_stay_in_bounds(config, plan, avg_daily_tan_mg, lux, temp,
-                                             evaporation_days, algae_days, horizon_days):
+                                             evaporation_days, algae_days, horizon_days, green):
     twin = run_twin(config, plan)
+    initialise_camera(twin, plan[-1][1] + timedelta(minutes=1), green)
     chem = twin.chemistry.project_forward(avg_daily_tan_mg=avg_daily_tan_mg, fallback_temp_c=temp,
                                           fallback_lux=lux, horizon_days=horizon_days)
     for day in chem["trajectory"]:
@@ -311,7 +322,8 @@ def test_property_projections_stay_in_bounds(config, plan, avg_daily_tan_mg, lux
     for day in evap["trajectory"]:
         assert day["cumulative_loss_litres"] >= 0.0 and day["cumulative_loss_pct"] >= 0.0
     algae = twin.algae.project_forward(daily_environment=algae_days, horizon_days=horizon_days)
-    for day in algae.get("trajectory", []):
+    assert len(algae["trajectory"]) == horizon_days
+    for day in algae["trajectory"]:
         assert 0.0 <= day["green_ratio"] <= 1.0
 
 
@@ -322,10 +334,12 @@ def test_property_projections_stay_in_bounds(config, plan, avg_daily_tan_mg, lux
 @given(config=configs, plan=steps(max_size=15), avg_daily_tan_mg=floats(0.0, 20000.0),
        lux=maybe(floats(0.0, 150000.0)), temp=floats(-5.0, 45.0),
        evaporation_days=st.lists(evaporation_envs, min_size=1, max_size=5),
-       algae_days=st.lists(algae_envs, min_size=1, max_size=5), horizon_days=st.integers(1, 30))
+       algae_days=st.lists(algae_envs, min_size=1, max_size=5), horizon_days=st.integers(1, 30),
+       green=floats(0.0, 1.0))
 def test_property_project_forward_never_changes_engine_state(config, plan, avg_daily_tan_mg, lux, temp,
-                                                             evaporation_days, algae_days, horizon_days):
+                                                             evaporation_days, algae_days, horizon_days, green):
     twin = run_twin(config, plan)
+    initialise_camera(twin, plan[-1][1] + timedelta(minutes=1), green)
     before = twin_state(twin)
     twin.chemistry.project_forward(avg_daily_tan_mg=avg_daily_tan_mg, fallback_temp_c=temp,
                                    fallback_lux=lux, horizon_days=horizon_days)
@@ -342,7 +356,7 @@ def test_property_project_forward_never_changes_engine_state(config, plan, avg_d
 @PROPERTY_SETTINGS
 @given(config=configs, plan=steps(), more=steps(max_size=5))
 def test_property_snapshot_round_trip_is_exact(config, plan, more):
-    twin = run_twin(config, plan)
+    twin = run_twin(config, plan, record_events=True)
     snapshot = as_json(twin.to_snapshot())
     loaded = PondTwin.from_snapshot(snapshot)
     assert twin_state(loaded) == twin_state(twin)
@@ -386,8 +400,12 @@ def ledger_plans(draw):
     instant apply in the order recorded), plus an order to post the events
     in after every reading has been ingested."""
     plan = [s for s in draw(steps(min_size=2, max_size=30)) if s[0] != "environment"]
-    assume(plan)
-    events = [(f"e{n}", s[2]) for n, s in enumerate(s for s in plan if s[0] == "event")]
+    # Every example has both input types, even when Hypothesis shrinks
+    # the generated sequence to samples only or events only.
+    plan.insert(0, ("sample", T0, draw(channels)))
+    end = plan[-1][1] + timedelta(minutes=1)
+    plan.append(("event", end, draw(events_at(end))))
+    events = [(str(UUID(int=n + 1)), s[2]) for n, s in enumerate(s for s in plan if s[0] == "event")]
     post_order = draw(st.permutations(events))
     return plan, events, post_order
 
@@ -418,3 +436,35 @@ def test_property_ledger_replay_equals_applying_live(config, ledger_plan):
 
     assert chemistry_state(replayed) == chemistry_state(live)
     assert sorted(e.event_id for e in replayed.ledger.live()) == sorted(e for e, _ in events)
+
+
+@PROPERTY_SETTINGS
+@given(config=configs, plan=steps(), first_event=events_at(T0))
+def test_property_ordered_ledger_replay_equals_live_for_all_engines(config, plan, first_event):
+    """Replay persisted ledger entries alongside the same sensor/weather inputs.
+
+    Unlike backdated posting (which rewinds chemistry only), ordered
+    replay must also reproduce the evaporation and algae event effects.
+    """
+    plan = [("event", T0, first_event)] + plan
+    live = PondTwin.create(config)
+    for kind, time, payload in plan:
+        if kind == "event":
+            live.record_event(str(UUID(int=len(live.ledger.entries) + 1)), payload, now=time)
+        else:
+            apply_step(live, kind, time, payload)
+
+    ledger = type(live.ledger).from_dict(as_json(live.ledger.to_dict()))
+    entries = iter(ledger.live())
+    replayed = PondTwin.create(config)
+    for kind, time, payload in plan:
+        if kind == "event":
+            entry = next(entries)
+            assert entry.model_time == time
+            replayed.apply_event(entry.event, now=time)
+        else:
+            apply_step(replayed, kind, time, payload)
+
+    for name in ("chemistry", "evaporation", "algae"):
+        assert as_json(getattr(replayed, name).to_snapshot()) == as_json(getattr(live, name).to_snapshot())
+    assert replayed.sensor_channels == live.sensor_channels
