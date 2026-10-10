@@ -138,6 +138,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from koi import notifications
 from koi.logs import log_event, pond_context
 from koi.models import algae_engine as ae
 from koi.models import device_health, forecast_utils
@@ -379,10 +380,10 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     # discards anything it has already assimilated, so a sleeping camera
     # costs one small query per cycle and changes nothing.
     camera_samples = []
+    image_rows = None
     try:
-        camera_samples = ae.parse_image_rows(
-            storage.fetch_image_history(user_id, limit=50)
-        )
+        image_rows = storage.fetch_image_history(user_id, limit=50)
+        camera_samples = ae.parse_image_rows(image_rows)
     except Exception as exc:  # noqa: BLE001 - camera is optional
         log_event(log, "camera_history_unavailable", level=logging.WARNING, error=str(exc))
 
@@ -541,11 +542,21 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         forecasts=forecast_provenance(payload, fail_soft(lambda: storage.fetch_dashboard_sources(user_id), None)),
         sensor_groups=sensor["inputs"], events=outcome["events"].get("applied", 0),
         camera_frames=outcome.get("assimilated_camera_frames", 0))
+    # Read before this cycle's rows are pushed: the outbox's "turned red"
+    # compares against them.
+    previous = notifications.previous_assessments(storage, user_id)
     storage.push_evaluation(user_id, run.stamp(CHEMISTRY, chem.to_dict()))
     if evap is not None:
         fail_soft(lambda: storage.push_evaporation_evaluation(user_id, run.stamp(EVAPORATION, evap.to_dict())), None)
     if algae is not None:
         fail_soft(lambda: storage.push_algae_evaluation(user_id, run.stamp(ALGAE, algae.to_dict())), None)
+
+    # --- notification outbox (issue #36): best effort, never fails the poll ---
+    notifications.notify_cycle(
+        storage, user_id, now,
+        current={"chemistry": chem.to_dict(), "evaporation": evap.to_dict() if evap else None,
+                 "algae": algae.to_dict() if algae else None},
+        previous=previous, image_rows=image_rows, default_sensor_interval=cadence)
 
     log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
               evaporation=evap.status if evap else None, algae=algae.status if algae else None,

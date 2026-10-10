@@ -45,6 +45,7 @@ from koi.storage.base import (
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
+    NOTIFICATION_COLUMNS,
     PROFILE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
@@ -275,6 +276,33 @@ class SupabaseStorage:
                 rows.extend(page)
                 if len(page) < 1000:
                     return rows
+
+    # --- notification outbox (migration 0024) -------------------------
+    def enqueue_notification(self, user_id: int, entry: dict, cooldown_seconds: int) -> Optional[dict]:
+        with _operation("enqueue_notification"):
+            res = self._db().rpc("enqueue_notification", {
+                "p_pond": user_id, "p_kind": entry["kind"], "p_severity": entry["severity"],
+                "p_title": entry["title"], "p_body": entry["body"], "p_data": entry.get("data") or {},
+                "p_dedupe_key": entry["dedupe_key"], "p_created_at": entry.get("created_at"),
+                "p_cooldown_seconds": cooldown_seconds}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or None
+
+    def fetch_notifications(self, user_id: int, unsent_only: bool = False, limit: int = 100) -> list[dict]:
+        with _operation("fetch_notifications"):
+            query = (self._db().table("notification_outbox").select(", ".join(NOTIFICATION_COLUMNS))
+                     .eq("pond", user_id))
+            if unsent_only:
+                query = query.is_("sent_at", "null").is_("error", "null")
+            return list(query.order("created_at").order("id").limit(limit).execute().data or [])
+
+    def record_notification_result(self, user_id: int, notification_id: int, sent_at: Optional[str],
+                                   error: Optional[str]) -> None:
+        with _operation("record_notification_result"):
+            (self._db().table("notification_outbox").update({"sent_at": sent_at, "error": error})
+             .eq("id", notification_id).eq("pond", user_id).execute())
 
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         with _operation("fetch_chemistry_evaluation_at"):

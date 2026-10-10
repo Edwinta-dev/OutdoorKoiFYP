@@ -40,6 +40,7 @@ from koi.storage.base import (
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
     INTERVENTION_COLUMNS,
+    NOTIFICATION_COLUMNS,
     PROFILE_COLUMNS,
     PROVENANCE_COLUMNS,
     DuplicateProfileError,
@@ -67,6 +68,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
     # Per-pond calibration versions (migration 0022).
     "pond_calibration": CALIBRATION_COLUMNS,
+    # Notification outbox (migration 0024).
+    "notification_outbox": NOTIFICATION_COLUMNS,
     # Sensor ingestion progress (migration 0014).
     "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
     "sensor_ingest_ledger": ("pond_id", "sensor_row_id", "sensor_type", "effective_sample_time", "time_basis",
@@ -133,6 +136,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 USER_COLUMN = {
     "kit_readings": "pond",
     "pond_calibration": "pond_id",
+    "notification_outbox": "pond",
     "pond_chemistry_state": "user_id",
     "sensor_ingest_cursor": "pond_id",
     "sensor_ingest_ledger": "pond_id",
@@ -165,6 +169,7 @@ OBSERVATION_AS_OF_COLUMNS = ("id", "source", "station_id", "metric", "value", "u
 _STAMPED = {
     "kit_readings": "created_at",
     "pond_calibration": "created_at",
+    "notification_outbox": "created_at",
     "pond_chemistry_evaluations": "evaluated_at",
     "pond_evaporation_evaluations": "evaluated_at",
     "pond_algae_evaluations": "evaluated_at",
@@ -192,6 +197,10 @@ def _same_user(row: dict, column: str, user_id: object) -> bool:
 
 
 class MemoryStorage:
+    # notification_outbox's checks (migration 0024).
+    NOTIFICATION_KINDS = ("status_red", "ladder_action", "node_silent", "camera_obstructed")
+    NOTIFICATION_SEVERITIES = ("info", "warning", "critical")
+
     def __init__(self, seed: Optional[dict] = None, clock: Optional[Callable[[], datetime]] = None):
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._lock = threading.RLock()
@@ -504,6 +513,61 @@ class MemoryStorage:
         rows = self._select("pond_calibration", user_id)
         rows.sort(key=lambda r: (parse_timestamp(r["effective_from"]), r["id"]))
         return [self._project(r, CALIBRATION_COLUMNS) for r in rows]
+
+    # --- notification outbox ------------------------------------------
+    @classmethod
+    def _notification_problem(cls, entry: dict, cooldown_seconds: int) -> Optional[str]:
+        if not isinstance(cooldown_seconds, int) or cooldown_seconds < 0:
+            return "cool-down must be zero or more seconds"
+        if entry.get("kind") not in cls.NOTIFICATION_KINDS:
+            return f"unknown notification kind {entry.get('kind')!r}"
+        if entry.get("severity") not in cls.NOTIFICATION_SEVERITIES:
+            return f"unknown severity {entry.get('severity')!r}"
+        for column, longest in (("title", 200), ("body", 2000), ("dedupe_key", 200)):
+            value = entry.get(column)
+            if not isinstance(value, str):
+                return f"{column} must be 1 to {longest} characters"
+            if not 1 <= len(value if column == "dedupe_key" else value.strip()) <= longest:
+                return f"{column} must be 1 to {longest} characters"
+        if entry.get("data") is not None and not isinstance(entry["data"], dict):
+            return "data must be an object"
+        return None
+
+    def enqueue_notification(self, user_id: int, entry: dict, cooldown_seconds: int) -> Optional[dict]:
+        """The same as enqueue_notification (migration 0024), including its
+        column checks."""
+        self._check("enqueue_notification")
+        problem = self._notification_problem(entry, cooldown_seconds)
+        if problem:
+            raise StorageError("enqueue_notification", problem)
+        at = parse_timestamp(entry["created_at"]) if entry.get("created_at") is not None else self._clock()
+        with self._lock:
+            since = at - timedelta(seconds=cooldown_seconds)
+            if any(parse_timestamp(r["created_at"]) > since
+                   for r in self._select("notification_outbox", user_id, dedupe_key=entry["dedupe_key"])):
+                return None
+            row = {c: entry.get(c) for c in ("kind", "severity", "title", "body", "dedupe_key")}
+            row.update(pond=user_id, data=entry.get("data") or {}, created_at=at.isoformat(), sent_at=None,
+                       error=None)
+            return self._project(self._insert("enqueue_notification", "notification_outbox", [row])[0],
+                                 NOTIFICATION_COLUMNS)
+
+    def fetch_notifications(self, user_id: int, unsent_only: bool = False, limit: int = 100) -> list[dict]:
+        self._check("fetch_notifications")
+        rows = self._select("notification_outbox", user_id)
+        if unsent_only:
+            rows = [r for r in rows if r.get("sent_at") is None and r.get("error") is None]
+        rows.sort(key=lambda r: (parse_timestamp(r["created_at"]), r["id"]))
+        return [self._project(r, NOTIFICATION_COLUMNS) for r in rows[:limit]]
+
+    def record_notification_result(self, user_id: int, notification_id: int, sent_at: Optional[str],
+                                   error: Optional[str]) -> None:
+        self._check("record_notification_result")
+        with self._lock:
+            for row in self._tables["notification_outbox"]:
+                if row["id"] == notification_id and _same_user(row, "pond", user_id):
+                    row["sent_at"] = parse_timestamp(sent_at).isoformat() if sent_at is not None else None
+                    row["error"] = error
 
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         self._check("fetch_chemistry_evaluation_at")

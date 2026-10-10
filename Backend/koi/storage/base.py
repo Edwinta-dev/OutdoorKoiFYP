@@ -179,6 +179,25 @@ class Storage(Protocol):
         """Newest evaluation at exactly this instant; no stale or future pairing."""
         ...
 
+    # --- notification outbox (notification_outbox, migration 0024) -----
+    def enqueue_notification(self, user_id: int, entry: dict, cooldown_seconds: int) -> Optional[dict]:
+        """Stores entry ({kind, severity, title, body, data, dedupe_key,
+        created_at}) unless the pond has a row with the same dedupe_key
+        created after created_at - cooldown_seconds (enqueue_notification).
+        Returns the stored row (NOTIFICATION_COLUMNS), or None when the
+        cool-down suppressed it."""
+        ...
+
+    def fetch_notifications(self, user_id: int, unsent_only: bool = False, limit: int = 100) -> list[dict]:
+        """The pond's outbox rows, oldest created_at first (then id); with
+        unsent_only, only rows with neither sent_at nor error."""
+        ...
+
+    def record_notification_result(self, user_id: int, notification_id: int, sent_at: Optional[str],
+                                   error: Optional[str]) -> None:
+        """Sets a row's sent_at (delivered) or error (not delivered)."""
+        ...
+
     # --- evaluation logs ----------------------------------------------
     def push_evaluation(self, user_id: int, assessment: dict) -> None: ...
 
@@ -383,6 +402,10 @@ INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volu
 CALIBRATION_COLUMNS = ("id", "pond_id", "parameter", "status", "value", "lag_hours", "fitted_at", "effective_from",
                        "sample_count", "error", "training_from", "training_to", "evaluation_from", "evaluation_to",
                        "details", "method_version", "created_at")
+
+# notification_outbox's columns (migration 0024).
+NOTIFICATION_COLUMNS = ("id", "pond", "kind", "severity", "title", "body", "data", "created_at", "dedupe_key",
+                        "sent_at", "error")
 
 # Provenance columns of the three evaluation tables (migration 0016).
 # Every evaluation push carries all four (koi/provenance.py); rows written
