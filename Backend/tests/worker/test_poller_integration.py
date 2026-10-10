@@ -356,6 +356,10 @@ def test_undo_restores_through_the_endpoint(store, client, carried):
 
 
 def test_obstruction_rating_discards_the_frame(store, client, carried, registry):
+    if snapshot(store) is None:
+        # Selected alone (pytest -k obstruction): the earlier sections
+        # have not polled the pond yet, so there is no twin to rewind.
+        poll(store, registry)
     bad_t = datetime.fromisoformat(frames(store)[-1]["created_at"]) + timedelta(days=1)
     carried["obstructed_frame_time"] = bad_t
     add_frames(store, [{

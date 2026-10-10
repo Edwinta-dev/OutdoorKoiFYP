@@ -21,10 +21,15 @@ TRIGGERS
   node_silent        the sensor node has sent nothing for
                      device_health.SILENT_AFTER_INTERVALS (3) expected
                      intervals after it was due (device_health.device_status).
-  camera_obstructed  the pond's newest camera frame, stored within the
-                     last OBSTRUCTION_MAX_AGE, has current_state
-                     "obstruction". The camera service is unchanged: this
-                     reads imageTable as it is written today.
+  camera_obstructed  issue #41. The camera enters the obstruction state
+                     (koi/camera/hsvEngine.py::evalstate): a warning,
+                     "Camera view blocked since 14:10", once per episode
+                     while its newest frame is within OBSTRUCTION_MAX_AGE.
+                     It clears after more than OBSTRUCTION_CLEAR_AFTER
+                     (2 h): an info "view clear" entry. Episodes come
+                     from the current_state labels of the imageTable
+                     rows the poll already read (obstruction_episode);
+                     the camera service is unchanged.
 
 --------------------------------------------------------------------
 DEDUPE AND COOL-DOWN
@@ -39,13 +44,17 @@ the cool-down before it, as one step in the database. So:
   ladder_action:<rule>:<local day> 24 h: each rule once per pond-local day
   node_silent:sensor               24 h: a daily reminder while the node
                                    stays silent, not one per cycle
-  camera_obstructed:camera         24 h
+  camera_obstructed:camera:<start> 365 d: once per episode, until the
+                                   view clears (a new episode has a new
+                                   start)
+  camera_obstructed:clear:<at>     365 d: once per clearing
 
 Writing is best effort: a failed write is logged and skipped, and never
 fails the poll.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from functools import partial
@@ -53,7 +62,7 @@ from typing import Any, Optional, Protocol
 
 from koi.logs import log_event
 from koi.models import device_health, ladder
-from koi.models.local_time import local_date
+from koi.models.local_time import DEFAULT_POND_TIME_ZONE, local_date, zone
 from koi.models.sensor_inputs import parse_timestamp
 from koi.storage.base import fail_soft
 from koi.weather.history import local_day_window
@@ -72,12 +81,20 @@ COOLDOWNS: dict[str, timedelta] = {
     STATUS_RED: timedelta(hours=12),
     LADDER_ACTION: timedelta(hours=24),
     NODE_SILENT: timedelta(hours=24),
-    CAMERA_OBSTRUCTED: timedelta(hours=24),
+    # Keys are per episode (issue #41), so this only has to outlast one.
+    CAMERA_OBSTRUCTED: timedelta(days=365),
 }
 
 # A frame older than this does not raise camera_obstructed: a camera that
 # stopped on an obstructed frame is not reported every day forever.
 OBSTRUCTION_MAX_AGE = timedelta(hours=24)
+# An obstruction must last longer than this for its clearing to be
+# reported (issue #41); a short one clears without a second message.
+OBSTRUCTION_CLEAR_AFTER = timedelta(hours=2)
+OBSTRUCTION = "obstruction"
+# Rows the poller reads from imageTable each cycle (koi/worker/poller.py
+# fetch_image_history(limit=50)). A shorter window is the whole history.
+IMAGE_WINDOW = 50
 
 DOMAIN_TITLES = {"chemistry": "Water chemistry", "evaporation": "Water level", "algae": "Algae"}
 RED = "Red"
@@ -149,21 +166,92 @@ def node_silent(activity: Optional[dict], default_interval: timedelta, now: date
                   f"{NODE_SILENT}:{device_health.SENSOR}", now)
 
 
-def camera_obstructed(image_rows: Optional[list[dict]], now: datetime) -> Optional[dict]:
-    """An entry when the newest stored frame reports an obstruction and is
-    no older than OBSTRUCTION_MAX_AGE."""
+def _frame_state(row: dict) -> Optional[str]:
+    """The state machine's label stored in an imageTable row's
+    current_state: a [label, baseline, ...] list (or its JSON text) as
+    camera.py writes it, or a bare label from older rows. The same reading
+    as koi/camera/hsvEngine.py::_coerce_state, without importing OpenCV
+    into the worker."""
+    value = row.get("current_state")
+    if isinstance(value, str) and value.strip().startswith("["):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return None
+    if isinstance(value, (list, tuple)):
+        return str(value[0]) if value else None
+    return value.strip() if isinstance(value, str) else None
+
+
+def obstruction_episode(image_rows: Optional[list[dict]]) -> Optional[dict]:
+    """The camera's latest obstruction episode in a newest-first window of
+    imageTable rows, or None when the window holds none.
+
+    Returns {since, until, cleared_at, image_id, complete}: since is the
+    first frame of the run of consecutive "obstruction" frames, until its
+    last, cleared_at the first frame after it (None while it lasts) and
+    image_id the newest frame of the run. complete is False when the run
+    reaches the oldest frame of a full window (IMAGE_WINDOW rows), so
+    since is only a bound."""
     rows = [r for r in image_rows or [] if r.get("created_at") is not None]
-    if not rows:
+    rows.sort(key=lambda r: (parse_timestamp(r["created_at"]), r.get("id") or 0), reverse=True)
+    i = 0
+    while i < len(rows) and _frame_state(rows[i]) != OBSTRUCTION:
+        i += 1
+    if i == len(rows):
         return None
-    newest = max(rows, key=lambda r: (parse_timestamp(r["created_at"]), r.get("id") or 0))
-    captured = parse_timestamp(newest["created_at"])
-    if newest.get("current_state") != "obstruction" or now - captured > OBSTRUCTION_MAX_AGE:
+    j = i
+    while j + 1 < len(rows) and _frame_state(rows[j + 1]) == OBSTRUCTION:
+        j += 1
+    return {"since": parse_timestamp(rows[j]["created_at"]), "until": parse_timestamp(rows[i]["created_at"]),
+            "cleared_at": parse_timestamp(rows[i - 1]["created_at"]) if i > 0 else None,
+            "image_id": rows[i].get("id"), "complete": j + 1 < len(rows) or len(rows) < IMAGE_WINDOW}
+
+
+def _clock(at: datetime, now: datetime) -> str:
+    """at as pond-local HH:MM, with the date when it is not now's day."""
+    local = at.astimezone(zone(DEFAULT_POND_TIME_ZONE))
+    if local.date() == local_date(now):
+        return local.strftime("%H:%M")
+    return f"{local:%H:%M} on {local.day} {local:%b}"
+
+
+def camera_obstructed(image_rows: Optional[list[dict]], now: datetime) -> Optional[dict]:
+    """An entry for the camera's obstruction episode (obstruction_episode):
+
+    - still obstructed, newest frame no older than OBSTRUCTION_MAX_AGE:
+      a warning keyed on the episode's first frame, so it is written once
+      per episode (the cool-down outlasts any episode the window can see);
+    - cleared, by a frame no older than OBSTRUCTION_MAX_AGE, after more
+      than OBSTRUCTION_CLEAR_AFTER: an info "view clear" entry keyed on
+      the clearing frame.
+
+    None otherwise, including for an ongoing episode whose start lies
+    before the window: its warning was written when it began."""
+    episode = obstruction_episode(image_rows)
+    if episode is None:
         return None
-    return _entry(CAMERA_OBSTRUCTED, WARNING, "Camera view is blocked",
-                  "The newest camera frame looks obstructed, so the algae reading is on hold. Clear whatever "
-                  "is in front of the lens (leaves, a net, condensation).",
-                  {"image_id": newest.get("id"), "captured_at": captured.isoformat()},
-                  f"{CAMERA_OBSTRUCTED}:camera", now)
+    since, until, cleared_at = episode["since"], episode["until"], episode["cleared_at"]
+    if cleared_at is None:
+        if not episode["complete"] or now - until > OBSTRUCTION_MAX_AGE:
+            return None
+        return _entry(CAMERA_OBSTRUCTED, WARNING, "Camera view is blocked",
+                      f"Camera view blocked since {_clock(since, now)}. Check the lens and the view. "
+                      f"The algae reading is on hold until the view clears.",
+                      {"state": OBSTRUCTION, "image_id": episode["image_id"], "since": since.isoformat(),
+                       "captured_at": until.isoformat()},
+                      f"{CAMERA_OBSTRUCTED}:camera:{since.isoformat()}", now)
+    lasted = cleared_at - since
+    if lasted <= OBSTRUCTION_CLEAR_AFTER or now - cleared_at > OBSTRUCTION_MAX_AGE:
+        return None
+    hours = lasted.total_seconds() / 3600.0
+    return _entry(CAMERA_OBSTRUCTED, INFO, "Camera view is clear",
+                  f"Camera view clear again at {_clock(cleared_at, now)} after being blocked "
+                  f"{'since' if episode['complete'] else 'since at least'} {_clock(since, now)} "
+                  f"({hours:.1f} hours). The algae reading resumes from the new frames.",
+                  {"state": "clear", "since": since.isoformat(), "cleared_at": cleared_at.isoformat(),
+                   "obstructed_hours": round(hours, 2)},
+                  f"{CAMERA_OBSTRUCTED}:clear:{cleared_at.isoformat()}", now)
 
 
 # ----------------------------------------------------------------------

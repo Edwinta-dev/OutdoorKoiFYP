@@ -138,7 +138,7 @@ def test_outbox_dedupe_a_flapping_status_does_not_repeat_within_the_cool_down():
 
 def test_outbox_dedupe_ladder_once_per_rule_per_local_day_and_cool_downs_per_kind():
     assert nt.COOLDOWNS == {"status_red": timedelta(hours=12), "ladder_action": timedelta(hours=24),
-                            "node_silent": timedelta(hours=24), "camera_obstructed": timedelta(hours=24)}
+                            "node_silent": timedelta(hours=24), "camera_obstructed": timedelta(days=365)}
     storage = pond()
     evaluated = {"actions": [{"rule": "REACT", "lead_time": "next morning", "action": "Check the pond."}]}
     for minutes in range(0, 12 * 60, 15):  # every cycle of the same Singapore day
