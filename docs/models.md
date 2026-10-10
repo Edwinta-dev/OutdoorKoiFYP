@@ -3,6 +3,22 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Backtest baseline (issue #33)
+
+`Backend/backtest_baseline.json` holds the backtest metrics that
+`python tools/check.py backend` guards (`python -m koi.tools.backtest
+--check`). A change that makes one worse than its tolerance allows must
+update the baseline in the same change (`--update-baseline`, which raises
+the version) and add a line here naming the version and the reason.
+
+- Backtest baseline version 1 (issue #33): first baseline, no model
+  constant changed. Demo pond (synthetic seed): water temperature RMSE
+  1.00, 1.00 and 0.97 C at +1, +3 and +6 hours against persistence 0.17,
+  0.48 and 0.88 C (the air-plus-offset model loses to persistence at every
+  horizon on this fixture, because the seeded air swings two to three times
+  as far as the water); the one logged top-up (100 L) against a modelled
+  54.5 L loss. NEA table: clear-day precision 0.861, heat-holds 0.842.
+
 ## Pond-specific calibration (issue #32)
 
 No default changes: the wind shelter factor stays 0.6, the water/air

@@ -1,0 +1,25 @@
+{
+  "_comment": "Backtest baseline (issue #33). python -m koi.tools.backtest --check fails when a metric is worse than 'value' by more than 'tolerance' (in the metric's unit), in the direction 'better' names. Update with --update-baseline and add 'Backtest baseline version N' with the reason to docs/models.md.",
+  "version": 1,
+  "scenarios": {
+    "demo_pond": {
+      "metrics": {
+        "water_temp_rmse_c_1h": {"value": 0.9987, "better": "lower", "tolerance": 0.02},
+        "water_temp_rmse_c_3h": {"value": 1.0008, "better": "lower", "tolerance": 0.02},
+        "water_temp_rmse_c_6h": {"value": 0.9674, "better": "lower", "tolerance": 0.02},
+        "water_temp_issue_times": {"value": 98.0, "better": "higher", "tolerance": 0},
+        "evaporation_mean_abs_error_l": {"value": 45.47, "better": "lower", "tolerance": 2.0},
+        "evaporation_topups_scored": {"value": 1.0, "better": "higher", "tolerance": 0}
+      }
+    },
+    "nea_ladder": {
+      "metrics": {
+        "ladder_days": {"value": 2302.0, "better": "higher", "tolerance": 0},
+        "ladder_clear_day_precision": {"value": 0.8611, "better": "higher", "tolerance": 0.005},
+        "ladder_clear_day_lowest_year_precision": {"value": 0.7556, "better": "higher", "tolerance": 0.01},
+        "ladder_heat_holds_precision": {"value": 0.8419, "better": "higher", "tolerance": 0.005},
+        "ladder_heat_holds_lowest_year_precision": {"value": 0.7561, "better": "higher", "tolerance": 0.01}
+      }
+    }
+  }
+}
