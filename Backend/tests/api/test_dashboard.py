@@ -95,6 +95,21 @@ def test_dashboard_and_actions_route_keep_missing_weather_unassessed(scenario_ap
     assert {r["rule"] for r in body["rules"]} == {"REACT", "PREEMPT", "WINDOW", "NOWCAST"}
 
 
+def test_dashboard_serves_fired_actions_in_the_documented_shape(scenario_app, clock, monkeypatch):
+    """The app reads next_actions entries as LeadTimeAction (issue #55)."""
+    from koi.models import ladder
+    fired = ladder.nowcast(rain_call="Thundery Showers")
+    assert fired["actions"], "a rain nowcast fires"
+    monkeypatch.setattr(ladder, "actions", lambda **_: {"status": "insufficient_data", "rules": [fired],
+                                                        "actions": fired["actions"]})
+    _, _, client = scenario_app
+    clock(NOW)
+    body = client.get("/v1/ponds/9101/dashboard").get_json()
+    assert body["next_actions"] == [{"rule": "NOWCAST", "lead_time": "within 2 hours",
+                                     "action": fired["actions"][0]["action"], "evidence": "Thundery Showers"}]
+    api_contract.validate("Dashboard", body)
+
+
 def test_dashboard_complete_pond(scenario_app, clock):
     _, _, client = scenario_app
     r = client.get("/v1/ponds/9101/dashboard")

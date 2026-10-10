@@ -3205,10 +3205,10 @@ components:
         assessments:
           $ref: '#/components/schemas/DashboardAssessments'
         next_actions:
-          description: Empty until the action ladder issue defines it.
+          description: Weather rules that fired as of now, in rule order (REACT, PREEMPT, WINDOW, NOWCAST);
+            empty when none fired or none could be assessed.
           items:
-            additionalProperties: true
-            type: object
+            $ref: '#/components/schemas/LeadTimeAction'
           title: Next Actions
           type: array
         weather:
@@ -4546,6 +4546,37 @@ components:
       - ph
       - kh_dkh
       title: KitValues
+      type: object
+    LeadTimeAction:
+      additionalProperties: true
+      description: One fired weather rule (koi/models/ladder.py::_action).
+      properties:
+        rule:
+          description: REACT, PREEMPT, WINDOW or NOWCAST.
+          title: Rule
+          type: string
+        lead_time:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: When the action applies, in the rule's words, e.g. "within 2 hours".
+          title: Lead Time
+        action:
+          description: What the owner should do, in plain words.
+          title: Action
+          type: string
+        evidence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: The observation or forecast that fired the rule.
+          title: Evidence
+      required:
+      - rule
+      - lead_time
+      - action
+      - evidence
+      title: LeadTimeAction
       type: object
     LeadTimeActions:
       properties:

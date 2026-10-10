@@ -29,7 +29,7 @@ API = os.path.join(
 DASHBOARD_API = os.path.join(os.path.dirname(API), "pond_dashboard.dart")
 PROFILE_API = os.path.join(os.path.dirname(API), "..", "data", "pond_profile.dart")
 # Dart class -> OpenAPI schema, where the names differ.
-SCHEMA_FOR_DART_CLASS = {"PondDashboard": "Dashboard"}
+SCHEMA_FOR_DART_CLASS = {"PondDashboard": "Dashboard", "PondAction": "LeadTimeAction"}
 # Dart classes that read no JSON.
 NO_JSON = {"DigitalTwinApi"}
 

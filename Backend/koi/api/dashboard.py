@@ -322,7 +322,7 @@ def build_dashboard(*, pond_id: int, sources: dict, chemistry: Optional[dict], e
             algae=r.AlgaeAssessment.model_validate(algae) if algae else None,
             hypoxia=r.HypoxiaFlag.model_validate(hypoxia),
         ),
-        next_actions=next_actions or [],
+        next_actions=[r.LeadTimeAction.model_validate(a) for a in next_actions or []],
         weather=r.WeatherNow(
             air_temperature=_weather_value("air_temperature", stations["air_temperature"], telemetry, now),
             rainfall=_weather_value("rainfall", stations["rainfall"], telemetry, now),

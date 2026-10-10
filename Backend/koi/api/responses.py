@@ -728,6 +728,16 @@ class DashboardForecast(_Closed):
     outlook: list[OutlookDay]
 
 
+class LeadTimeAction(_Open):
+    """One fired weather rule (koi/models/ladder.py::_action)."""
+
+    rule: str = Field(description="REACT, PREEMPT, WINDOW or NOWCAST.")
+    lead_time: Optional[str] = Field(description="When the action applies, in the rule's words, e.g. "
+                                                 "\"within 2 hours\".")
+    action: str = Field(description="What the owner should do, in plain words.")
+    evidence: Optional[str] = Field(description="The observation or forecast that fired the rule.")
+
+
 class Dashboard(_Closed):
     """Everything the dashboard screen shows, in one response."""
 
@@ -736,7 +746,9 @@ class Dashboard(_Closed):
     stations: StationAssignment
     readings: DashboardReadings
     assessments: DashboardAssessments
-    next_actions: list[dict[str, Any]] = Field(description="Empty until the action ladder issue defines it.")
+    next_actions: list[LeadTimeAction] = Field(description="Weather rules that fired as of now, in rule order "
+                                                     "(REACT, PREEMPT, WINDOW, NOWCAST); empty when none fired "
+                                                     "or none could be assessed.")
     weather: WeatherNow
     forecast: DashboardForecast
 
