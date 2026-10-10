@@ -164,8 +164,38 @@ class Storage(Protocol):
 
     def fetch_kit_readings(self, user_id: int) -> list[dict]: ...
 
+    # --- pond calibration (pond_calibration, migration 0022) ------------
+    def insert_calibration(self, user_id: int, row: dict) -> dict:
+        """Appends one calibration result (CALIBRATION_COLUMNS without id,
+        pond_id and created_at) and returns the stored row."""
+        ...
+
+    def fetch_calibrations(self, user_id: int) -> list[dict]:
+        """Every calibration row of the pond, ordered by effective_from,
+        id: the version history the poller and the API pick from."""
+        ...
+
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         """Newest evaluation at exactly this instant; no stale or future pairing."""
+        ...
+
+    # --- notification outbox (notification_outbox, migration 0024) -----
+    def enqueue_notification(self, user_id: int, entry: dict, cooldown_seconds: int) -> Optional[dict]:
+        """Stores entry ({kind, severity, title, body, data, dedupe_key,
+        created_at}) unless the pond has a row with the same dedupe_key
+        created after created_at - cooldown_seconds (enqueue_notification).
+        Returns the stored row (NOTIFICATION_COLUMNS), or None when the
+        cool-down suppressed it."""
+        ...
+
+    def fetch_notifications(self, user_id: int, unsent_only: bool = False, limit: int = 100) -> list[dict]:
+        """The pond's outbox rows, oldest created_at first (then id); with
+        unsent_only, only rows with neither sent_at nor error."""
+        ...
+
+    def record_notification_result(self, user_id: int, notification_id: int, sent_at: Optional[str],
+                                   error: Optional[str]) -> None:
+        """Sets a row's sent_at (delivered) or error (not delivered)."""
         ...
 
     # --- evaluation logs ----------------------------------------------
@@ -221,10 +251,11 @@ class Storage(Protocol):
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
-                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
+                     gcc: Optional[float] = None, colour: Optional[dict] = None,
+                     regions: Optional[dict] = None) -> None:
         """mask_version and baseline_reset (migration 0010), quality and
-        thumbnail_path (migration 0011), gcc and colour (migration 0021)
-        are left out when None, preserving inserts without observations."""
+        thumbnail_path (migration 0011), gcc and colour (migration 0021),
+        regions (migration 0023) are left out when None, preserving inserts without observations."""
         ...
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str: ...
@@ -235,17 +266,19 @@ class Storage(Protocol):
 
     # --- camera water mask (camera_config, migration 0010) -------------
     def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
-        """The pond's camera_config row {pond_id, mask, mask_version,
-        updated_at}, or None when no mask has been saved."""
+        """The pond's camera_config row {pond_id, mask, regions,
+        mask_version, updated_at}, or None when no mask has been saved.
+        mask or regions (migration 0023) may be None, not both."""
         ...
 
     def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
         """Every saved mask of the pond {pond_id, mask_version, mask,
-        created_at}, oldest version first."""
+        regions, created_at}, oldest version first."""
         ...
 
-    def save_camera_mask(self, user_id: int, mask: list) -> dict:
-        """Stores mask (a validated polygon, koi/camera/mask.py) as the
+    def save_camera_mask(self, user_id: int, mask: Optional[list], regions: Optional[dict] = None) -> dict:
+        """Stores mask (a validated polygon, koi/camera/mask.py, or None)
+        and regions (validate_regions, or None; not both None) as the
         pond's next mask version and makes it the one in force, in one
         step (save_camera_mask). Returns the new camera_config row."""
         ...
@@ -354,16 +387,25 @@ class Storage(Protocol):
 _BIOMASS_KG_TO_GRAMS = 1000.0
 
 # imageTable columns the services read (mask_version, baseline_reset: 0010;
-# quality, thumbnail_path: 0011; gcc, colour: 0021).
+# quality, thumbnail_path: 0011; gcc, colour: 0021; regions: 0023).
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
-                 "quality", "thumbnail_path", "gcc", "colour")
-# camera_config and camera_mask_version columns (migration 0010).
-CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
-CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
+                 "quality", "thumbnail_path", "gcc", "colour", "regions")
+# camera_config and camera_mask_version columns (migration 0010; regions 0023).
+CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "regions", "mask_version", "updated_at")
+CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "regions", "created_at")
 
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
                         "food_grams", "protein_percentage", "algae_method", "created_at", "salt_grams", "notes")
+
+# pond_calibration's columns (migration 0022).
+CALIBRATION_COLUMNS = ("id", "pond_id", "parameter", "status", "value", "lag_hours", "fitted_at", "effective_from",
+                       "sample_count", "error", "training_from", "training_to", "evaluation_from", "evaluation_to",
+                       "details", "method_version", "created_at")
+
+# notification_outbox's columns (migration 0024).
+NOTIFICATION_COLUMNS = ("id", "pond", "kind", "severity", "title", "body", "data", "created_at", "dedupe_key",
+                        "sent_at", "error")
 
 # Provenance columns of the three evaluation tables (migration 0016).
 # Every evaluation push carries all four (koi/provenance.py); rows written

@@ -527,6 +527,7 @@ class PondTwin:
         rain_intensity: str = "unknown",
         measured_water_temp_c: Optional[float] = None,
         sensor_warnings: Optional[list] = None,
+        observed_rain: Optional[dict] = None,
     ) -> dict:
         """Advances every engine to `now` using freshly polled conditions,
         then produces one assessment per domain.
@@ -549,6 +550,10 @@ class PondTwin:
         temperature as measured_water_temp_c and that step's warnings as
         sensor_warnings. With a sample, its temperature and warnings are
         used instead.
+
+        observed_rain is the rolling 24-hour station rain
+        (forecast_utils.observed_rain_24h); with the profile's depth it
+        gives the chemistry rain term (issue #27).
         """
         result: dict = {"assimilated_camera_frames": 0}
 
@@ -598,6 +603,8 @@ class PondTwin:
             rain_incoming=rain_incoming,
             rain_intensity=rain_intensity,
             recent_sensor_warnings=warnings,
+            observed_rain=observed_rain,
+            depth_m=self.depth_m_at(now),
         )
         result["chemistry"] = chem
         result["evaporation"] = self.evaporation.assess(current_water_temp_c=water_temp_c)
@@ -777,6 +784,15 @@ class PondTwin:
             estimated_biomass_grams=float(profile.biomass_g),
             pond_depth_m=float(profile.depth_m) if profile.depth_m is not None else ev.DEFAULT_POND_DEPTH_M,
         )
+
+    def depth_m_at(self, t: datetime) -> Optional[float]:
+        """The profile's measured depth at t, or None when there is no
+        profile or it has no depth. Unlike evaporation, the chemistry rain
+        term does not fall back to DEFAULT_POND_DEPTH_M (issue #27)."""
+        if self.profiles is None:
+            return None
+        depth = self.profiles.at(t).depth_m
+        return float(depth) if depth is not None else None
 
     def use_profile(self, profile: PondProfile) -> None:
         """Puts every engine on one profile: volume, biomass, fish and tap

@@ -402,6 +402,10 @@ class WaterChemistryAssessment:
     advisory: str
     add_hardener_now: bool
     risk_score: int = 0
+    # Issue #27: the observed-rain dilution term
+    # (WaterChemistryEngine.rain_dilution_term). Like risk_score, no
+    # column stores it.
+    rain_dilution: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -454,6 +458,32 @@ class WaterChemistryEngine:
     RISK_HIGH_THRESHOLD = 6
     NITRITE_OVERRIDE_PPM = 0.5
 
+    # Issue #27: one risk point per level the observed 24-hour rain
+    # dilution reaches. 0.08 needs about 100 mm on a 1.2 m pond (33 mm on
+    # 0.4 m); 0.16 about 209 mm on 1.2 m (70 mm on 0.4 m). They replace
+    # the forecast-wording points (+2 thundery/heavy, +1 showers/rain);
+    # see docs/models.md.
+    RAIN_DILUTION_LEVELS: tuple[float, ...] = (0.08, 0.16)
+
+    # The chemistry rain term reads observed rain at the pond's assigned
+    # station over the rolling 24 hours before the assessment. The
+    # lead-time ladder's REACT rule separately reads yesterday's local day.
+    RAIN_DILUTION_WINDOW = timedelta(hours=24)
+
+    @classmethod
+    def rain_dilution_window(cls, now: datetime) -> tuple[datetime, datetime]:
+        """[now - 24 h, now]: the chemistry rain term's observation window."""
+        return now - cls.RAIN_DILUTION_WINDOW, now
+
+    @staticmethod
+    def rain_dilution_fraction(rain_mm: float, depth_m: float) -> float:
+        """Fraction of the pond's water replaced by rain_mm of rain on a pond
+        depth_m deep: 1 - exp(-R/D), with R converted from mm to metres.
+        30 mm on 1.2 m is about 2.5 %; 100 mm on 1.2 m about 8.0 %."""
+        if not math.isfinite(depth_m) or depth_m <= 0:
+            raise ValueError("depth_m must be a positive number of metres")
+        return 1.0 - math.exp(-(max(rain_mm, 0.0) / 1000.0) / depth_m)
+
     # ROUND 2 FIX: _daily previously had no retention cap at all - unlike
     # EvaporationFeedEngine._recent_env (capped 200) and
     # AlgaeGrowthEngine._camera_history/_ratings (capped 300/200), it grew
@@ -485,6 +515,10 @@ class WaterChemistryEngine:
         self._algae_suppression_days_remaining = 0
         self._last_tds_ppm = 0.0
         self._last_ingest_time: Optional[datetime] = None
+        # Multiplier on both nitrification rates, fitted per pond from kit
+        # readings (issue #32, koi/kit_readings.py); 1.0 without a fit.
+        self.nitrification_scale = 1.0
+        self.nitrification_scale_version: Optional[int] = None
 
         self._gate = SensorGate(self._has_volume_event_within_6h)
 
@@ -660,6 +694,8 @@ class WaterChemistryEngine:
             hours,
             temp_c,
             lux_value,
+            0.05 * self.nitrification_scale,
+            0.035 * self.nitrification_scale,
         )
 
     @staticmethod
@@ -741,15 +777,17 @@ class WaterChemistryEngine:
         current_reactivity: Optional[float],
         reactivity_trend: Optional[float],
         tds_trend: Optional[float],
-        rain_incoming: bool,
-        rain_intensity: str,
+        rain_points: int = 0,
     ) -> tuple[int, bool]:
         """Returns (risk_score, nitrite_override). Pulled out of assess()
         so project_forward() scores each simulated day with exactly the
         same rules the live status uses - current_reactivity/
         reactivity_trend/tds_trend are None for simulated days (the
         pH-buffering trend has no forecastable analogue), which simply
-        skips those terms rather than double-counting a stale value."""
+        skips those terms rather than double-counting a stale value.
+
+        rain_points comes from rain_dilution_term (observed rain and pond
+        depth); forecast rain wording no longer scores (issue #27)."""
         risk_score = 0
         nitrite_override = no2_ppm > WaterChemistryEngine.NITRITE_OVERRIDE_PPM
 
@@ -781,17 +819,75 @@ class WaterChemistryEngine:
             if tds_trend > 5.0 and reactivity_trend > 0:
                 risk_score += 1
 
-        if rain_incoming:
-            risk_score += 2 if rain_intensity == "heavy" else 1
+        risk_score += max(int(rain_points), 0)
 
         return risk_score, nitrite_override
+
+    @classmethod
+    def rain_dilution_term(cls, rain: Optional[dict], depth_m: Optional[float],
+                           levels: Optional[tuple] = None) -> dict:
+        """The chemistry rain term from observed rain and the pond's depth.
+
+        rain is a rainfall_total result (koi/weather/history.py) over
+        cls.rain_dilution_window, or None when no station is assigned; depth_m
+        is the profile's depth. A known depth and any observed total give a
+        dilution and its points; a partial window's total is a lower bound,
+        so its points still count. Missing or partial rain, or an unknown
+        depth, is not read as zero dilution: status is insufficient_data
+        and confidence reduced."""
+        levels = tuple(cls.RAIN_DILUTION_LEVELS if levels is None else levels)
+        rain = rain if isinstance(rain, dict) else None
+        total = rain.get("total_mm") if rain else None
+        rain_status = rain.get("status") if rain else "no_station"
+        depth: Optional[float] = None
+        if (isinstance(depth_m, (int, float)) and not isinstance(depth_m, bool)
+                and math.isfinite(depth_m) and depth_m > 0):
+            depth = float(depth_m)
+        depth_ok = depth is not None
+        fraction = None
+        points = 0
+        if depth is not None and total is not None:
+            fraction = cls.rain_dilution_fraction(float(total), depth)
+            points = sum(1 for level in levels if fraction >= level)
+        reasons = []
+        if not depth_ok:
+            reasons.append("The pond profile has no depth, so rain dilution cannot be worked out.")
+        if rain is None:
+            reasons.append("No rainfall station is assigned to this pond.")
+        elif rain_status != "complete" or total is None:
+            reasons.append("The last 24 hours of station rainfall are incomplete"
+                           + ("; the total so far is a lower bound." if total is not None else "."))
+        assessed = not reasons
+        return {
+            "window": "rolling_24h",
+            "station_id": rain.get("station_id") if rain else None,
+            "from": rain.get("from") if rain else None,
+            "to": rain.get("to") if rain else None,
+            "rain_mm": total,
+            "rain_status": rain_status,
+            "coverage": rain.get("coverage") if rain else None,
+            "depth_m": depth,
+            "dilution_fraction": fraction,
+            "levels": list(levels),
+            "points": points,
+            "status": "assessed" if assessed else "insufficient_data",
+            "confidence": "full" if assessed else "reduced",
+            "reasons": reasons,
+        }
 
     # --------------------------------------------------------
     # Assessment (current state)
     # --------------------------------------------------------
-    def assess(self, rain_incoming: bool, rain_intensity: str = "unknown",
-               recent_sensor_warnings: Optional[list] = None) -> WaterChemistryAssessment:
+    def assess(self, rain_incoming: bool = False, rain_intensity: str = "unknown",
+               recent_sensor_warnings: Optional[list] = None, *,
+               observed_rain: Optional[dict] = None,
+               depth_m: Optional[float] = None) -> WaterChemistryAssessment:
+        """rain_incoming (forecast wording) only shapes the advice
+        (add_hardener_now at Watch); rain_intensity is no longer used. The
+        risk score's rain term comes from observed_rain (rolling 24 h at
+        the assigned station) and depth_m via rain_dilution_term (#27)."""
         recent_sensor_warnings = recent_sensor_warnings or []
+        rain_term = self.rain_dilution_term(observed_rain, depth_m)
         tan_ppm = self._tan_mg / self.config.volume_litres
         no2_ppm = self._no2_mg / self.config.volume_litres
         no3_ppm = self._no3_mg / self.config.volume_litres
@@ -818,7 +914,7 @@ class WaterChemistryEngine:
         risk_score, nitrite_override = self._score_risk(
             tan_ppm, no2_ppm, no3_ppm,
             current_reactivity, reactivity_trend, tds_trend,
-            rain_incoming, rain_intensity,
+            rain_points=rain_term["points"],
         )
 
         add_hardener = False
@@ -862,6 +958,7 @@ class WaterChemistryEngine:
             advisory=advisory,
             add_hardener_now=add_hardener,
             risk_score=risk_score,
+            rain_dilution=rain_term,
         )
 
     # --------------------------------------------------------
@@ -922,12 +1019,16 @@ class WaterChemistryEngine:
         become necessary". Operates on local copies of the pools only;
         never mutates self, so it's safe to call from a read-only request.
 
-        daily_temp_forecast_c / daily_lux_forecast / daily_rain: explicit
-        per-day values for as many days as you have real forecast data for
-        (e.g. NEA's 4-day outlook - see forecast_utils.py). Once the
-        horizon runs past the supplied lists, fallback_temp_c/
-        fallback_lux (recent historical daily averages) are used for the
-        remaining days, with no rain assumed.
+        daily_temp_forecast_c / daily_lux_forecast: explicit per-day
+        values for as many days as you have real forecast data for (e.g.
+        NEA's 4-day outlook - see forecast_utils.py). Once the horizon runs
+        past the supplied lists, fallback_temp_c/fallback_lux (recent
+        historical daily averages) are used for the remaining days.
+
+        daily_rain (per-day forecast wording) is accepted but not scored:
+        since issue #27 the rain term uses observed rain only, which a
+        projection does not have, and forecast rain feeds the lead-time
+        ladder's advice instead.
 
         Returns a dict with the day each risk threshold is first crossed,
         as "N days from now" (0 = already true right now, based on
@@ -940,6 +1041,10 @@ class WaterChemistryEngine:
         it is intentionally excluded here - a real future assess() could
         still read worse than this projection if buffering is degrading
         on top of waste load.
+
+        Both rates are multiplied by self.nitrification_scale, the pond's
+        fitted scale (1.0 without one), so the uncertainty scenarios spread
+        around the fitted rates.
         """
         if horizon_days < 1:
             raise ValueError("horizon_days must be >= 1")
@@ -948,7 +1053,6 @@ class WaterChemistryEngine:
 
         daily_temp_forecast_c = daily_temp_forecast_c or []
         daily_lux_forecast = daily_lux_forecast or []
-        daily_rain = daily_rain or []
 
         tan_mg, no2_mg, no3_mg = self._tan_mg, self._no2_mg, self._no3_mg
         algae_days = self._algae_suppression_days_remaining
@@ -975,7 +1079,6 @@ class WaterChemistryEngine:
         current_risk_score, current_nitrite_override = self._score_risk(
             current_tan_ppm, current_no2_ppm, current_no3_ppm,
             current_reactivity=None, reactivity_trend=None, tds_trend=None,
-            rain_incoming=False, rain_intensity="unknown",
         )
         if current_nitrite_override:
             first_nitrite_day = 0
@@ -997,10 +1100,6 @@ class WaterChemistryEngine:
                 if day_index < len(daily_lux_forecast) and daily_lux_forecast[day_index] is not None
                 else fallback_lux
             )
-            rain_incoming, rain_intensity = (
-                daily_rain[day_index] if day_index < len(daily_rain) else (False, "unknown")
-            )
-
             if temp_c is None:
                 raise ValueError(
                     f"No temperature forecast or fallback available for day {days_from_now} - "
@@ -1011,7 +1110,7 @@ class WaterChemistryEngine:
                 tan_mg += tan_per_step
                 tan_mg, no2_mg, no3_mg, algae_days = self._step_pools(
                     tan_mg, no2_mg, no3_mg, algae_days, hours_per_step, temp_c, lux_value,
-                    tan_to_no2_rate, no2_to_no3_rate,
+                    tan_to_no2_rate * self.nitrification_scale, no2_to_no3_rate * self.nitrification_scale,
                 )
 
             tan_ppm = tan_mg / self.config.volume_litres
@@ -1021,7 +1120,6 @@ class WaterChemistryEngine:
             risk_score, nitrite_override = self._score_risk(
                 tan_ppm, no2_ppm, no3_ppm,
                 current_reactivity=None, reactivity_trend=None, tds_trend=None,
-                rain_incoming=rain_incoming, rain_intensity=rain_intensity,
             )
 
             if nitrite_override and first_nitrite_day is None:
@@ -1080,6 +1178,9 @@ class WaterChemistryEngine:
             "last_tds_ppm": self._last_tds_ppm,
             "last_ingest_time": self._last_ingest_time.isoformat() if self._last_ingest_time else None,
             "gate": self._gate.to_snapshot(),
+            # Issue #32; absent from older snapshots, which load at 1.0.
+            "nitrification_scale": self.nitrification_scale,
+            "nitrification_scale_version": self.nitrification_scale_version,
         }
 
     @classmethod
@@ -1103,5 +1204,7 @@ class WaterChemistryEngine:
         engine._last_tds_ppm = snapshot.get("last_tds_ppm", 0.0)
         lit = snapshot.get("last_ingest_time")
         engine._last_ingest_time = datetime.fromisoformat(lit) if lit else None
-        engine._gate = SensorGate.from_snapshot(snapshot.get("gate", {}), engine._has_volume_event_within_6h)
+        engine.nitrification_scale = float(snapshot.get("nitrification_scale") or 1.0)
+        engine.nitrification_scale_version = snapshot.get("nitrification_scale_version")
+        engine._gate =SensorGate.from_snapshot(snapshot.get("gate", {}), engine._has_volume_event_within_6h)
         return engine

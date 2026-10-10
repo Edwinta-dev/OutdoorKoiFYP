@@ -45,6 +45,14 @@ them. `/metrics` stays unversioned (Prometheus text).
 
 ## Conditional GET and caching
 
+`GET /v1/ponds/{pond}/actions` evaluates the lead-time ladder from
+retained weather visible at request time. Its top-level status is
+`insufficient_data` if any rule lacks its required input; each rule has its
+own status and only assessed triggers appear in `actions`. The dashboard
+returns those actionable entries in `next_actions`. Historical forecasts
+are selected by issuance availability and validity at the decision instant;
+the latest forecast cache is not used to reconstruct past decisions.
+
 The three pond forecast endpoints include `uncertainty.low` and
 `uncertainty.high`: pointwise envelopes of numeric trajectory fields in
 their original units. `trajectory` is the existing central projection.
@@ -152,7 +160,7 @@ known, and `status` says why. No value is ever substituted.
 | `nea_forecasts.outlook_4day` | `forecast.outlook[]` | Every `4day` row whose day (Singapore date of `valid_period.timestamp`) is today or later, oldest day first. The old RPC took the 4 most recently written rows |
 | (none) | `assessments.chemistry`, `evaporation`, `algae` | Latest stored evaluation of each domain; null before the first |
 | (none) | `assessments.hypoxia` | `koi/models/hypoxia.py` from the fresh lux and water temperature only; `unknown` when either is not fresh |
-| (none) | `next_actions` | Always `[]` until the action ladder issue |
+| (none) | `next_actions` | Lead-time rules supported by retained observations and as-of forecasts; unavailable source windows remain unassessed |
 | `UserData.ClosestStations` | `stations` | Each assignment, or null |
 
 Retained forecast issuances (more than the latest per slot) come from
@@ -254,6 +262,26 @@ Both GETs use the usual authentication, pond access and ETag rules.
 Apply migration `0020_kit_readings.sql` before redeploying the API.
 It adds a backend-only table with nullable measurement and comparison
 fields; existing engine state and model constants are unchanged.
+
+## Pond calibration (issue #32)
+
+`GET /v1/ponds/{pond}/calibration` returns `pond_id`, `as_of`,
+`parameters` and `history`. `parameters` has one entry for each of
+`evaporation_shelter_factor`, `water_air_temperature` (offset in degC
+and `lag_hours`) and `nitrification_rate_scale`. Each entry gives
+`status` (`fitted` when a fit is in force now, `pending` otherwise),
+`value_in_use` and `lag_hours_in_use` (the fit, or the default while
+pending), `default_value`, `default_lag_hours`, `unit`, `in_force` (the
+stored version in use, with `fitted_at`, `effective_from`,
+`sample_count`, `error`, and its training and evaluation intervals),
+`effective_until` (when a later fit takes over, else null) and `latest`
+(the newest stored row, fitted or pending; a pending row's
+`details.reason` says what is missing). `history` lists every stored row,
+oldest first. The worker writes the rows once a day; this route only
+reads them. Usual authentication, pond access and ETag rules.
+
+Apply migration `0022_pond_calibration.sql` before redeploying the API
+and the worker.
 ## TDS owner questions (issue #35)
 
 `GET /v1/ponds/{pond}/prompts` returns `enabled` and unanswered `prompts`,

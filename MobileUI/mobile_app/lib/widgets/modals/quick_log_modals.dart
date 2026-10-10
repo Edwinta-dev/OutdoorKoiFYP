@@ -123,24 +123,35 @@ Widget _actionTile(
     ),
     onTap: () {
       Navigator.pop(ctx);
-      showModalBottomSheet(
-        context: ctx,
-        isScrollControlled: true,
-        backgroundColor: AppColors.of(ctx).surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.panel),
-          ),
-        ),
-        builder: (_) => InterventionLogSheet(
-          eventType: type,
-          title: title,
-          accentColor: color,
-        ),
+      showInterventionLogSheet(
+        ctx,
+        eventType: type,
+        title: title,
+        accentColor: color,
       );
     },
   );
 }
+
+/// Opens the log sheet for one event type, as the selector's tiles do.
+Future<void> showInterventionLogSheet(
+  BuildContext context, {
+  required String eventType,
+  required String title,
+  required Color accentColor,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: AppColors.of(context).surface,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.panel)),
+  ),
+  builder: (_) => InterventionLogSheet(
+    eventType: eventType,
+    title: title,
+    accentColor: accentColor,
+  ),
+);
 
 // ============================================================================
 // UNIFIED, DRY INTERVENTION LOG SHEET (~100 LINES FOR ALL 4 EVENT TYPES)

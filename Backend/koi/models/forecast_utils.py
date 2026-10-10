@@ -37,7 +37,12 @@ _DEFAULT_LUX_MULTIPLIER = 0.85  # unrecognised code - assume mild cloud cover
 
 def rain_context_from_text(text: str | None) -> tuple[bool, str]:
     """Same heuristic poller.py used inline before this was pulled out -
-    2hr-nowcast-style text -> (rain_incoming, intensity)."""
+    2hr-nowcast-style text -> (rain_incoming, intensity).
+
+    Since issue #27 this wording feeds advice only (the evaporation
+    forecast's rain category and the chemistry add-hardener hint), not the
+    chemistry risk score: the 24-hour forecast says "thundery" on about
+    72 % of days. The score's rain term is observed rain (observed_rain_24h)."""
     text = (text or "").lower()
     if "thundery" in text or "heavy" in text:
         return True, "heavy"
@@ -62,6 +67,22 @@ def today_rain_context(payload: dict) -> tuple[bool, str]:
         today_text = outlook[0].get("data", {}).get("forecast", {}).get("text")
         return rain_context_from_text(today_text)
     return False, "unknown"
+
+
+def observed_rain_24h(storage, sources: dict | None, now: datetime) -> dict | None:
+    """Rain at the pond's assigned rainfall station over the rolling 24
+    hours before now, from the retained observation history (#24,
+    Storage.fetch_rainfall_total) as of now. None when no station is
+    assigned. The chemistry rain term reads this window; the ladder's
+    REACT rule reads yesterday's local day instead."""
+    from koi.models.engine import WaterChemistryEngine
+
+    stations = (sources or {}).get("stations") if isinstance(sources, dict) else None
+    station = stations.get("rainfall") if isinstance(stations, dict) else None
+    if not station:
+        return None
+    start, end = WaterChemistryEngine.rain_dilution_window(now)
+    return storage.fetch_rainfall_total(station, start, end, as_of=now)
 
 
 def _midpoint(block: dict | None) -> float | None:

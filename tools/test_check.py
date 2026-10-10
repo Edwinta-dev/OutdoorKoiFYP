@@ -271,3 +271,24 @@ def test_installed_cores_parses_core_list(monkeypatch, payload, expected):
         stdout = payload
     monkeypatch.setattr(check.subprocess, "run", lambda *a, **k: Proc())
     assert check.installed_cores("arduino-cli") == expected
+
+
+def test_backend_runs_the_backtest_against_its_baseline(monkeypatch):
+    """Issue #33: the backend suite runs python -m koi.tools.backtest
+    --check from Backend/, so a worse model metric fails it."""
+    monkeypatch.setattr(check, "check_secrets", lambda r: None)
+    monkeypatch.setattr(check, "python_tool", lambda module: None)
+    calls = []
+
+    def fake_run(self, name, cmd, cwd, summarise=None):
+        calls.append((name, cmd, cwd, summarise))
+        return self.record(check.Result(name, "PASS"))
+
+    monkeypatch.setattr(check.Runner, "run", fake_run)
+    r = check.Runner(strict=False)
+    check.check_backend(r)
+    (name, cmd, cwd, summarise), = [c for c in calls if c[0] == "backend: backtest"]
+    assert cmd == [sys.executable, "-m", "koi.tools.backtest", "--check"]
+    assert cwd == check.BACKEND
+    out = "WORSE  demo_pond.x: 2\n10 of 11 metrics within baseline version 3, 1 worse\n"
+    assert summarise(out) == "10 of 11 metrics within baseline version 3"

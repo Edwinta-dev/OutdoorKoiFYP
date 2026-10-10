@@ -45,6 +45,7 @@ from koi.storage.base import (
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
+    NOTIFICATION_COLUMNS,
     PROFILE_COLUMNS,
     DuplicateProfileError,
     StaleSnapshotError,
@@ -257,6 +258,51 @@ class SupabaseStorage:
                 rows.extend(page)
                 if len(page) < 1000:
                     return rows
+
+    # --- pond calibration ----------------------------------------------
+    def insert_calibration(self, user_id: int, row: dict) -> dict:
+        with _operation("insert_calibration"):
+            values = {k: v for k, v in row.items() if k not in ("id", "pond_id", "created_at")}
+            return self._db().table("pond_calibration").insert({**values, "pond_id": user_id}).execute().data[0]
+
+    def fetch_calibrations(self, user_id: int) -> list[dict]:
+        with _operation("fetch_calibrations"):
+            rows: list[dict] = []
+            # PostgREST caps a response; page so no version is missed.
+            while True:
+                page = (self._db().table("pond_calibration").select("*").eq("pond_id", user_id)
+                        .order("effective_from").order("id")
+                        .range(len(rows), len(rows) + 999).execute().data or [])
+                rows.extend(page)
+                if len(page) < 1000:
+                    return rows
+
+    # --- notification outbox (migration 0024) -------------------------
+    def enqueue_notification(self, user_id: int, entry: dict, cooldown_seconds: int) -> Optional[dict]:
+        with _operation("enqueue_notification"):
+            res = self._db().rpc("enqueue_notification", {
+                "p_pond": user_id, "p_kind": entry["kind"], "p_severity": entry["severity"],
+                "p_title": entry["title"], "p_body": entry["body"], "p_data": entry.get("data") or {},
+                "p_dedupe_key": entry["dedupe_key"], "p_created_at": entry.get("created_at"),
+                "p_cooldown_seconds": cooldown_seconds}).execute()
+            data = res.data
+            if isinstance(data, str):
+                data = json.loads(data)
+            return data or None
+
+    def fetch_notifications(self, user_id: int, unsent_only: bool = False, limit: int = 100) -> list[dict]:
+        with _operation("fetch_notifications"):
+            query = (self._db().table("notification_outbox").select(", ".join(NOTIFICATION_COLUMNS))
+                     .eq("pond", user_id))
+            if unsent_only:
+                query = query.is_("sent_at", "null").is_("error", "null")
+            return list(query.order("created_at").order("id").limit(limit).execute().data or [])
+
+    def record_notification_result(self, user_id: int, notification_id: int, sent_at: Optional[str],
+                                   error: Optional[str]) -> None:
+        with _operation("record_notification_result"):
+            (self._db().table("notification_outbox").update({"sent_at": sent_at, "error": error})
+             .eq("id", notification_id).eq("pond", user_id).execute())
 
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         with _operation("fetch_chemistry_evaluation_at"):
@@ -480,7 +526,8 @@ class SupabaseStorage:
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
-                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
+                     gcc: Optional[float] = None, colour: Optional[dict] = None,
+                     regions: Optional[dict] = None) -> None:
         with _operation("insert_image"):
             row = {
                 "user_ID": user_id,
@@ -493,6 +540,7 @@ class SupabaseStorage:
                 "thumbnail_path": thumbnail_path,
                 "gcc": gcc,
                 "colour": colour,
+                "regions": regions,
             }
             self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
@@ -532,9 +580,14 @@ class SupabaseStorage:
             )
             return list(res.data or [])
 
-    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+    def save_camera_mask(self, user_id: int, mask: Optional[list], regions: Optional[dict] = None) -> dict:
         with _operation("save_camera_mask"):
-            res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
+            # p_regions only when set, so a mask-only save is the same call
+            # as before migration 0023.
+            params: dict[str, Any] = {"p_pond_id": user_id, "p_mask": mask}
+            if regions is not None:
+                params["p_regions"] = regions
+            res = self._db().rpc("save_camera_mask", params).execute()
             return res.data[0]
 
     # --- device health (migration 0018) ----------------------------------

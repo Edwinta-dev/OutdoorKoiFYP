@@ -12,6 +12,7 @@ import '../widgets/dashboard/nea_weather_ribbon.dart';
 import '../widgets/dashboard/temperature_outcome_card.dart';
 import '../widgets/dashboard/solar_outcome_card.dart';
 import '../widgets/dashboard/ph_outcome_card.dart';
+import '../widgets/dashboard/today_action_feed.dart';
 import '../widgets/modals/nea_full_forecast_modal.dart';
 import 'detail_graph_screen.dart';
 
@@ -49,6 +50,12 @@ class DashboardViewState extends ConsumerState<DashboardView> {
         dashboardData['nea_forecasts'] ?? {};
     final Map<String, dynamic> telemetryData =
         dashboardData['nea_telemetry'] ?? {};
+    // Null when the dashboard did not load: the feed then says so instead
+    // of reporting that the pond needs nothing.
+    final pondDashboard = ref.watch(pondDashboardProvider).value;
+    final todayActions = pondDashboard?.nextActions
+        .map(PondAction.fromJson)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.of(
@@ -76,6 +83,8 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      TodayActionFeed(actions: todayActions),
+                      const SizedBox(height: AppSpace.lg),
                       NeaWeatherRibbon(
                         forecastData: forecastData,
                         telemetryData: telemetryData,

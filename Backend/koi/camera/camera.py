@@ -31,6 +31,16 @@ baseline_reset = "mask_changed". The decision uses only stored rows, so
 it holds across service restarts. If the mask cannot be read the frame
 is analysed over the whole frame and stored without a mask_version.
 
+Named regions (issue #91, migration 0023): the same camera_config row may
+carry regions (koi/camera/mask.py::validate_regions), saved in the same
+mask_version as the mask, so changing any region resets the baseline
+exactly as a mask change does. When it does, every frame's per-region
+metrics (hsvEngine.region_metrics) are stored in imageTable.regions; the
+green ratio, quality gate and state machine still use the mask (or the
+whole frame) as before. A config with only a mask behaves as before and
+stores no regions. If the metrics cannot be computed the frame is stored
+without them.
+
 Quality gate (issues #40/#90, migrations 0011/0021, koi/camera/quality.py): every
 frame is measured (V mean and spread, clipped fraction, variance of the
 Laplacian) and the versioned result is stored in imageTable.quality. A
@@ -171,13 +181,33 @@ def get_prev_image_data(user_id: str):
     return DEFAULT_BASELINE, hsvEngine.DEFAULT_STATE, None
 
 
+def get_camera_config(user_id: str) -> tuple[list | None, dict | None, int | None]:
+    """(polygon, regions, mask_version) from one read of the pond's
+    camera_config row; (None, None, None) when the pond has no config or
+    it cannot be read. polygon or regions is None when not set."""
+    config = fail_soft(lambda: _storage().fetch_camera_mask(user_id), None)
+    if not config:
+        return None, None, None
+    return config.get("mask"), config.get("regions"), int(config["mask_version"])
+
+
 def get_mask(user_id: str) -> tuple[list | None, int | None]:
     """(polygon, mask_version) from one read of the pond's camera_config
     row; (None, None) when the pond has no mask or it cannot be read."""
-    config = fail_soft(lambda: _storage().fetch_camera_mask(user_id), None)
-    if not config:
-        return None, None
-    return config["mask"], int(config["mask_version"])
+    polygon, _, mask_version = get_camera_config(user_id)
+    return polygon, mask_version
+
+
+def measure_regions(img, regions: dict | None) -> dict | None:
+    """hsvEngine.region_metrics for the pond's regions, or None when it has
+    none or they cannot be measured (logged); the frame is stored either way."""
+    if not regions:
+        return None
+    try:
+        return hsvEngine.region_metrics(img, regions)
+    except Exception as exc:  # noqa: BLE001 - an observation, never a reason to refuse the frame
+        log_event(log, "region_metrics_failed", level=logging.WARNING, error=str(exc))
+        return None
 
 
 def carried_state(prev_state, prev_green_ratio) -> list:
@@ -220,11 +250,11 @@ def discard_objects(bucket: str, paths: list[str]) -> None:
 def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
                       mask_version: int | None = None, baseline_reset: str | None = None,
                       frame_quality: dict | None = None, thumbnail_path: str | None = None,
-                      gcc: float | None = None, colour: dict | None = None):
+                      gcc: float | None = None, colour: dict | None = None, regions: dict | None = None):
     """Raises StorageError when the row cannot be written."""
     _storage().insert_image(user_id, green_ratio, state, public_url, mask_version=mask_version,
                             baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path,
-                            gcc=gcc, colour=colour)
+                            gcc=gcc, colour=colour, regions=regions)
 
 
 def record_contact(user_id: str, wake: imageSchedule.NextWake) -> None:
@@ -265,7 +295,7 @@ def upload_image():
     # version is the one stored with the frame.
     # CHANGED: a corrupt JPEG used to raise here, outside any try, and the ESP32
     # got an HTML 500 page with no sleep time in it.
-    polygon, mask_version = get_mask(user_id)
+    polygon, regions, mask_version = get_camera_config(user_id)
     started = time.perf_counter()
     try:
         green_ratio = hsvEngine.analyze_image_bytes(file_bytes, polygon=polygon)
@@ -278,6 +308,7 @@ def upload_image():
                                        s_mean_max=settings.camera_s_mean_max)
     except Exception as e:
         return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
+    region_values = measure_regions(img, regions)
     analysis_time = time.perf_counter() - started
     passed = frame_quality["status"] != quality.FAIL
 
@@ -329,6 +360,7 @@ def upload_image():
         wake = imageSchedule.quality_retry_wake(wake, now=now, test_mode=settings.test_mode)
     log_event(log, "frame_analysed", green_ratio=green_ratio, mask_version=mask_version,
               quality=frame_quality["status"],
+              gap_usable=(region_values["regions"]["water_gap"].get("usable") if region_values else None),
               from_state=from_state, to_state=state[0],
               analysis_ms=round(analysis_time * 1000, 1), rise=round(rise, 4), sleep_sec=wake.sleep_sec,
               reason=wake.reason, next_at=wake.reply()["next_at"])
@@ -348,7 +380,7 @@ def upload_image():
         # just stored are removed again.
         try:
             push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset,
-                              frame_quality, thumb_path, gcc, colour)
+                              frame_quality, thumb_path, gcc, colour, region_values)
         except StorageError:
             discard_objects(bucket, [filename] + ([thumb_path] if thumb_path else []))
             raise

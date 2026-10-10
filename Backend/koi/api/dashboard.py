@@ -301,7 +301,7 @@ def build_forecast(forecasts: list[dict], stations: dict[str, Optional[str]], no
 # ---------------------------------------------------------------------
 def build_dashboard(*, pond_id: int, sources: dict, chemistry: Optional[dict], evaporation: Optional[dict],
                     algae: Optional[dict], aeration: Optional[bool], hypoxia_thresholds: HypoxiaThresholds,
-                    now: datetime) -> r.Dashboard:
+                    now: datetime, next_actions: Optional[list[dict[str, Any]]] = None) -> r.Dashboard:
     stations = _stations(sources.get("stations"))
     readings = build_readings(list(sources.get("readings") or []), now)
     telemetry = list(sources.get("telemetry") or [])
@@ -322,7 +322,7 @@ def build_dashboard(*, pond_id: int, sources: dict, chemistry: Optional[dict], e
             algae=r.AlgaeAssessment.model_validate(algae) if algae else None,
             hypoxia=r.HypoxiaFlag.model_validate(hypoxia),
         ),
-        next_actions=[],
+        next_actions=[r.LeadTimeAction.model_validate(a) for a in next_actions or []],
         weather=r.WeatherNow(
             air_temperature=_weather_value("air_temperature", stations["air_temperature"], telemetry, now),
             rainfall=_weather_value("rainfall", stations["rainfall"], telemetry, now),

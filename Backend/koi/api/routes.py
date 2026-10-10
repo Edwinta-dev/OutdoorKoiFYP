@@ -55,8 +55,8 @@ dashboard screen needs (koi/api/dashboard.py).
 """
 import dataclasses
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional, TypeVar
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal, Optional, TypeVar
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
 # print call in koi/, issue #10) does not mistake for one.
@@ -74,14 +74,18 @@ from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
-from koi.models import device_health, forecast_utils, uncertainty
+from koi.models import device_health, forecast_utils, ladder, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
+from koi.models.local_time import local_date
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
+from koi.storage.base import parse_timestamp
+from koi.weather.history import local_day_window
+from koi.worker import poller
 
 bp = RouteGroup("twin", __name__)
 bp.before_request(authenticate)
@@ -93,6 +97,12 @@ POND_ERRORS = (401, 403, 404, 503)
 log = logging.getLogger(__name__)
 
 M = TypeVar("M", bound=BaseModel)
+
+
+class LeadTimeActions(BaseModel):
+    status: Literal["assessed", "insufficient_data"]
+    rules: list[dict[str, Any]]
+    actions: list[dict[str, Any]]
 
 
 def _storage() -> Storage:
@@ -243,9 +253,14 @@ def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, rati
         events=events, ratings=ratings)
 
     # --- chemistry ---
+    assessed_at = schemas.utc_now()
+    observed_rain = fail_soft(lambda: forecast_utils.observed_rain_24h(
+        _storage(), _storage().fetch_dashboard_sources(user_id), assessed_at), None)
     chem = provenance.stamp(CHEMISTRY, twin.chemistry.assess(
         rain_incoming=ctx["rain_incoming"],
         rain_intensity=ctx["rain_intensity"],
+        observed_rain=observed_rain,
+        depth_m=twin.depth_m_at(assessed_at),
     ).to_dict())
     _storage().push_evaluation(user_id, chem)
 
@@ -409,6 +424,40 @@ def get_kit_validation(user_id: int):
     """
     _require_pond(user_id)
     return jsonify(kit_readings.validation(_storage().fetch_kit_readings(user_id)))
+
+
+# ===================================================================
+# Pond calibration (issue #32)
+# ===================================================================
+_CALIBRATION_UNITS = {poller.SHELTER: None, poller.TEMPERATURE: "degC", poller.NITRIFICATION: None}
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/calibration", summary="Pond-specific model constants",
+       tag="validation", response=res.Calibration, errors=POND_ERRORS)
+def get_calibration(user_id: int):
+    """The evaporation shelter factor, the water/air temperature offset and lag, and the nitrification rate scale
+    the models use for this pond now: the fit in force with its fit date, sample count and error, or the default
+    while the fit is pending. history holds every stored version, oldest first."""
+    _require_pond(user_id)
+    rows = _storage().fetch_calibrations(user_id)
+    now = datetime.now(timezone.utc)
+    in_force = poller.calibration_in_force(rows, now)
+    parameters = {}
+    for parameter in poller.CALIBRATION_PARAMETERS:
+        default = poller.CALIBRATION_DEFAULTS[parameter]
+        row = in_force.get(parameter)
+        own = [r for r in rows if r["parameter"] == parameter]
+        later = [parse_timestamp(r["effective_from"]) for r in own
+                 if r["status"] == "fitted" and row is not None and parse_timestamp(r["effective_from"]) > now]
+        parameters[parameter] = {
+            "status": "fitted" if row else "pending",
+            "value_in_use": row["value"] if row else default["value"],
+            "lag_hours_in_use": (row["lag_hours"] if row else default["lag_hours"]),
+            "default_value": default["value"], "default_lag_hours": default["lag_hours"],
+            "unit": _CALIBRATION_UNITS[parameter], "in_force": row,
+            "effective_until": min(later).isoformat() if later else None, "latest": own[-1] if own else None,
+        }
+    return jsonify({"pond_id": user_id, "as_of": now.isoformat(), "parameters": parameters, "history": rows})
 
 
 # ===================================================================
@@ -1028,6 +1077,7 @@ def get_dashboard(user_id):
         _require_pond(user_id)
     profiles = _profiles_for(user_id)
     now = schemas.utc_now()
+    action_payload = _lead_time_actions(user_id, sources, now)
     assessments = {
         "chemistry": _storage().fetch_latest_evaluation(user_id),
         "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
@@ -1041,8 +1091,43 @@ def get_dashboard(user_id):
         aeration=profiles.at(now).aeration if profiles is not None else None,
         hypoxia_thresholds=_registry().hypoxia_thresholds,
         now=now,
+        next_actions=action_payload["actions"],
     )
     return jsonify(dashboard.model_dump(mode="json")), 200
+
+
+def _lead_time_actions(user_id: int, sources: dict, now: datetime) -> dict:
+    """Evaluate using only retained weather visible at this decision instant."""
+    slots = sources.get("stations") or {}
+    rainfall_station = slots.get("rainfall") if isinstance(slots, dict) else None
+    day = local_date(now) - timedelta(days=1)
+    start, end = local_day_window(day)
+    rain = (_storage().fetch_rainfall_total(rainfall_station, start, end, as_of=now)
+            if rainfall_station else None)
+    nowcast_slot = slots.get("two-hr-forecast") if isinstance(slots, dict) else None
+    nowcast_row = (_storage().fetch_forecast_as_of("2hr", nowcast_slot, now, valid_at=now)
+                   if nowcast_slot else None)
+    nowcast_data = (nowcast_row or {}).get("payload") or {}
+    nowcast_value = nowcast_data.get("forecast") if isinstance(nowcast_data, dict) else None
+    nowcast_text = (nowcast_value.get("text") if isinstance(nowcast_value, dict) else nowcast_value)
+    if not isinstance(nowcast_text, str):
+        nowcast_text = None
+    # The current NEA realtime feed is sub-daily and does not provide the
+    # notebook's daily network Tmax or pooled 24-hour period rank. Preserve
+    # these as unassessed until their matching retained series is available.
+    evaluated = ladder.actions(decision_time=now, rain=rain, nowcast_text=nowcast_text,
+                               observed_tmax_c=None, temperature_regime=None, outlook_high_c=None,
+                               pooled_rank=None, dry_band_max=None)
+    return evaluated
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/actions", summary="Lead-time weather actions",
+       tag="forecasts", response=LeadTimeActions, errors=POND_ERRORS)
+def get_actions(user_id: int):
+    """Evaluate weather actions from retained observations and forecasts as of now."""
+    _require_pond(user_id)
+    now = schemas.utc_now()
+    return jsonify(_lead_time_actions(user_id, _storage().fetch_dashboard_sources(user_id), now))
 
 
 # ===================================================================
@@ -1104,12 +1189,19 @@ def put_pond_profile(user_id):
 # frame's mask_version still names the polygon it was analysed over.
 # The camera restarts its smoothed baseline on the first frame with the
 # new version (koi/camera/camera.py).
+#
+# Named regions (issue #91, migration 0023) are saved in the same version
+# as the mask, so changing a region also restarts the baseline. A PUT that
+# leaves regions out keeps the regions in force (so a mask-only editor
+# does not clear them); regions: null removes them. polygon: null means no
+# mask (the whole frame for the green ratio) and needs regions in the body.
 
 def _camera_mask_response(user_id: int) -> dict:
     config = _storage().fetch_camera_mask(user_id)
     return {
         "pond_id": user_id,
         "mask": config["mask"] if config else None,
+        "regions": config.get("regions") if config else None,
         "mask_version": config["mask_version"] if config else None,
         "updated_at": config["updated_at"] if config else None,
         "versions": _storage().fetch_camera_mask_versions(user_id),
@@ -1127,14 +1219,20 @@ def get_camera_mask(user_id):
 @route(bp, "PUT", "/v1/ponds/<int:user_id>/camera/mask", summary="Save a new camera water mask", tag="pond",
        body=schemas.CameraMaskUpdate, response=res.CameraMaskResponse, errors=(400, 401, 403, 503))
 def put_camera_mask(user_id):
-    """Saves the body's polygon as the pond's next mask version."""
+    """Saves the body's polygon, and its regions or the ones in force,
+    as the pond's next mask version."""
     body = request.get_json(force=True, silent=True)
     if not isinstance(body, dict):
         raise ApiError("The request body must be a JSON object.", code="invalid_body")
     update = schemas.CameraMaskUpdate.model_validate(body)
-    saved = _storage().save_camera_mask(user_id, update.polygon)
+    regions = update.regions
+    if "regions" not in update.model_fields_set:
+        current = _storage().fetch_camera_mask(user_id)
+        regions = current.get("regions") if current else None
+    saved = _storage().save_camera_mask(user_id, update.polygon, regions)
     log_event(log, "camera_mask_saved", pond_id=user_id, mask_version=saved["mask_version"],
-              points=len(update.polygon))
+              points=len(update.polygon) if update.polygon is not None else 0,
+              regions=sorted(regions) if regions else [])
     return jsonify(_camera_mask_response(user_id)), 200
 
 

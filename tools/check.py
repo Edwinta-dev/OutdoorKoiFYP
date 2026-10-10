@@ -21,6 +21,10 @@ non-zero if any step failed.
 No step contacts a live service: the backend tests stub Supabase, and the
 firmware and mobile checks build and test locally.
 
+The backend suite also runs the backtest (python -m koi.tools.backtest
+--check): it fails when a model metric is worse than
+Backend/backtest_baseline.json allows.
+
 The backend suite also scans every tracked file for committed credentials
 (see SECRET_PATTERNS). The firmware compiles use each sketch's
 secrets.h.example, never a developer's real secrets.h.
@@ -231,6 +235,9 @@ def check_backend(r: Runner) -> None:
         r.skip("backend: pytest", "pytest")
         r.skip("tools: pytest", "pytest")
 
+    # Model metrics against Backend/backtest_baseline.json (issue #33).
+    r.run("backend: backtest", [sys.executable, "-m", "koi.tools.backtest", "--check"], BACKEND,
+          summarise=lambda out: last_match(r"\d+ of \d+ metrics within baseline version \d+", out))
 
 def host_test_exe() -> Path:
     """A fresh output path for the firmware host-test binary. On Windows a

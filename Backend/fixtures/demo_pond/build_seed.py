@@ -24,6 +24,15 @@ Also: one SensorData row with no userID (written before the node sent
 one), and the weather caches and station lookup that one recorded NEA
 fetch produces through the ingestion job (koi/weather).
 
+seed["backtest"] holds the demo pond's station weather over the same 14
+days for the backtest (python -m koi.tools.backtest, issue #33): hourly
+air temperature, wind speed and rainfall at S43 and the 24-hour
+forecast's humidity every six hours. It is outside seed["tables"], so the
+development stack does not load it. The air temperature peaks at 14:00
+Singapore time, an hour before the water, with a wider daily swing that
+follows the same cloud factor as the light; rain falls on the two
+cloudiest afternoons.
+
 Measured values have at most six significant digits (pH and temperature
 to 0.01, green ratio to 0.0001), which is what a 4-byte real column
 (SensorData.data1, imageTable.green_ratio) returns when the database turns
@@ -78,6 +87,13 @@ TOP_UP = {"day": 10, "hour": 18, "percent": 2}
 # Day-to-day cloud factor applied to the light curve.
 CLOUD = (1.0, 0.8, 0.55, 0.95, 0.9, 0.7, 1.0, 0.85, 0.6, 0.95, 1.0, 0.75, 0.9, 0.85, 1.0)
 CAMERA_HOURS = (8, 10, 12, 14, 16, 18)
+
+# Backtest weather (seed["backtest"]): the demo pond's air-temperature,
+# wind and rainfall station, and the afternoon rain on the cloudiest days.
+BACKTEST_STATION = "S43"
+RAIN_CLOUD_BELOW = 0.65
+RAIN_MM_BY_HOUR = {15: 4.0, 16: 2.4, 17: 0.6}
+HUMIDITY_EVERY_HOURS = 6
 
 
 
@@ -227,6 +243,38 @@ def weather_tables() -> dict[str, list[dict]]:
 
 
 # ---------------------------------------------------------------------
+# Backtest weather
+# ---------------------------------------------------------------------
+def backtest_weather() -> dict:
+    """Hourly station weather for the demo pond's 14 days, as compact
+    lists; koi.tools.backtest expands them into weather history rows."""
+    start = ANCHOR - timedelta(days=DAYS)
+    hours = [start.replace(minute=0) + timedelta(hours=i) for i in range(DAYS * 24 + 1)]
+    air, wind, rain = [], [], []
+    for at in hours:
+        sgt = at.astimezone(SGT)
+        day = (sgt.date() - local(0, 0).date()).days
+        cloud = CLOUD[day % len(CLOUD)]
+        air.append(round(28.2 + 1.2 * (cloud - 0.8) + 2.6 * cloud * math.sin(2 * math.pi * (sgt.hour - 8) / 24), 1))
+        wind.append(round(5.0 + 2.0 * math.sin(2 * math.pi * (sgt.hour - 10) / 24) + 0.5 * (day % 3), 1))
+        rain.append(RAIN_MM_BY_HOUR.get(sgt.hour, 0.0) if cloud < RAIN_CLOUD_BELOW else 0.0)
+    humidity = []
+    for at in hours[::HUMIDITY_EVERY_HOURS]:
+        day = (at.astimezone(SGT).date() - local(0, 0).date()).days
+        low = 60 + round(20 * (1 - CLOUD[day % len(CLOUD)]))
+        humidity.append({"issued_at": iso(at), "low": low, "high": low + 25})
+    return {
+        "_comment": "Station weather for python -m koi.tools.backtest; not loaded by the development stack.",
+        "station_id": BACKTEST_STATION,
+        "first_hour": iso(hours[0]),
+        "air_temperature_c": air,
+        "wind_speed_knots": wind,
+        "rainfall_mm": rain,
+        "humidity_forecast": humidity,
+    }
+
+
+# ---------------------------------------------------------------------
 def build() -> dict:
     first = ANCHOR - timedelta(days=DAYS)
     legacy = legacy_rows()
@@ -260,6 +308,7 @@ def build() -> dict:
         "anchor": iso(ANCHOR),
         "ponds": [DEMO_POND, LEGACY_POND],
         "tables": tables,
+        "backtest": backtest_weather(),
     }
 
 

@@ -85,9 +85,20 @@ within OBSTRUCTION_TOLERANCE of each other build a candidate level; after
 OBSTRUCTION_CONFIRM_FRAMES of them the baseline restarts at their mean
 (see rebaselined). A lone spike breaks the run and confirms nothing. The
 candidate is stored as current_state[4:6] = [candidate_mean, count].
+
+[Issue #91] Named regions. region_metrics measures each named region of
+the pond's camera config (koi/camera/mask.py::validate_regions) on its
+own: water_gap (a fixed spot of open water, the main algae signal), rim
+(wall film) and plants (context). Pixels outside every region are not
+measured. An optional reference patch (matte white or grey) colour-
+corrects the frame first, and the water_gap's plant cover decides
+whether the frame is usable for the gap signal. The green ratio and
+state machine above are unchanged.
 """
 import cv2
 import numpy as np
+
+from koi.camera import quality
 
 DEFAULT_STATE = "base"
 
@@ -344,3 +355,103 @@ def evalstate(
 
     # --- PRIORITY 3: BASE ----------------------------------------
     return ("base", smoothed, raised, stable)
+
+
+# --- Named regions (issue #91) -----------------------------------------
+REGIONS_VERSION = 1
+# A water_gap pixel is plant, not open water, when its HSV (after the
+# reference correction) is a saturated, lit green. Green water from
+# planktonic algae is darker and less saturated than floating leaves.
+# Starting values from synthetic frames, not yet checked on pond frames.
+PLANT_LOWER = np.array([25, 110, 60], dtype=np.uint8)   # hue ~50 degrees
+PLANT_UPPER = np.array([90, 255, 255], dtype=np.uint8)  # hue ~180 degrees
+# Above this plant fraction the gap reading is plant colour, not water.
+GAP_MAX_PLANT_FRACTION = 0.3
+GAP_PLANTS_OVER = "plants_over_gap"
+GAP_NO_PIXELS = "no_usable_pixels"
+
+
+def _polygon_mask(shape: tuple, polygon: list) -> np.ndarray:
+    """Boolean mask of the pixels inside a normalised polygon, filled as
+    analyze_image_bytes fills the water mask."""
+    height, width = shape[:2]
+    region = np.zeros((height, width), dtype=np.uint8)
+    corners = np.array([[round(x * width), round(y * height)] for x, y in polygon], dtype=np.int32)
+    cv2.fillPoly(region, [corners], 255)
+    return region > 0
+
+
+def _rgb_means(rgb: np.ndarray) -> dict:
+    """gcc, exg, r, g, b means of an (n, 3) array of 0..1 RGB, as
+    quality.colour_means reports them; nulls for no pixels."""
+    if not len(rgb):
+        return dict.fromkeys(("gcc", "exg", "r", "g", "b"))
+    r, g, b = rgb.T
+    total = r + g + b
+    gcc = np.divide(g, total, out=np.full_like(g, 1 / 3), where=total > 0)
+    return {"gcc": float(gcc.mean()), "exg": float(((2 * g - r - b + 2) / 4).mean()),
+            "r": float(r.mean()), "g": float(g.mean()), "b": float(b.mean())}
+
+
+def region_metrics(img: np.ndarray, regions: dict) -> dict:
+    """Per-region colour metrics of a decoded BGR frame, stored in
+    imageTable.regions. regions is a validated mask.validate_regions value.
+
+    Colour means use unclipped pixels only (quality.CLIP_LOW_V <
+    V < quality.CLIP_HIGH_V), as quality.colour_means does. With a
+    reference patch, every pixel's channels are divided by the patch's
+    channel means (then scaled by the patch's mean brightness, which
+    leaves GCC unchanged and keeps values near 0..1), so a grey patch
+    reads GCC 1/3 whatever the colour cast. When the patch has no
+    unclipped pixels or a channel mean of 0, no correction is applied
+    and reference.applied is false.
+
+    water_gap also reports plant_fraction (PLANT_LOWER..PLANT_UPPER
+    pixels over the region's pixels) and open_fraction, and its colour
+    means are over the open-water pixels only. usable is false, with
+    unusable_reason, when plants cover more than GAP_MAX_PLANT_FRACTION
+    of the gap or no open-water pixel is unclipped.
+    """
+    v = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[..., 2]
+    unclipped = (v > quality.CLIP_LOW_V) & (v < quality.CLIP_HIGH_V)
+    rgb = img[..., ::-1].astype(np.float64) / 255.0
+    corrected_img = img
+
+    reference: dict | None = None
+    if regions.get("reference") is not None:
+        inside = _polygon_mask(img.shape, regions["reference"]) & unclipped
+        reference = {"applied": False, "pixels": int(inside.sum()), "r": None, "g": None, "b": None}
+        if inside.any():
+            patch = rgb[inside].mean(axis=0)
+            reference.update(r=float(patch[0]), g=float(patch[1]), b=float(patch[2]),
+                             applied=bool((patch > 0).all()))
+        if reference["applied"]:
+            scale = patch.mean() / patch
+            rgb = rgb * scale
+            corrected_img = np.clip(img.astype(np.float64) * scale[::-1], 0, 255).astype(np.uint8)
+
+    measured = {}
+    for name, polygon in regions.items():
+        inside = _polygon_mask(img.shape, polygon)
+        result: dict = {"pixels": int(inside.sum())}
+        usable = inside & unclipped
+        if name == "water_gap":
+            hsv = cv2.cvtColor(corrected_img, cv2.COLOR_BGR2HSV)
+            plant = (cv2.inRange(hsv, PLANT_LOWER, PLANT_UPPER) > 0) & inside
+            plant_fraction = float(plant.sum()) / max(result["pixels"], 1)
+            usable &= ~plant
+            reason = (GAP_PLANTS_OVER if plant_fraction > GAP_MAX_PLANT_FRACTION
+                      else GAP_NO_PIXELS if not usable.any() else None)
+            result.update(plant_fraction=round(plant_fraction, 4), open_fraction=round(1 - plant_fraction, 4),
+                          usable=reason is None, unusable_reason=reason)
+        result["usable_pixels"] = int(usable.sum())
+        result.update(_rgb_means(rgb[usable]))
+        measured[name] = result
+
+    return {
+        "version": REGIONS_VERSION,
+        "reference": reference,
+        "regions": measured,
+        "thresholds": {"plant_lower_hsv": PLANT_LOWER.tolist(), "plant_upper_hsv": PLANT_UPPER.tolist(),
+                       "gap_max_plant_fraction": GAP_MAX_PLANT_FRACTION},
+    }

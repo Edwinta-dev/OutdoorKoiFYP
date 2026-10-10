@@ -3,6 +3,127 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Chemistry rain term by pond depth and observed rain (issue #27)
+
+| Term | Old | New |
+|---|---|---|
+| Source | Forecast wording (`forecast_utils.rain_context_from_text` on the 2-hour nowcast, else today's 4-day outlook) | Observed rain at the pond's assigned rainfall station over the rolling 24 hours before the assessment (`weather_rainfall_total`, issue #24), and the depth from the pond profile |
+| Points | +2 for "thundery" or "heavy", +1 for "shower" or "rain" | +1 for each level the dilution `1 - exp(-R/D)` reaches, R and D in metres |
+| Levels | none | `WaterChemistryEngine.RAIN_DILUTION_LEVELS = (0.08, 0.16)` |
+| Projection (`project_forward`) | the outlook's wording scored each forecast day | forecast days carry no rain points |
+
+Why: the 24-hour forecast uses thundery wording on about 72 % of days and
+the Watch threshold is 3, so with the old term most days showed Amber with
+any one other point. The dilution rain actually causes is small: 30 mm on
+a 1.2 m pond replaces about 2.5 % of the water. The first level (0.08)
+needs about 101 mm on a 1.2 m pond and about 34 mm on a 0.4 m pond; the
+second (0.16) about 209 mm and 70 mm.
+
+Missing or partial station rain, no assigned station, or a profile with no
+depth leave the term unassessed (`rain_dilution.status` insufficient_data,
+`confidence` reduced) rather than reading as zero dilution. A partial
+window's total is a lower bound, so points it already reaches still count.
+The forecast wording still sets the evaporation rain category and the
+add-hardener hint at Watch; forecast rain advice is the lead-time ladder's
+NOWCAST rule. The ladder's REACT rule keeps its own window (yesterday's
+local day, 50 mm).
+
+## Backtest baseline (issue #33)
+
+`Backend/backtest_baseline.json` holds the backtest metrics that
+`python tools/check.py backend` guards (`python -m koi.tools.backtest
+--check`). A change that makes one worse than its tolerance allows must
+update the baseline in the same change (`--update-baseline`, which raises
+the version) and add a line here naming the version and the reason.
+
+- Backtest baseline version 1 (issue #33): first baseline, no model
+  constant changed. Demo pond (synthetic seed): water temperature RMSE
+  1.00, 1.00 and 0.97 C at +1, +3 and +6 hours against persistence 0.17,
+  0.48 and 0.88 C (the air-plus-offset model loses to persistence at every
+  horizon on this fixture, because the seeded air swings two to three times
+  as far as the water); the one logged top-up (100 L) against a modelled
+  54.5 L loss. NEA table: clear-day precision 0.861, heat-holds 0.842.
+
+## Pond-specific calibration (issue #32)
+
+No default changes: the wind shelter factor stays 0.6, the water/air
+offset -1.0 C with no lag, and both nitrification rates (0.05 and 0.035
+per hour) stay as they are. A pond with no fit uses exactly these.
+
+The worker's daily calibration job (04:00 Singapore time,
+`Backend/koi/worker/poller.py`) fits per pond, from the 60 days before the
+run, and appends each result to `pond_calibration` (migration 0022):
+
+- Shelter factor (`evaporation_engine.fit_shelter_factor`): litres added
+  at each logged top-up against the Penman loss since the previous top-up
+  or water change, hour by hour from station air temperature, wind,
+  measured rainfall and the 24-hour forecast's humidity. Least squares
+  over 0.05 to 1.5 in steps of 0.005. Needs 3 usable top-ups: a logged
+  volume, an interval of 1 to 45 days, 75% of its hours complete
+  (missing hours are covered by scaling the complete ones). Assumes each
+  top-up refilled to the same level. Error: in-sample RMSE in litres
+  beside the RMSE at 0.6.
+- Water/air temperature (`fit_water_air_temperature`): the pond's hourly
+  water temperature against the station's hourly air temperature, lags 0
+  to 12 hours, offset the mean difference at each lag. The first 70% of
+  the usable hours train, the rest evaluate; the evaluation RMSE is
+  reported beside persistence (water 24 hours earlier) and beside the
+  default. Needs 72 usable hours and 24 evaluation hours.
+- Nitrification scale (`kit_readings.fit_nitrification_scale`): one
+  multiplier on both rates, from kit ammonia (TAN) and nitrite against a
+  simulation of the pools from logged feedings and water changes using
+  the engine's own step. Log-spaced grid 0.1 to 5 (161 points). Needs 4
+  readings with ammonia or nitrite, a week after the simulation start.
+
+Too little data stores a pending row and keeps the default; a pending
+result never replaces a fit. Each poll applies the newest fit in force at
+its time, so a rebuild of a past time uses the version that existed then.
+The uncertainty scenarios (issue #31) are scaled onto a fitted value:
+shelter 0.4/0.6/0.8 becomes 2/3, 1 and 4/3 of the fitted factor, and the
+nitrification ranges are multiplied by the scale.
+
+## Lead-time weather action ladder (issue #26)
+
+`Backend/koi/models/ladder.py::react` checks the previous Singapore local
+calendar day at its assigned rainfall station. It fires REACT at 50 mm or
+more, only when retained station intervals cover the full day. A partial or
+absent window is `insufficient_data`; a covered day below 50 mm is an
+assessed no-action result.
+
+`Backend/koi/models/ladder.py::preempt` requires both a measured daily Tmax
+and an issued hot outlook. The observed hot thresholds are regime-aware:
+32.60 °C for the validation's older two-station cluster and 31.86 °C for its
+later full-network regime, regenerated from the committed CSV. The notebook's
+saved run reports 31.80 °C for the latter regime, a 0.06 °C difference from
+the committed snapshot. The validation reports held-out precision 0.885.
+This evidence is a network-mean series; it has not been shown to transfer to
+one pond's assigned weather station. The live API leaves PREEMPT unassessed
+until a complete station-day maximum and matching as-of outlook are
+available.
+
+`Backend/koi/models/ladder.py::window` accepts the notebook's pooled 24-hour
+forecast rank and compares it with the training-period 16th percentile
+(rank 0.10 in the committed daily export; ties mean this is not exactly 16%
+of days). It recommends a water change or scrub. The CSV's TEST rows
+reproduce held-out precision 0.8595 for a dry day (<1 mm). The runtime
+assigned regional forecast is not the same pooled network series, so the API
+reports `insufficient_data` for WINDOW until a comparable series is retained.
+
+`Backend/koi/models/ladder.py::nowcast` checks only the 2-hour issuance
+available and valid at decision time. A rain call prompts securing exposed
+feed and pausing outdoor pond work; a valid non-rain call is a no-action
+result. The validation reports a median warning of about 50 minutes. This
+is a short-fuse rain alert, not a pond-safety prediction.
+
+`Backend/tools/regenerate_ladder_params.py` derives observed heat thresholds
+and forecast cutoffs from committed climate and daily-label CSVs through
+2024-12-31 and writes `Backend/koi/models/ladder_params.json`. The compact
+daily-label CSV omits PREEMPT's future three-day heat target, so its 0.8851
+held-out precision is read from the committed notebook validation export;
+the test checks its recorded sample count and precision. Precision figures
+are validation evidence, not runtime confidence. The runtime network/station
+definition gap limits which rules can currently fire in the API.
+
 ## Salt addition and filter cleaning (issue #29)
 
 `Backend/koi/models/engine.py`: SALT increases expected TDS by nominal

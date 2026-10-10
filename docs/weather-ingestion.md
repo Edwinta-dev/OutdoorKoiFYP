@@ -102,7 +102,8 @@ station is a single station, not a network mean, so its observations have
 `series = 'station'` and no regime. The foreign key on
 `(regime_id, series)` refuses a regime on a `station` row, so a threshold
 or calibration derived on the network mean cannot be attached to one
-station's readings without saying so explicitly (#32 decides any mapping).
+station's readings without saying so explicitly. Calibration (#32) uses
+only the pond's assigned station's own `station` rows, with no regime.
 
 ## Deduplication and the caches
 
@@ -139,7 +140,7 @@ cadence that is roughly 300 rows a day per station and metric. Consumers:
 |---|---|
 | #26 advisory rules | `fetch_forecast_as_of` for 24-hour periods and the 4-day outlook as issued before the rule's time; observed temperature per regime |
 | #27 rainfall | `fetch_rainfall_total` (value plus coverage) per local day or trailing 24 hours |
-| #32 calibration | `fetch_weather_observations` per station, with the regime rule above |
+| #32 calibration | `fetch_weather_observations` of the assigned station (air temperature, wind speed, rainfall), a day per call over the 60 days before the run, binned by hour; the 24-hour forecast's humidity as of each 6-hour block (`koi/worker/poller.py`) |
 | #20 state rebuild | as-of observations and forecasts at each replayed time (`koi.tools.rebuild`: newest air temperature, rainfall and wind speed observed in the hour before each poll; 2-hour, 24-hour and 4-day forecasts usable then; a missing part is reported as an incomplete interval) |
 | #33 backtests | as-of forecasts only (`available_at <= prediction time`) |
 
