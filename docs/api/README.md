@@ -254,6 +254,26 @@ Both GETs use the usual authentication, pond access and ETag rules.
 Apply migration `0020_kit_readings.sql` before redeploying the API.
 It adds a backend-only table with nullable measurement and comparison
 fields; existing engine state and model constants are unchanged.
+
+## Pond calibration (issue #32)
+
+`GET /v1/ponds/{pond}/calibration` returns `pond_id`, `as_of`,
+`parameters` and `history`. `parameters` has one entry for each of
+`evaporation_shelter_factor`, `water_air_temperature` (offset in degC
+and `lag_hours`) and `nitrification_rate_scale`. Each entry gives
+`status` (`fitted` when a fit is in force now, `pending` otherwise),
+`value_in_use` and `lag_hours_in_use` (the fit, or the default while
+pending), `default_value`, `default_lag_hours`, `unit`, `in_force` (the
+stored version in use, with `fitted_at`, `effective_from`,
+`sample_count`, `error`, and its training and evaluation intervals),
+`effective_until` (when a later fit takes over, else null) and `latest`
+(the newest stored row, fitted or pending; a pending row's
+`details.reason` says what is missing). `history` lists every stored row,
+oldest first. The worker writes the rows once a day; this route only
+reads them. Usual authentication, pond access and ETag rules.
+
+Apply migration `0022_pond_calibration.sql` before redeploying the API
+and the worker.
 ## TDS owner questions (issue #35)
 
 `GET /v1/ponds/{pond}/prompts` returns `enabled` and unanswered `prompts`,

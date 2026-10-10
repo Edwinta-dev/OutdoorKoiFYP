@@ -111,6 +111,58 @@ class KitValidation(_Closed):
 
 
 # ---------------------------------------------------------------------
+# Pond calibration (issue #32, migration 0022)
+# ---------------------------------------------------------------------
+class CalibrationVersion(_Closed):
+    """One pond_calibration row: a fit or a pending result."""
+
+    id: int
+    pond_id: int
+    parameter: Literal["evaporation_shelter_factor", "water_air_temperature", "nitrification_rate_scale"]
+    status: Literal["fitted", "pending"]
+    value: Optional[float] = Field(description="The fitted value; null while pending.")
+    lag_hours: Optional[float] = Field(description="Water/air temperature lag; null for the other parameters.")
+    fitted_at: datetime
+    effective_from: datetime = Field(description="From this time on the poller uses this version.")
+    sample_count: int
+    error: Optional[dict[str, Any]] = Field(description="RMSE of the fit and of the default (and, for the "
+                                            "temperature fit, of persistence) on the stated interval.")
+    training_from: Optional[datetime]
+    training_to: Optional[datetime]
+    evaluation_from: Optional[datetime]
+    evaluation_to: Optional[datetime]
+    details: Optional[dict[str, Any]] = Field(description="Reason when pending, the samples used and the default.")
+    method_version: int
+    created_at: datetime
+
+
+class CalibrationParameter(_Closed):
+    status: Literal["fitted", "pending"] = Field(
+        description="fitted: a fit is in force now. pending: no fit yet, the default is used.")
+    value_in_use: float
+    lag_hours_in_use: Optional[float]
+    default_value: float
+    default_lag_hours: Optional[float]
+    unit: Optional[str]
+    in_force: Optional[CalibrationVersion]
+    effective_until: Optional[datetime] = Field(description="When a newer fit replaces in_force; null if none.")
+    latest: Optional[CalibrationVersion] = Field(description="The newest row, fitted or pending.")
+
+
+class CalibrationParameters(_Closed):
+    evaporation_shelter_factor: CalibrationParameter
+    water_air_temperature: CalibrationParameter
+    nitrification_rate_scale: CalibrationParameter
+
+
+class Calibration(_Closed):
+    pond_id: int
+    as_of: datetime
+    parameters: CalibrationParameters
+    history: list[CalibrationVersion] = Field(description="Every row, oldest first.")
+
+
+# ---------------------------------------------------------------------
 # Errors (koi/errors.py)
 # ---------------------------------------------------------------------
 class ErrorDetail(_Closed):

@@ -3,6 +3,44 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Pond-specific calibration (issue #32)
+
+No default changes: the wind shelter factor stays 0.6, the water/air
+offset -1.0 C with no lag, and both nitrification rates (0.05 and 0.035
+per hour) stay as they are. A pond with no fit uses exactly these.
+
+The worker's daily calibration job (04:00 Singapore time,
+`Backend/koi/worker/poller.py`) fits per pond, from the 60 days before the
+run, and appends each result to `pond_calibration` (migration 0022):
+
+- Shelter factor (`evaporation_engine.fit_shelter_factor`): litres added
+  at each logged top-up against the Penman loss since the previous top-up
+  or water change, hour by hour from station air temperature, wind,
+  measured rainfall and the 24-hour forecast's humidity. Least squares
+  over 0.05 to 1.5 in steps of 0.005. Needs 3 usable top-ups: a logged
+  volume, an interval of 1 to 45 days, 75% of its hours complete
+  (missing hours are covered by scaling the complete ones). Assumes each
+  top-up refilled to the same level. Error: in-sample RMSE in litres
+  beside the RMSE at 0.6.
+- Water/air temperature (`fit_water_air_temperature`): the pond's hourly
+  water temperature against the station's hourly air temperature, lags 0
+  to 12 hours, offset the mean difference at each lag. The first 70% of
+  the usable hours train, the rest evaluate; the evaluation RMSE is
+  reported beside persistence (water 24 hours earlier) and beside the
+  default. Needs 72 usable hours and 24 evaluation hours.
+- Nitrification scale (`kit_readings.fit_nitrification_scale`): one
+  multiplier on both rates, from kit ammonia (TAN) and nitrite against a
+  simulation of the pools from logged feedings and water changes using
+  the engine's own step. Log-spaced grid 0.1 to 5 (161 points). Needs 4
+  readings with ammonia or nitrite, a week after the simulation start.
+
+Too little data stores a pending row and keeps the default; a pending
+result never replaces a fit. Each poll applies the newest fit in force at
+its time, so a rebuild of a past time uses the version that existed then.
+The uncertainty scenarios (issue #31) are scaled onto a fitted value:
+shelter 0.4/0.6/0.8 becomes 2/3, 1 and 4/3 of the fitted factor, and the
+nitrification ranges are multiplied by the scale.
+
 ## Salt addition and filter cleaning (issue #29)
 
 `Backend/koi/models/engine.py`: SALT increases expected TDS by nominal

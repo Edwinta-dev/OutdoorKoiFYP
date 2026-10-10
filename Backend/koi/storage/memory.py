@@ -35,6 +35,7 @@ from typing import Any, Callable, Iterable, Optional
 from koi.models.event_ledger import derived_event_id
 from koi.models.local_time import local_date
 from koi.storage.base import (
+    CALIBRATION_COLUMNS,
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
@@ -64,6 +65,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "kit_readings": ("id", "pond", "taken_at", "kit", "ammonia_mg_l", "nitrite_mg_l", "nitrate_mg_l",
                      "ph", "kh_dkh", "notes", "estimates", "differences", "comparison", "created_at"),
     "pond_chemistry_state": ("user_id", "snapshot", "updated_at", "snapshot_version"),
+    # Per-pond calibration versions (migration 0022).
+    "pond_calibration": CALIBRATION_COLUMNS,
     # Sensor ingestion progress (migration 0014).
     "sensor_ingest_cursor": ("pond_id", "watermark", "updated_at"),
     "sensor_ingest_ledger": ("pond_id", "sensor_row_id", "sensor_type", "effective_sample_time", "time_basis",
@@ -129,6 +132,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 # The user column of each table (three spellings coexist in the schema).
 USER_COLUMN = {
     "kit_readings": "pond",
+    "pond_calibration": "pond_id",
     "pond_chemistry_state": "user_id",
     "sensor_ingest_cursor": "pond_id",
     "sensor_ingest_ledger": "pond_id",
@@ -160,6 +164,7 @@ OBSERVATION_AS_OF_COLUMNS = ("id", "source", "station_id", "metric", "value", "u
 # Table timestamps filled in on insert when the row does not carry one.
 _STAMPED = {
     "kit_readings": "created_at",
+    "pond_calibration": "created_at",
     "pond_chemistry_evaluations": "evaluated_at",
     "pond_evaporation_evaluations": "evaluated_at",
     "pond_algae_evaluations": "evaluated_at",
@@ -487,6 +492,18 @@ class MemoryStorage:
         rows.sort(key=lambda r: (r.get("taken_at") is not None,
                                 parse_timestamp(r["taken_at"]) if r.get("taken_at") else _EPOCH, r["id"]))
         return [self._project(r, TABLE_COLUMNS["kit_readings"]) for r in rows]
+
+    # --- pond calibration ----------------------------------------------
+    def insert_calibration(self, user_id: int, row: dict) -> dict:
+        self._check("insert_calibration")
+        values = {k: v for k, v in row.items() if k not in ("id", "pond_id", "created_at")}
+        return self._insert("insert_calibration", "pond_calibration", [{**values, "pond_id": user_id}])[0]
+
+    def fetch_calibrations(self, user_id: int) -> list[dict]:
+        self._check("fetch_calibrations")
+        rows = self._select("pond_calibration", user_id)
+        rows.sort(key=lambda r: (parse_timestamp(r["effective_from"]), r["id"]))
+        return [self._project(r, CALIBRATION_COLUMNS) for r in rows]
 
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         self._check("fetch_chemistry_evaluation_at")

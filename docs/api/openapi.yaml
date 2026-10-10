@@ -109,7 +109,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id035
+              schema: &id036
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -403,6 +403,67 @@ paths:
           content: *id007
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/calibration:
+    get:
+      operationId: get_calibration
+      summary: Pond-specific model constants
+      tags:
+      - validation
+      description: 'The evaporation shelter factor, the water/air temperature offset and lag, and the
+        nitrification rate scale the models use for this pond now: the fit in force with its fit date,
+        sample count and error, or the default while the fit is pending. history holds every stored version,
+        oldest first.'
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Calibration'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '401':
+          description: Not signed in
+          content: &id008
+            application/json:
+              schema: *id001
+        '403':
+          description: Another account's pond
+          content: *id008
+        '404':
+          description: Pond or assessment not found
+          content: *id008
+        '500':
+          description: Unexpected server error
+          content: *id008
+        '503':
+          description: Storage or service not available
+          content: *id008
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/camera/mask:
     get:
       operationId: get_camera_mask
@@ -430,7 +491,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id009
+              schema: &id010
                 $ref: '#/components/schemas/CameraMaskResponse'
           headers:
             ETag:
@@ -445,18 +506,18 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id008
+          content: &id009
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id008
+          content: *id009
         '500':
           description: Unexpected server error
-          content: *id008
+          content: *id009
         '503':
           description: Storage or service not available
-          content: *id008
+          content: *id009
       security:
       - bearerAuth: []
     put:
@@ -484,24 +545,24 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: *id010
         '400':
           description: Invalid request
-          content: &id010
+          content: &id011
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id010
+          content: *id011
         '403':
           description: Another account's pond
-          content: *id010
+          content: *id011
         '500':
           description: Unexpected server error
-          content: *id010
+          content: *id011
         '503':
           description: Storage or service not available
-          content: *id010
+          content: *id011
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/dashboard:
@@ -548,21 +609,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id011
+          content: &id012
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id011
+          content: *id012
         '404':
           description: Pond or assessment not found
-          content: *id011
+          content: *id012
         '500':
           description: Unexpected server error
-          content: *id011
+          content: *id012
         '503':
           description: Storage or service not available
-          content: *id011
+          content: *id012
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/devices:
@@ -609,21 +670,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id012
+          content: &id013
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id012
+          content: *id013
         '404':
           description: Pond or assessment not found
-          content: *id012
+          content: *id013
         '500':
           description: Unexpected server error
-          content: *id012
+          content: *id013
         '503':
           description: Storage or service not available
-          content: *id012
+          content: *id013
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating:
@@ -660,24 +721,24 @@ paths:
                 $ref: '#/components/schemas/AlgaeRatingResult'
         '400':
           description: Invalid request
-          content: &id013
+          content: &id014
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id013
+          content: *id014
         '403':
           description: Another account's pond
-          content: *id013
+          content: *id014
         '404':
           description: Pond or assessment not found
-          content: *id013
+          content: *id014
         '500':
           description: Unexpected server error
-          content: *id013
+          content: *id014
         '503':
           description: Storage or service not available
-          content: *id013
+          content: *id014
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algae-rating/undo:
@@ -713,27 +774,27 @@ paths:
                 $ref: '#/components/schemas/AlgaeRatingUndoResult'
         '400':
           description: Invalid request
-          content: &id014
+          content: &id015
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id014
+          content: *id015
         '403':
           description: Another account's pond
-          content: *id014
+          content: *id015
         '404':
           description: Pond or assessment not found
-          content: *id014
+          content: *id015
         '409':
           description: Conflict
-          content: *id014
+          content: *id015
         '500':
           description: Unexpected server error
-          content: *id014
+          content: *id015
         '503':
           description: Storage or service not available
-          content: *id014
+          content: *id015
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/algal-scrub:
@@ -762,28 +823,28 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id016
+              schema: &id017
                 $ref: '#/components/schemas/EventAssessments'
         '400':
           description: Invalid request
-          content: &id015
+          content: &id016
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id015
+          content: *id016
         '403':
           description: Another account's pond
-          content: *id015
+          content: *id016
         '404':
           description: Pond or assessment not found
-          content: *id015
+          content: *id016
         '500':
           description: Unexpected server error
-          content: *id015
+          content: *id016
         '503':
           description: Storage or service not available
-          content: *id015
+          content: *id016
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/feeding:
@@ -812,27 +873,27 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id016
+              schema: *id017
         '400':
           description: Invalid request
-          content: &id017
+          content: &id018
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id017
+          content: *id018
         '403':
           description: Another account's pond
-          content: *id017
+          content: *id018
         '404':
           description: Pond or assessment not found
-          content: *id017
+          content: *id018
         '500':
           description: Unexpected server error
-          content: *id017
+          content: *id018
         '503':
           description: Storage or service not available
-          content: *id017
+          content: *id018
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/filter-clean:
@@ -860,27 +921,27 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id016
+              schema: *id017
         '400':
           description: Invalid request
-          content: &id018
+          content: &id019
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id018
+          content: *id019
         '403':
           description: Another account's pond
-          content: *id018
+          content: *id019
         '404':
           description: Pond or assessment not found
-          content: *id018
+          content: *id019
         '500':
           description: Unexpected server error
-          content: *id018
+          content: *id019
         '503':
           description: Storage or service not available
-          content: *id018
+          content: *id019
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/events/salt:
@@ -908,56 +969,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id016
-        '400':
-          description: Invalid request
-          content: &id019
-            application/json:
-              schema: *id001
-        '401':
-          description: Not signed in
-          content: *id019
-        '403':
-          description: Another account's pond
-          content: *id019
-        '404':
-          description: Pond or assessment not found
-          content: *id019
-        '500':
-          description: Unexpected server error
-          content: *id019
-        '503':
-          description: Storage or service not available
-          content: *id019
-      security:
-      - bearerAuth: []
-  /v1/ponds/{pond}/events/top-up:
-    post:
-      operationId: log_top_up
-      summary: Log a top-up
-      tags:
-      - events
-      description: Clears the evaporation engine's accrued loss, re-assesses and returns all three assessments.
-      parameters:
-      - name: pond
-        in: path
-        required: true
-        description: The pond (UserData.userID); must be the signed-in account's pond.
-        schema:
-          type: integer
-          minimum: 0
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: &id021
-              $ref: '#/components/schemas/VolumeEventOnPond'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: *id016
+              schema: *id017
         '400':
           description: Invalid request
           content: &id020
@@ -980,6 +992,55 @@ paths:
           content: *id020
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/events/top-up:
+    post:
+      operationId: log_top_up
+      summary: Log a top-up
+      tags:
+      - events
+      description: Clears the evaporation engine's accrued loss, re-assesses and returns all three assessments.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id022
+              $ref: '#/components/schemas/VolumeEventOnPond'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id017
+        '400':
+          description: Invalid request
+          content: &id021
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id021
+        '403':
+          description: Another account's pond
+          content: *id021
+        '404':
+          description: Pond or assessment not found
+          content: *id021
+        '500':
+          description: Unexpected server error
+          content: *id021
+        '503':
+          description: Storage or service not available
+          content: *id021
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/events/water-change:
     post:
       operationId: log_water_change
@@ -1000,33 +1061,33 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id021
+            schema: *id022
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: *id016
+              schema: *id017
         '400':
           description: Invalid request
-          content: &id022
+          content: &id023
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id022
+          content: *id023
         '403':
           description: Another account's pond
-          content: *id022
+          content: *id023
         '404':
           description: Pond or assessment not found
-          content: *id022
+          content: *id023
         '500':
           description: Unexpected server error
-          content: *id022
+          content: *id023
         '503':
           description: Storage or service not available
-          content: *id022
+          content: *id023
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/algae:
@@ -1082,27 +1143,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id023
+          content: &id024
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id023
+          content: *id024
         '403':
           description: Another account's pond
-          content: *id023
+          content: *id024
         '404':
           description: Pond or assessment not found
-          content: *id023
+          content: *id024
         '422':
           description: Not enough history to project
-          content: *id023
+          content: *id024
         '500':
           description: Unexpected server error
-          content: *id023
+          content: *id024
         '503':
           description: Storage or service not available
-          content: *id023
+          content: *id024
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/chemistry:
@@ -1156,27 +1217,27 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id024
+          content: &id025
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id024
+          content: *id025
         '403':
           description: Another account's pond
-          content: *id024
+          content: *id025
         '404':
           description: Pond or assessment not found
-          content: *id024
+          content: *id025
         '422':
           description: Not enough history to project
-          content: *id024
+          content: *id025
         '500':
           description: Unexpected server error
-          content: *id024
+          content: *id025
         '503':
           description: Storage or service not available
-          content: *id024
+          content: *id025
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/forecasts/evaporation:
@@ -1242,24 +1303,24 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '400':
           description: Invalid request
-          content: &id025
+          content: &id026
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id025
+          content: *id026
         '403':
           description: Another account's pond
-          content: *id025
+          content: *id026
         '404':
           description: Pond or assessment not found
-          content: *id025
+          content: *id026
         '500':
           description: Unexpected server error
-          content: *id025
+          content: *id026
         '503':
           description: Storage or service not available
-          content: *id025
+          content: *id026
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/kit-readings:
@@ -1293,24 +1354,24 @@ paths:
                 $ref: '#/components/schemas/KitReading'
         '400':
           description: Invalid request
-          content: &id026
+          content: &id027
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id026
+          content: *id027
         '403':
           description: Another account's pond
-          content: *id026
+          content: *id027
         '404':
           description: Pond or assessment not found
-          content: *id026
+          content: *id027
         '500':
           description: Unexpected server error
-          content: *id026
+          content: *id027
         '503':
           description: Storage or service not available
-          content: *id026
+          content: *id027
       security:
       - bearerAuth: []
     get:
@@ -1352,21 +1413,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id027
+          content: &id028
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id027
+          content: *id028
         '404':
           description: Pond or assessment not found
-          content: *id027
+          content: *id028
         '500':
           description: Unexpected server error
-          content: *id027
+          content: *id028
         '503':
           description: Storage or service not available
-          content: *id027
+          content: *id028
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/profile:
@@ -1396,7 +1457,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id029
+              schema: &id030
                 $ref: '#/components/schemas/PondProfileResponse'
           headers:
             ETag:
@@ -1411,21 +1472,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id028
+          content: &id029
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id028
+          content: *id029
         '404':
           description: Pond or assessment not found
-          content: *id028
+          content: *id029
         '500':
           description: Unexpected server error
-          content: *id028
+          content: *id029
         '503':
           description: Storage or service not available
-          content: *id028
+          content: *id029
       security:
       - bearerAuth: []
     put:
@@ -1454,30 +1515,30 @@ paths:
           description: Created
           content:
             application/json:
-              schema: *id029
+              schema: *id030
         '400':
           description: Invalid request
-          content: &id030
+          content: &id031
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id030
+          content: *id031
         '403':
           description: Another account's pond
-          content: *id030
+          content: *id031
         '404':
           description: Pond or assessment not found
-          content: *id030
+          content: *id031
         '409':
           description: Conflict
-          content: *id030
+          content: *id031
         '500':
           description: Unexpected server error
-          content: *id030
+          content: *id031
         '503':
           description: Storage or service not available
-          content: *id030
+          content: *id031
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/prompts:
@@ -1521,21 +1582,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id031
+          content: &id032
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id031
+          content: *id032
         '404':
           description: Pond or assessment not found
-          content: *id031
+          content: *id032
         '500':
           description: Unexpected server error
-          content: *id031
+          content: *id032
         '503':
           description: Storage or service not available
-          content: *id031
+          content: *id032
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/prompts/{prompt_id}:
@@ -1576,27 +1637,27 @@ paths:
                 $ref: '#/components/schemas/TdsPromptAnswer'
         '400':
           description: Invalid request
-          content: &id032
+          content: &id033
             application/json:
               schema: *id001
         '401':
           description: Not signed in
-          content: *id032
+          content: *id033
         '403':
           description: Another account's pond
-          content: *id032
+          content: *id033
         '404':
           description: Pond or assessment not found
-          content: *id032
+          content: *id033
         '409':
           description: Conflict
-          content: *id032
+          content: *id033
         '500':
           description: Unexpected server error
-          content: *id032
+          content: *id033
         '503':
           description: Storage or service not available
-          content: *id032
+          content: *id033
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/ratings/algae:
@@ -1641,21 +1702,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id033
+          content: &id034
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id033
+          content: *id034
         '404':
           description: Pond or assessment not found
-          content: *id033
+          content: *id034
         '500':
           description: Unexpected server error
-          content: *id033
+          content: *id034
         '503':
           description: Storage or service not available
-          content: *id033
+          content: *id034
       security:
       - bearerAuth: []
   /v1/ponds/{pond}/validation:
@@ -1701,21 +1762,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id034
+          content: &id035
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id034
+          content: *id035
         '404':
           description: Pond or assessment not found
-          content: *id034
+          content: *id035
         '500':
           description: Unexpected server error
-          content: *id034
+          content: *id035
         '503':
           description: Storage or service not available
-          content: *id034
+          content: *id035
       security:
       - bearerAuth: []
   /v1/ready:
@@ -1738,7 +1799,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id035
+              schema: *id036
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -1752,12 +1813,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id036
+          content: &id037
             application/json:
               schema: *id001
         '503':
           description: Storage or service not available
-          content: *id036
+          content: *id037
       security: []
 components:
   schemas:
@@ -2538,6 +2599,218 @@ components:
       - slope_mv_per_day
       - trend
       title: BatteryTrend
+      type: object
+    Calibration:
+      additionalProperties: false
+      properties:
+        pond_id:
+          title: Pond Id
+          type: integer
+        as_of:
+          format: date-time
+          title: As Of
+          type: string
+        parameters:
+          $ref: '#/components/schemas/CalibrationParameters'
+        history:
+          description: Every row, oldest first.
+          items:
+            $ref: '#/components/schemas/CalibrationVersion'
+          title: History
+          type: array
+      required:
+      - pond_id
+      - as_of
+      - parameters
+      - history
+      title: Calibration
+      type: object
+    CalibrationParameter:
+      additionalProperties: false
+      properties:
+        status:
+          description: 'fitted: a fit is in force now. pending: no fit yet, the default is used.'
+          enum:
+          - fitted
+          - pending
+          title: Status
+          type: string
+        value_in_use:
+          title: Value In Use
+          type: number
+        lag_hours_in_use:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Lag Hours In Use
+        default_value:
+          title: Default Value
+          type: number
+        default_lag_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Default Lag Hours
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        in_force:
+          anyOf:
+          - $ref: '#/components/schemas/CalibrationVersion'
+          - type: 'null'
+        effective_until:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: When a newer fit replaces in_force; null if none.
+          title: Effective Until
+        latest:
+          anyOf:
+          - $ref: '#/components/schemas/CalibrationVersion'
+          - type: 'null'
+          description: The newest row, fitted or pending.
+      required:
+      - status
+      - value_in_use
+      - lag_hours_in_use
+      - default_value
+      - default_lag_hours
+      - unit
+      - in_force
+      - effective_until
+      - latest
+      title: CalibrationParameter
+      type: object
+    CalibrationParameters:
+      additionalProperties: false
+      properties:
+        evaporation_shelter_factor:
+          $ref: '#/components/schemas/CalibrationParameter'
+        water_air_temperature:
+          $ref: '#/components/schemas/CalibrationParameter'
+        nitrification_rate_scale:
+          $ref: '#/components/schemas/CalibrationParameter'
+      required:
+      - evaporation_shelter_factor
+      - water_air_temperature
+      - nitrification_rate_scale
+      title: CalibrationParameters
+      type: object
+    CalibrationVersion:
+      additionalProperties: false
+      description: 'One pond_calibration row: a fit or a pending result.'
+      properties:
+        id:
+          title: Id
+          type: integer
+        pond_id:
+          title: Pond Id
+          type: integer
+        parameter:
+          enum:
+          - evaporation_shelter_factor
+          - water_air_temperature
+          - nitrification_rate_scale
+          title: Parameter
+          type: string
+        status:
+          enum:
+          - fitted
+          - pending
+          title: Status
+          type: string
+        value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: The fitted value; null while pending.
+          title: Value
+        lag_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          description: Water/air temperature lag; null for the other parameters.
+          title: Lag Hours
+        fitted_at:
+          format: date-time
+          title: Fitted At
+          type: string
+        effective_from:
+          description: From this time on the poller uses this version.
+          format: date-time
+          title: Effective From
+          type: string
+        sample_count:
+          title: Sample Count
+          type: integer
+        error:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: RMSE of the fit and of the default (and, for the temperature fit, of persistence)
+            on the stated interval.
+          title: Error
+        training_from:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Training From
+        training_to:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Training To
+        evaluation_from:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Evaluation From
+        evaluation_to:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Evaluation To
+        details:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Reason when pending, the samples used and the default.
+          title: Details
+        method_version:
+          title: Method Version
+          type: integer
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+      required:
+      - id
+      - pond_id
+      - parameter
+      - status
+      - value
+      - lag_hours
+      - fitted_at
+      - effective_from
+      - sample_count
+      - error
+      - training_from
+      - training_to
+      - evaluation_from
+      - evaluation_to
+      - details
+      - method_version
+      - created_at
+      title: CalibrationVersion
       type: object
     CameraDriftVerdict:
       additionalProperties: true

@@ -82,6 +82,8 @@ from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
+from koi.storage.base import parse_timestamp
+from koi.worker import poller
 
 bp = RouteGroup("twin", __name__)
 bp.before_request(authenticate)
@@ -409,6 +411,40 @@ def get_kit_validation(user_id: int):
     """
     _require_pond(user_id)
     return jsonify(kit_readings.validation(_storage().fetch_kit_readings(user_id)))
+
+
+# ===================================================================
+# Pond calibration (issue #32)
+# ===================================================================
+_CALIBRATION_UNITS = {poller.SHELTER: None, poller.TEMPERATURE: "degC", poller.NITRIFICATION: None}
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/calibration", summary="Pond-specific model constants",
+       tag="validation", response=res.Calibration, errors=POND_ERRORS)
+def get_calibration(user_id: int):
+    """The evaporation shelter factor, the water/air temperature offset and lag, and the nitrification rate scale
+    the models use for this pond now: the fit in force with its fit date, sample count and error, or the default
+    while the fit is pending. history holds every stored version, oldest first."""
+    _require_pond(user_id)
+    rows = _storage().fetch_calibrations(user_id)
+    now = datetime.now(timezone.utc)
+    in_force = poller.calibration_in_force(rows, now)
+    parameters = {}
+    for parameter in poller.CALIBRATION_PARAMETERS:
+        default = poller.CALIBRATION_DEFAULTS[parameter]
+        row = in_force.get(parameter)
+        own = [r for r in rows if r["parameter"] == parameter]
+        later = [parse_timestamp(r["effective_from"]) for r in own
+                 if r["status"] == "fitted" and row is not None and parse_timestamp(r["effective_from"]) > now]
+        parameters[parameter] = {
+            "status": "fitted" if row else "pending",
+            "value_in_use": row["value"] if row else default["value"],
+            "lag_hours_in_use": (row["lag_hours"] if row else default["lag_hours"]),
+            "default_value": default["value"], "default_lag_hours": default["lag_hours"],
+            "unit": _CALIBRATION_UNITS[parameter], "in_force": row,
+            "effective_until": min(later).isoformat() if later else None, "latest": own[-1] if own else None,
+        }
+    return jsonify({"pond_id": user_id, "as_of": now.isoformat(), "parameters": parameters, "history": rows})
 
 
 # ===================================================================

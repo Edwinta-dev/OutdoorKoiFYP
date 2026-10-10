@@ -94,7 +94,11 @@ def test_poller_schedules_at_the_configured_interval(monkeypatch):
     monkeypatch.setattr(background, "BackgroundScheduler", FakeScheduler, raising=False)
     registry = EngineRegistry(MemoryStorage())
     poller.start(make_settings(poll_interval_minutes=3, evaluation_retention_days=45), registry)
-    [(fn, trigger, kwargs), (daily, daily_trigger, daily_kwargs), started] = jobs
+    [(fn, trigger, kwargs), (daily, daily_trigger, daily_kwargs), (calibration, cal_trigger, cal_kwargs),
+     started] = jobs
+    # Calibration (issue #32) runs once a day after retention, over the same registry.
+    assert cal_trigger == "cron" and (cal_kwargs["hour"], cal_kwargs["minute"]) == (4, 0)
+    assert cal_kwargs["timezone"] == "Asia/Singapore" and calibration.__self__.registry is registry
     assert (trigger, kwargs["minutes"], started) == ("interval", 3, "started")
     # The job is a lease-gated worker cycle over the given registry.
     assert fn.__func__ is poller.Worker.run_cycle and fn.__self__.registry is registry

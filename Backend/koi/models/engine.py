@@ -485,6 +485,10 @@ class WaterChemistryEngine:
         self._algae_suppression_days_remaining = 0
         self._last_tds_ppm = 0.0
         self._last_ingest_time: Optional[datetime] = None
+        # Multiplier on both nitrification rates, fitted per pond from kit
+        # readings (issue #32, koi/kit_readings.py); 1.0 without a fit.
+        self.nitrification_scale = 1.0
+        self.nitrification_scale_version: Optional[int] = None
 
         self._gate = SensorGate(self._has_volume_event_within_6h)
 
@@ -660,6 +664,8 @@ class WaterChemistryEngine:
             hours,
             temp_c,
             lux_value,
+            0.05 * self.nitrification_scale,
+            0.035 * self.nitrification_scale,
         )
 
     @staticmethod
@@ -940,6 +946,10 @@ class WaterChemistryEngine:
         it is intentionally excluded here - a real future assess() could
         still read worse than this projection if buffering is degrading
         on top of waste load.
+
+        Both rates are multiplied by self.nitrification_scale, the pond's
+        fitted scale (1.0 without one), so the uncertainty scenarios spread
+        around the fitted rates.
         """
         if horizon_days < 1:
             raise ValueError("horizon_days must be >= 1")
@@ -1011,7 +1021,7 @@ class WaterChemistryEngine:
                 tan_mg += tan_per_step
                 tan_mg, no2_mg, no3_mg, algae_days = self._step_pools(
                     tan_mg, no2_mg, no3_mg, algae_days, hours_per_step, temp_c, lux_value,
-                    tan_to_no2_rate, no2_to_no3_rate,
+                    tan_to_no2_rate * self.nitrification_scale, no2_to_no3_rate * self.nitrification_scale,
                 )
 
             tan_ppm = tan_mg / self.config.volume_litres
@@ -1080,6 +1090,9 @@ class WaterChemistryEngine:
             "last_tds_ppm": self._last_tds_ppm,
             "last_ingest_time": self._last_ingest_time.isoformat() if self._last_ingest_time else None,
             "gate": self._gate.to_snapshot(),
+            # Issue #32; absent from older snapshots, which load at 1.0.
+            "nitrification_scale": self.nitrification_scale,
+            "nitrification_scale_version": self.nitrification_scale_version,
         }
 
     @classmethod
@@ -1103,5 +1116,7 @@ class WaterChemistryEngine:
         engine._last_tds_ppm = snapshot.get("last_tds_ppm", 0.0)
         lit = snapshot.get("last_ingest_time")
         engine._last_ingest_time = datetime.fromisoformat(lit) if lit else None
-        engine._gate = SensorGate.from_snapshot(snapshot.get("gate", {}), engine._has_volume_event_within_6h)
+        engine.nitrification_scale = float(snapshot.get("nitrification_scale") or 1.0)
+        engine.nitrification_scale_version = snapshot.get("nitrification_scale_version")
+        engine._gate =SensorGate.from_snapshot(snapshot.get("gate", {}), engine._has_volume_event_within_6h)
         return engine

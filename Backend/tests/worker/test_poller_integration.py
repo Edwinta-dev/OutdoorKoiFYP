@@ -393,7 +393,7 @@ def test_rating_context_endpoint_feeds_the_card(client):
         "latest_image carries an id for pinning"
 
 
-def test_calibration_reached_after_enough_labels(store, client, carried):
+def test_rating_thresholds_reached_after_enough_labels(store, client, carried):
     bad_t = carried["obstructed_frame_time"]
     # Feed two of each class, pinned to real frames.
     pairs = [("none", 0.004), ("none", 0.005), ("minor", 0.03), ("minor", 0.033),
@@ -430,7 +430,7 @@ def test_calibration_reached_after_enough_labels(store, client, carried):
     carried["calibration"] = cal
 
 
-def test_calibration_survives_a_registry_eviction(client, carried, registry):
+def test_rating_thresholds_survive_a_registry_eviction(client, carried, registry):
     cal = carried["calibration"]
     registry.evict(USER)
     cal2 = client.get(f"/v1/ponds/{USER}/ratings/algae").get_json()["calibration"]

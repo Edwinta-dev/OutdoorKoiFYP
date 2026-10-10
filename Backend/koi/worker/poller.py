@@ -128,13 +128,14 @@ A second job runs once a day at 03:30 pond local time: evaluation
 retention (koi/worker/retention.py), which folds the evaluation rows of
 days older than Settings.evaluation_retention_days into evaluation_daily.
 """
+import bisect
 import logging
 import os
 import socket
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from koi.logs import log_event, pond_context
@@ -393,10 +394,15 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     # --- logged interventions of the window, for reconciliation ----
     intervention_rows = _intervention_rows(registry, user_id, now)
     history = registry.sensor_history(user_id)
+    # The pond's calibration versions; None (unreadable) leaves the twin's
+    # as they are.
+    calibrations = fail_soft(lambda: storage.fetch_calibrations(user_id), None)
 
     commit: dict[str, Any] = {}
 
     def cycle(twin):
+        if calibrations is not None:
+            apply_calibration(twin, calibrations, now)
         # --- every sensor reading since the last cycle, in order ---
         discovery = _discover(registry, user_id, twin, now)
         commit["ingest"] = discovery.commit()
@@ -634,6 +640,363 @@ def _algae_forecast_env(forecast_days, baseline_lux, baseline_temp, no3_series, 
     return env
 
 
+# ---------------------------------------------------------------
+# Calibration (issue #32, migration 0022)
+# ---------------------------------------------------------------
+# Once a day the worker fits three pond-specific constants from the
+# pond's own history and appends each result to pond_calibration:
+#
+#   evaporation_shelter_factor  litres added at each logged top-up
+#                               against the modelled loss since the
+#                               previous top-up or water change
+#                               (ev.fit_shelter_factor, >= 3 top-ups)
+#   water_air_temperature       the pond's hourly water temperature
+#                               against the assigned station's hourly air
+#                               temperature: offset and lag, error on a
+#                               later evaluation interval beside
+#                               persistence (ev.fit_water_air_temperature)
+#   nitrification_rate_scale    kit ammonia and nitrite against the
+#                               simulated pools (kit_readings.
+#                               fit_nitrification_scale, >= 4 readings)
+#
+# Each cycle applies the newest fitted row of each parameter whose
+# effective_from is at or before the cycle's time (calibration_in_force),
+# so a rebuild replaying a past time uses the version in force then. With
+# no fitted row the engines keep their defaults.
+#
+# Missing-data rules, all over the CALIBRATION_WINDOW before the run:
+#   * Hours are UTC hour bins keyed by the observation's start
+#     (observed_from) or the sensor row's insert time; a bin's value is
+#     the mean of its samples (rainfall: the sum of its 5-minute totals,
+#     scaled to the hour, when they cover at least half of it).
+#   * A shelter-fit hour is complete when air temperature, wind, rainfall
+#     and the 24-hour forecast's humidity are all known; water
+#     temperature is the pond's own in that hour, else the air estimate.
+#     A top-up interval counts with 75% of its hours complete, between
+#     1 and MAX_TOPUP_INTERVAL_DAYS long, with a logged volume.
+#   * A temperature hour needs the pond's water value and the station's
+#     air value at every lag tried (0 to 12 hours).
+#   * The nitrification simulation starts from empty pools at the window
+#     start, uses the hourly water temperature (else air, carried forward
+#     over gaps) and leaves out readings in its first week.
+# Too little data gives a 'pending' row (stored only while no fit exists,
+# and only when it changes), never a value.
+CALIBRATION_LEASE = "calibration"
+CALIBRATION_LEASE_SECONDS = 3600
+CALIBRATION_RUN_HOUR, CALIBRATION_RUN_MINUTE = 4, 0
+CALIBRATION_WINDOW = timedelta(days=60)
+MAX_TOPUP_INTERVAL_DAYS = 45
+CALIBRATION_METHOD_VERSION = 1
+
+SHELTER = "evaporation_shelter_factor"
+TEMPERATURE = "water_air_temperature"
+NITRIFICATION = "nitrification_rate_scale"
+CALIBRATION_PARAMETERS = (SHELTER, TEMPERATURE, NITRIFICATION)
+# What each parameter falls back to with no fit.
+CALIBRATION_DEFAULTS: dict[str, dict[str, Optional[float]]] = {
+    SHELTER: {"value": ev.POND_SHELTER_FACTOR, "lag_hours": None},
+    TEMPERATURE: {"value": ev.DEFAULT_WATER_AIR_OFFSET_C, "lag_hours": 0.0},
+    NITRIFICATION: {"value": 1.0, "lag_hours": None},
+}
+_KNOTS_TO_MS = 0.514444
+_HOUR = timedelta(hours=1)
+# Hours of the 24-hour forecast's humidity looked up at once.
+_HUMIDITY_BLOCK_HOURS = 6
+
+
+def calibration_in_force(rows: list[dict], at: datetime) -> dict[str, dict]:
+    """The newest fitted row of each parameter with effective_from at or
+    before `at` (ties by id). A parameter with none is absent."""
+    found: dict[str, dict] = {}
+    for row in rows:
+        if row.get("status") != "fitted" or parse_timestamp(row["effective_from"]) > at:
+            continue
+        current = found.get(row["parameter"])
+        if current is None or ((parse_timestamp(row["effective_from"]), row["id"])
+                               > (parse_timestamp(current["effective_from"]), current["id"])):
+            found[row["parameter"]] = row
+    return found
+
+
+def apply_calibration(twin: PondTwin, rows: list[dict], at: datetime) -> dict[str, int]:
+    """Puts the calibration in force at `at` into the twin's engines and
+    returns the row ids applied, by parameter."""
+    in_force = calibration_in_force(rows, at)
+    shelter, temperature, scale = (in_force.get(p) for p in CALIBRATION_PARAMETERS)
+    versions = {p: int(row["id"]) for p, row in in_force.items()}
+    twin.evaporation.apply_calibration(
+        shelter_factor=float(shelter["value"]) if shelter else None,
+        water_air_offset_c=float(temperature["value"]) if temperature else None,
+        water_air_lag_hours=float(temperature["lag_hours"] or 0.0) if temperature else None,
+        versions={p: v for p, v in versions.items() if p != NITRIFICATION})
+    twin.chemistry.nitrification_scale = float(scale["value"]) if scale else 1.0
+    twin.chemistry.nitrification_scale_version = versions.get(NITRIFICATION)
+    return versions
+
+
+def _hour(t: datetime) -> datetime:
+    return t.replace(minute=0, second=0, microsecond=0)
+
+
+def _observations(storage, station: Optional[str], metric: str, start: datetime, end: datetime) -> list[dict]:
+    """Station observations over [start, end], a day per call so no call
+    comes near a response cap."""
+    if not station:
+        return []
+    rows: list[dict] = []
+    day = start
+    while day < end:
+        until = min(day + timedelta(days=1), end)
+        rows.extend(o for o in storage.fetch_weather_observations(str(station), metric, day, until, end)
+                    if o.get("value") is not None and parse_timestamp(o["observed_from"]) < until)
+        day = until
+    return rows
+
+
+def _hourly_mean(samples: list[tuple[datetime, float]]) -> dict[datetime, float]:
+    bins: dict[datetime, list[float]] = {}
+    for t, value in samples:
+        bins.setdefault(_hour(t), []).append(float(value))
+    return {h: sum(v) / len(v) for h, v in bins.items()}
+
+
+def _hourly_rain(rows: list[dict]) -> dict[datetime, float]:
+    totals: dict[datetime, list[float]] = {}
+    for o in rows:
+        if o.get("semantics") != "interval_total" or o.get("unit") not in (None, "mm"):
+            continue
+        start, end = parse_timestamp(o["observed_from"]), parse_timestamp(o["observed_to"])
+        entry = totals.setdefault(_hour(start), [0.0, 0.0])
+        entry[0] += float(o["value"])
+        entry[1] += max((end - start).total_seconds(), 0.0)
+    return {h: total * 3600.0 / covered for h, (total, covered) in totals.items() if covered >= 1800.0}
+
+
+def _hourly_humidity(storage, hours: set[datetime]) -> dict[datetime, float]:
+    """The 24-hour general forecast's humidity midpoint usable at each
+    block of _HUMIDITY_BLOCK_HOURS hours that holds a wanted hour (the
+    value the poller uses, as of then)."""
+    out: dict[datetime, float] = {}
+    blocks = sorted({h.replace(hour=h.hour - h.hour % _HUMIDITY_BLOCK_HOURS) for h in hours})
+    for block in blocks:
+        found = storage.fetch_forecast_as_of("24hr", "GENERAL", block)
+        payload = (found or {}).get("payload") or {}
+        humidity = forecast_utils.current_conditions(
+            {"nea_forecasts": {"forecast_24hr": {"general": payload}}}).get("humidity_pct")
+        if humidity is None:
+            continue
+        for offset in range(_HUMIDITY_BLOCK_HOURS):
+            out[block + offset * _HOUR] = float(humidity)
+    return out
+
+
+def _interval_hours(start: datetime, end: datetime) -> list[datetime]:
+    count = int((end - start).total_seconds() // 3600)
+    return [_hour(start + i * _HOUR) for i in range(count)]
+
+
+def _topup_samples(rows: list[dict], profiles: ProfileHistory, weather: dict, water: dict,
+                   offset_c: Optional[float]) -> tuple[list[ev.TopUpSample], list[dict]]:
+    """Each logged top-up with the hours since the previous top-up or
+    water change, and the top-ups left out with the reason."""
+    boundaries = [r for r in rows if r.get("event_type") in ("WATER_TOPUP", "WATER_CHANGE")]
+    samples: list[ev.TopUpSample] = []
+    skipped: list[dict] = []
+    for previous, row in zip(boundaries, boundaries[1:], strict=False):
+        if row["event_type"] != "WATER_TOPUP":
+            continue
+        start, end = parse_timestamp(previous["event_timestamp"]), parse_timestamp(row["event_timestamp"])
+        days = (end - start).total_seconds() / 86400.0
+        profile = profiles.at(end)
+        if row.get("volume_litres") is not None:
+            litres = float(row["volume_litres"])
+        elif row.get("volume_percentage") is not None:
+            litres = float(row["volume_percentage"]) / 100.0 * profile.volume_l
+        else:
+            skipped.append({"event_id": row.get("event_id"), "reason": "no_volume_logged"})
+            continue
+        if not 1.0 <= days <= MAX_TOPUP_INTERVAL_DAYS:
+            skipped.append({"event_id": row.get("event_id"), "reason": "interval_length", "days": round(days, 2)})
+            continue
+        hours: list[Optional[ev.HourConditions]] = []
+        for h in _interval_hours(start, end):
+            air, wind = weather["air"].get(h), weather["wind"].get(h)
+            rain, humidity = weather["rain"].get(h), weather["humidity"].get(h)
+            if air is None or wind is None or rain is None or humidity is None:
+                hours.append(None)
+                continue
+            at = profiles.at(h)
+            area = ev.EvaporationConfig(volume_litres=at.volume_l, estimated_biomass_grams=at.biomass_g,
+                                        pond_depth_m=at.depth_m or ev.DEFAULT_POND_DEPTH_M).surface_area_m2
+            hours.append(ev.HourConditions(
+                air_temp_c=air, relative_humidity_pct=humidity, wind_speed_ms=wind, rain_mm=rain,
+                water_temp_c=water.get(h, ev.predict_water_temp(air, offset_c)), surface_area_m2=area))
+        samples.append(ev.TopUpSample(start=start, end=end, litres_added=litres, hours=hours))
+    return samples, skipped
+
+
+def _temp_lookup(water: dict[datetime, float], air: dict[datetime, float]) -> Any:
+    """Hourly temperature for the nitrogen simulation: the pond's water,
+    else the station air, carried forward over gaps (backward before the
+    first value). None when neither has any value."""
+    merged = {**air, **water}
+    if not merged:
+        return None
+    hours = sorted(merged)
+
+    def temp_at(t: datetime) -> float:
+        index = bisect.bisect_right(hours, _hour(t)) - 1
+        return merged[hours[max(index, 0)]]
+    return temp_at
+
+
+def fit_pond_calibration(storage, profiles: ProfileHistory, pond: int, now: datetime,
+                         in_force: Optional[dict[str, dict]] = None) -> dict[str, dict]:
+    """The three fits for one pond from its history over the
+    CALIBRATION_WINDOW before now, as pond_calibration results."""
+    start = now - CALIBRATION_WINDOW
+    sources = storage.fetch_dashboard_sources(pond) or {}
+    found = sources.get("stations")
+    stations: dict = found if isinstance(found, dict) else {}
+    air = _hourly_mean([(parse_timestamp(o["observed_from"]), o["value"])
+                        for o in _observations(storage, stations.get("air-temperature"), "air_temperature",
+                                               start, now)])
+    wind = {h: v * _KNOTS_TO_MS for h, v in _hourly_mean(
+        [(parse_timestamp(o["observed_from"]), o["value"])
+         for o in _observations(storage, stations.get("wind-speed"), "wind_speed", start, now)]).items()}
+    rain = _hourly_rain(_observations(storage, stations.get("rainfall"), "rainfall", start, now))
+    water = _hourly_mean([(parse_timestamp(r["created_at"]), r["value"])
+                          for r in storage.fetch_ingested_sensor_rows(pond, ("temp",), start, now)
+                          if r.get("value") is not None])
+    interventions = storage.fetch_interventions(pond, start)
+
+    results: dict[str, dict] = {}
+    results[TEMPERATURE] = ev.fit_water_air_temperature(water, air)
+    if not stations.get("air-temperature"):
+        results[TEMPERATURE]["details"]["station"] = "no air-temperature station assigned"
+
+    temperature = (in_force or {}).get(TEMPERATURE)
+    offset = float(temperature["value"]) if temperature else None
+    wanted = {h for r in interventions if r.get("event_type") == "WATER_TOPUP"
+              for h in _interval_hours(max(start, parse_timestamp(r["event_timestamp"]) - MAX_TOPUP_INTERVAL_DAYS
+                                           * timedelta(days=1)), parse_timestamp(r["event_timestamp"]))}
+    humidity = _hourly_humidity(storage, wanted) if wanted else {}
+    samples, skipped = _topup_samples(interventions, profiles, {"air": air, "wind": wind, "rain": rain,
+                                                                 "humidity": humidity}, water, offset)
+    results[SHELTER] = ev.fit_shelter_factor(samples)
+    results[SHELTER]["details"]["skipped_topups"] = skipped
+
+    # Imported here: kit_readings imports the rebuild, which imports this module.
+    from koi import kit_readings
+    temp_at = _temp_lookup(water, air)
+    readings = storage.fetch_kit_readings(pond)
+    if temp_at is None:
+        results[NITRIFICATION] = ev.pending_calibration("no_temperature_history", 0)
+    else:
+        results[NITRIFICATION] = kit_readings.fit_nitrification_scale(
+            readings, kit_readings.nitrogen_events(interventions), temp_at,
+            lambda t: profiles.at(t).volume_l, start)
+    return results
+
+
+def _calibration_row(parameter: str, result: dict, now: datetime) -> dict:
+    def when(value: Any) -> Optional[str]:
+        return value.isoformat() if isinstance(value, datetime) else value
+    details = {**(result.get("details") or {}), "default": CALIBRATION_DEFAULTS[parameter]}
+    return {"parameter": parameter, "status": result["status"], "value": result["value"],
+            "lag_hours": result.get("lag_hours"), "fitted_at": now.isoformat(), "effective_from": now.isoformat(),
+            "sample_count": int(result["sample_count"]), "error": result.get("error"),
+            "training_from": when(result.get("training_from")), "training_to": when(result.get("training_to")),
+            "evaluation_from": when(result.get("evaluation_from")), "evaluation_to": when(result.get("evaluation_to")),
+            "details": details, "method_version": CALIBRATION_METHOD_VERSION}
+
+
+def _changed(row: dict, existing: list[dict]) -> bool:
+    """Whether row is worth a new version: a fit whose value, lag, sample
+    count or training end differs from the newest fit, or a pending
+    result while the parameter has no fit, differing from the newest
+    pending row in reason or sample count."""
+    same = [r for r in existing if r["parameter"] == row["parameter"]]
+    fits = [r for r in same if r["status"] == "fitted"]
+    if row["status"] == "fitted":
+        if not fits:
+            return True
+        last = fits[-1]
+        return (last["value"] != row["value"] or last.get("lag_hours") != row["lag_hours"]
+                or last["sample_count"] != row["sample_count"]
+                or (last.get("training_to") and parse_timestamp(last["training_to"]))
+                != (row["training_to"] and parse_timestamp(row["training_to"])))
+    if fits:
+        return False
+    if not same:
+        return True
+    last = same[-1]
+    return (last["sample_count"] != row["sample_count"]
+            or (last.get("details") or {}).get("reason") != row["details"].get("reason"))
+
+
+def calibrate_pond(registry: EngineRegistry, pond: int, now: Optional[datetime] = None) -> dict[str, dict]:
+    """Fits the pond's three constants and stores each result that is new
+    (see _changed). Returns, by parameter, {status, value, lag_hours,
+    sample_count, stored, reason}."""
+    storage = registry.storage
+    now = now or datetime.now(timezone.utc)
+    profiles = registry.profile_history(pond)
+    if profiles is None:
+        raise LookupError(f"pond {pond} has no profile and no UserData volume and biomass")
+    existing = storage.fetch_calibrations(pond)
+    results = fit_pond_calibration(storage, profiles, pond, now, calibration_in_force(existing, now))
+    report: dict[str, dict] = {}
+    for parameter in CALIBRATION_PARAMETERS:
+        row = _calibration_row(parameter, results[parameter], now)
+        stored = _changed(row, existing)
+        if stored:
+            existing.append(storage.insert_calibration(pond, row))
+        report[parameter] = {"status": row["status"], "value": row["value"], "lag_hours": row["lag_hours"],
+                             "sample_count": row["sample_count"], "stored": stored,
+                             "reason": row["details"].get("reason")}
+    return report
+
+
+class CalibrationJob:
+    """The scheduled run: takes the calibration lease, calibrates every
+    active pond (one pond's failure is logged and the rest go on)."""
+
+    def __init__(self, registry: EngineRegistry, holder: str):
+        self.registry = registry
+        self.holder = holder
+
+    def run(self, now: Optional[datetime] = None) -> Optional[dict]:
+        storage = self.registry.storage
+        try:
+            held = storage.take_lease(CALIBRATION_LEASE, self.holder, CALIBRATION_LEASE_SECONDS)
+        except StorageError as exc:
+            log_event(log, "calibration_lease_unavailable", level=logging.WARNING, error=str(exc))
+            return None
+        if not held:
+            log_event(log, "calibration_standby", holder=self.holder)
+            return None
+        report: dict[str, dict] = {}
+        try:
+            for row in storage.fetch_active_pond_configs():
+                pond = int(row["user_id"])
+                with pond_context(pond):
+                    try:
+                        report[str(pond)] = calibrate_pond(self.registry, pond, now)
+                    except Exception as exc:  # noqa: BLE001 - one pond's failure must not stop the others
+                        log_event(log, "pond_calibration_failed", level=logging.ERROR, exc_info=True,
+                                  error=str(exc))
+                        report[str(pond)] = {"failed": f"{type(exc).__name__}: {exc}"[:200]}
+                        continue
+                    log_event(log, "pond_calibrated", **{p: r["status"] for p, r in report[str(pond)].items()})
+        except StorageError as exc:
+            log_event(log, "calibration_failed", level=logging.ERROR, error=str(exc))
+            return None
+        finally:
+            fail_soft(lambda: storage.release_lease(CALIBRATION_LEASE, self.holder), None)
+        return report
+
+
 def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool = False):
     """Schedules a Worker's run_cycle every poll_interval_minutes, first run
     now, and the evaluation retention job daily at RUN_HOUR:RUN_MINUTE pond
@@ -657,6 +1020,10 @@ def start(settings: Optional[Settings], registry: EngineRegistry, blocking: bool
     scheduler.add_job(
         job.run, "cron", hour=retention.RUN_HOUR, minute=retention.RUN_MINUTE,
         timezone=retention.DEFAULT_POND_TIME_ZONE, id="evaluation_retention",
+    )
+    scheduler.add_job(
+        CalibrationJob(registry, worker.holder).run, "cron", hour=CALIBRATION_RUN_HOUR,
+        minute=CALIBRATION_RUN_MINUTE, timezone=retention.DEFAULT_POND_TIME_ZONE, id="calibration",
     )
     if not blocking:
         scheduler.start()

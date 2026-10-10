@@ -164,6 +164,17 @@ class Storage(Protocol):
 
     def fetch_kit_readings(self, user_id: int) -> list[dict]: ...
 
+    # --- pond calibration (pond_calibration, migration 0022) ------------
+    def insert_calibration(self, user_id: int, row: dict) -> dict:
+        """Appends one calibration result (CALIBRATION_COLUMNS without id,
+        pond_id and created_at) and returns the stored row."""
+        ...
+
+    def fetch_calibrations(self, user_id: int) -> list[dict]:
+        """Every calibration row of the pond, ordered by effective_from,
+        id: the version history the poller and the API pick from."""
+        ...
+
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         """Newest evaluation at exactly this instant; no stale or future pairing."""
         ...
@@ -364,6 +375,11 @@ CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",
                         "food_grams", "protein_percentage", "algae_method", "created_at", "salt_grams", "notes")
+
+# pond_calibration's columns (migration 0022).
+CALIBRATION_COLUMNS = ("id", "pond_id", "parameter", "status", "value", "lag_hours", "fitted_at", "effective_from",
+                       "sample_count", "error", "training_from", "training_to", "evaluation_from", "evaluation_to",
+                       "details", "method_version", "created_at")
 
 # Provenance columns of the three evaluation tables (migration 0016).
 # Every evaluation push carries all four (koi/provenance.py); rows written

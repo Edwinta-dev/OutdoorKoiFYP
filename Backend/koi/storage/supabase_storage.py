@@ -258,6 +258,24 @@ class SupabaseStorage:
                 if len(page) < 1000:
                     return rows
 
+    # --- pond calibration ----------------------------------------------
+    def insert_calibration(self, user_id: int, row: dict) -> dict:
+        with _operation("insert_calibration"):
+            values = {k: v for k, v in row.items() if k not in ("id", "pond_id", "created_at")}
+            return self._db().table("pond_calibration").insert({**values, "pond_id": user_id}).execute().data[0]
+
+    def fetch_calibrations(self, user_id: int) -> list[dict]:
+        with _operation("fetch_calibrations"):
+            rows: list[dict] = []
+            # PostgREST caps a response; page so no version is missed.
+            while True:
+                page = (self._db().table("pond_calibration").select("*").eq("pond_id", user_id)
+                        .order("effective_from").order("id")
+                        .range(len(rows), len(rows) + 999).execute().data or [])
+                rows.extend(page)
+                if len(page) < 1000:
+                    return rows
+
     def fetch_chemistry_evaluation_at(self, user_id: int, at: datetime) -> Optional[dict]:
         with _operation("fetch_chemistry_evaluation_at"):
             rows = (self._db().table("pond_chemistry_evaluations").select("*").eq("userid", user_id)

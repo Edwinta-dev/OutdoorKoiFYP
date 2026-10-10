@@ -88,6 +88,8 @@ _WIND_10M_TO_2M = 0.748
 #
 # This is the single most calibratable constant in this file: if you ever
 # log actual top-up volumes against elapsed days, fit this first.
+# fit_shelter_factor does that per pond (issue #32); this stays the default
+# for a pond without a fit.
 POND_SHELTER_FACTOR = 0.6
 
 # NEA's 4-day outlook gives a forecast code/text but no rainfall depth.
@@ -264,7 +266,198 @@ def predict_water_temp(air_temp_c: float, offset_c: Optional[float]) -> float:
     """Applies the fitted offset. Falls back to -1.0C (ponds usually sit
     slightly below mean air temperature thanks to evaporative cooling and
     thermal mass) when no history is available."""
-    return air_temp_c + (offset_c if offset_c is not None else -1.0)
+    return air_temp_c + (offset_c if offset_c is not None else DEFAULT_WATER_AIR_OFFSET_C)
+
+
+DEFAULT_WATER_AIR_OFFSET_C = -1.0
+
+# ============================================================
+# Calibration fits (issue #32)
+# ============================================================
+# The worker's calibration job (koi/worker/poller.py) builds the inputs
+# from the pond's history and stores each result in pond_calibration
+# (migration 0022). The fits below are pure: no I/O, no clock.
+
+# Water/air temperature: hourly pairs, lags tried, train/evaluate split.
+MAX_WATER_AIR_LAG_HOURS = 12
+TEMPERATURE_TRAINING_FRACTION = 0.7
+MIN_TEMPERATURE_HOURS = 72
+MIN_TEMPERATURE_EVALUATION_HOURS = 24
+# Persistence baseline: water temperature the same hour the day before.
+PERSISTENCE_HOURS = 24
+
+# Shelter factor: top-ups, each against the modelled loss since the
+# previous top-up or water change.
+MIN_TOPUP_SAMPLES = 3
+MIN_HOUR_COVERAGE = 0.75
+SHELTER_BOUNDS = (0.05, 1.5)
+_SHELTER_STEP = 0.005
+
+
+def _rmse(errors: list[float]) -> Optional[float]:
+    return math.sqrt(sum(e * e for e in errors) / len(errors)) if errors else None
+
+
+def pending_calibration(reason: str, sample_count: int, **details: object) -> dict:
+    """A calibration result with too little data: no value, the reason
+    and what was found. The engines keep their defaults."""
+    return {"status": "pending", "value": None, "lag_hours": None, "sample_count": sample_count, "error": None,
+            "training_from": None, "training_to": None, "evaluation_from": None, "evaluation_to": None,
+            "details": {"reason": reason, **details}}
+
+
+def fit_water_air_temperature(
+    water_by_hour: dict[datetime, float],
+    air_by_hour: dict[datetime, float],
+    *,
+    max_lag_hours: int = MAX_WATER_AIR_LAG_HOURS,
+    training_fraction: float = TEMPERATURE_TRAINING_FRACTION,
+    min_hours: int = MIN_TEMPERATURE_HOURS,
+    min_evaluation_hours: int = MIN_TEMPERATURE_EVALUATION_HOURS,
+) -> dict:
+    """Fits water(h) = air(h - lag) + offset from the pond's own hourly
+    water temperature and the station's hourly air temperature: the
+    hourly counterpart of fit_water_air_offset, with a lag.
+
+    Keys are hour starts. An hour is usable when it has a water value and
+    an air value at every lag tried, so every lag is scored on the same
+    hours. The usable hours are split in time order: the first
+    training_fraction trains (each lag gets its mean offset; the lag with
+    the lowest training RMSE wins, the shorter on a tie), the rest
+    evaluates. Evaluation hours also need the water value PERSISTENCE_HOURS
+    earlier, so the fit's error is reported beside persistence (water
+    temperature the same hour the day before) and beside the default
+    (lag 0, offset DEFAULT_WATER_AIR_OFFSET_C) on the same hours.
+
+    Too few hours gives a pending result, never a fit."""
+    lags = range(max_lag_hours + 1)
+    usable = sorted(h for h, w in water_by_hour.items()
+                    if w is not None and all(air_by_hour.get(h - timedelta(hours=lag)) is not None for lag in lags))
+    if len(usable) < min_hours:
+        return pending_calibration("not_enough_overlap", len(usable), required_hours=min_hours)
+    split = int(len(usable) * training_fraction)
+    training = usable[:split]
+    evaluation = [h for h in usable[split:]
+                  if water_by_hour.get(h - timedelta(hours=PERSISTENCE_HOURS)) is not None]
+    if len(evaluation) < min_evaluation_hours:
+        return pending_calibration("not_enough_evaluation_hours", len(usable), evaluation_hours=len(evaluation),
+                                   required_evaluation_hours=min_evaluation_hours)
+
+    def residuals(hours: list[datetime], lag: int, offset: float) -> list[float]:
+        return [air_by_hour[h - timedelta(hours=lag)] + offset - water_by_hour[h] for h in hours]
+
+    best: Optional[tuple[float, int, float]] = None
+    for lag in lags:
+        diffs = [water_by_hour[h] - air_by_hour[h - timedelta(hours=lag)] for h in training]
+        offset = sum(diffs) / len(diffs)
+        rmse = _rmse(residuals(training, lag, offset)) or 0.0
+        if best is None or rmse < best[0] - 1e-12:
+            best = (rmse, lag, offset)
+    assert best is not None
+    training_rmse, lag, offset = best
+    model = residuals(evaluation, lag, offset)
+    persistence = [water_by_hour[h - timedelta(hours=PERSISTENCE_HOURS)] - water_by_hour[h] for h in evaluation]
+    model_rmse, persistence_rmse = _rmse(model) or 0.0, _rmse(persistence) or 0.0
+    return {
+        "status": "fitted", "value": round(offset, 4), "lag_hours": float(lag),
+        "sample_count": len(training) + len(evaluation),
+        "error": {
+            "unit": "degC",
+            "training_rmse": round(training_rmse, 4),
+            "evaluation_rmse": round(model_rmse, 4),
+            "evaluation_mean_error": round(sum(model) / len(model), 4),
+            "persistence_rmse": round(persistence_rmse, 4),
+            "default_rmse": round(_rmse(residuals(evaluation, 0, DEFAULT_WATER_AIR_OFFSET_C)) or 0.0, 4),
+            "persistence_hours": PERSISTENCE_HOURS,
+        },
+        "training_from": training[0], "training_to": training[-1] + timedelta(hours=1),
+        "evaluation_from": evaluation[0], "evaluation_to": evaluation[-1] + timedelta(hours=1),
+        "details": {"training_hours": len(training), "evaluation_hours": len(evaluation),
+                    "max_lag_hours": max_lag_hours, "beats_persistence": model_rmse < persistence_rmse},
+    }
+
+
+@dataclass
+class HourConditions:
+    """One complete hour of conditions for the shelter fit. Wind is at
+    10 m in m/s, as NEA reports it; rain is the hour's measured total."""
+    air_temp_c: float
+    relative_humidity_pct: float
+    wind_speed_ms: float
+    rain_mm: float
+    water_temp_c: float
+    surface_area_m2: float
+
+
+@dataclass
+class TopUpSample:
+    """A logged top-up and the hours since the previous top-up or water
+    change: one entry per hour, None where the hour's conditions are
+    incomplete."""
+    start: datetime
+    end: datetime
+    litres_added: float
+    hours: list[Optional[HourConditions]]
+
+    @property
+    def coverage(self) -> float:
+        return sum(1 for h in self.hours if h is not None) / len(self.hours) if self.hours else 0.0
+
+
+def modelled_topup_litres(sample: TopUpSample, shelter_factor: float) -> float:
+    """The net loss the model gives over the sample's complete hours (the
+    running total floored at zero, as the engine's integral is: rain into
+    a full pond overflows), scaled up to the whole interval by its hour
+    coverage."""
+    complete = [h for h in sample.hours if h is not None]
+    if not complete:
+        return 0.0
+    total = 0.0
+    for h in complete:
+        e_mm_day = evaporation_mm_per_day(h.water_temp_c, h.air_temp_c, h.relative_humidity_pct, h.wind_speed_ms,
+                                          shelter_factor=shelter_factor)
+        total = max(total + (e_mm_day / 24.0 - h.rain_mm) * h.surface_area_m2, 0.0)
+    return total * len(sample.hours) / len(complete)
+
+
+def fit_shelter_factor(samples: list[TopUpSample], *, min_samples: int = MIN_TOPUP_SAMPLES,
+                       min_coverage: float = MIN_HOUR_COVERAGE) -> dict:
+    """Fits the wind shelter factor that makes the modelled loss since
+    each previous top-up best match the litres the owner added (least
+    squares over a grid inside SHELTER_BOUNDS). Samples with less than
+    min_coverage of their hours complete are left out; fewer than
+    min_samples usable samples gives a pending result.
+
+    Assumes each top-up returned the pond to the same level, so the litres
+    added equal the net loss since the interval began. The error is the
+    in-sample RMSE in litres, beside the RMSE at the default factor."""
+    usable = [s for s in samples if s.coverage >= min_coverage and s.litres_added > 0]
+    if len(usable) < min_samples:
+        return pending_calibration("not_enough_topups", len(usable), required_samples=min_samples,
+                                   candidates=len(samples))
+
+    def sse(factor: float) -> float:
+        return sum((modelled_topup_litres(s, factor) - s.litres_added) ** 2 for s in usable)
+
+    low, high = SHELTER_BOUNDS
+    grid = [round(low + i * _SHELTER_STEP, 4) for i in range(int(round((high - low) / _SHELTER_STEP)) + 1)]
+    factor = min(grid, key=lambda f: (sse(f), f))
+    modelled = [modelled_topup_litres(s, factor) for s in usable]
+    errors = [m - s.litres_added for m, s in zip(modelled, usable, strict=True)]
+    default_errors = [modelled_topup_litres(s, POND_SHELTER_FACTOR) - s.litres_added for s in usable]
+    return {
+        "status": "fitted", "value": factor, "lag_hours": None, "sample_count": len(usable),
+        "error": {"unit": "L", "training_rmse": round(_rmse(errors) or 0.0, 3),
+                  "training_mean_error": round(sum(errors) / len(errors), 3),
+                  "default_rmse": round(_rmse(default_errors) or 0.0, 3)},
+        "training_from": min(s.start for s in usable), "training_to": max(s.end for s in usable),
+        "evaluation_from": None, "evaluation_to": None,
+        "details": {"at_bound": factor in SHELTER_BOUNDS, "bounds": list(SHELTER_BOUNDS),
+                    "samples": [{"start": s.start.isoformat(), "end": s.end.isoformat(),
+                                 "litres_added": round(s.litres_added, 2), "modelled_litres": round(m, 2),
+                                 "hour_coverage": round(s.coverage, 3)}
+                                for s, m in zip(usable, modelled, strict=True)]},
+    }
 
 
 # ============================================================
@@ -310,6 +503,50 @@ class EvaporationFeedEngine:
         # offset. Bounded so the persisted snapshot cannot grow unbounded.
         self._recent_env: list = []
         self._last_evaporation_mm_per_day = 0.0
+        # Per-pond calibration in force (apply_calibration); None keeps the
+        # module default.
+        self._shelter_factor: Optional[float] = None
+        self._water_air_lag_hours: Optional[float] = None
+        self._calibration_versions: dict = {}
+
+    @property
+    def shelter_factor(self) -> float:
+        """The pond's fitted shelter factor, else POND_SHELTER_FACTOR."""
+        return self._shelter_factor if self._shelter_factor is not None else POND_SHELTER_FACTOR
+
+    @property
+    def calibration_versions(self) -> dict:
+        """pond_calibration ids applied, by parameter."""
+        return dict(self._calibration_versions)
+
+    def apply_calibration(self, *, shelter_factor: Optional[float] = None,
+                          water_air_offset_c: Optional[float] = None,
+                          water_air_lag_hours: Optional[float] = None,
+                          versions: Optional[dict] = None) -> None:
+        """Sets the pond's calibrated constants (issue #32). None for a
+        value means no fit is in force and the default applies; the poller
+        passes the versions in force at each cycle's time."""
+        self._shelter_factor = shelter_factor
+        self._water_air_offset_c = water_air_offset_c
+        self._water_air_lag_hours = water_air_lag_hours if water_air_offset_c is not None else None
+        self._calibration_versions = dict(versions or {})
+
+    def _air_for_water_estimate(self, now: datetime, air_temp_c: float) -> float:
+        """The air temperature the water estimate follows: with a fitted
+        lag, the recorded air temperature nearest now - lag (within 30
+        minutes), else the current one."""
+        if not self._water_air_lag_hours:
+            return air_temp_c
+        target = now - timedelta(hours=self._water_air_lag_hours)
+        best: Optional[tuple[float, float]] = None
+        for entry in self._recent_env:
+            try:
+                gap = abs((datetime.fromisoformat(entry["t"]) - target).total_seconds())
+            except (KeyError, TypeError, ValueError):
+                continue
+            if gap <= 1800 and entry.get("air") is not None and (best is None or gap < best[0]):
+                best = (gap, float(entry["air"]))
+        return best[1] if best is not None else air_temp_c
 
     @property
     def last_advance_time(self) -> Optional[datetime]:
@@ -347,7 +584,8 @@ class EvaporationFeedEngine:
             measured_water_temp_c
             if measured_water_temp_c is not None
             else (env.water_temp_c if env.water_temp_c is not None
-                  else predict_water_temp(env.air_temp_c, self._water_air_offset_c))
+                  else predict_water_temp(self._air_for_water_estimate(now, env.air_temp_c),
+                                          self._water_air_offset_c))
         )
 
         e_mm_per_day = evaporation_mm_per_day(
@@ -355,6 +593,7 @@ class EvaporationFeedEngine:
             air_temp_c=env.air_temp_c,
             relative_humidity_pct=env.relative_humidity_pct,
             wind_speed_ms=env.wind_speed_ms,
+            shelter_factor=self.shelter_factor,
         )
         self._last_evaporation_mm_per_day = e_mm_per_day
 
@@ -558,12 +797,19 @@ class EvaporationFeedEngine:
         *,
         daily_environment: list,
         horizon_days: int = 14,
-        shelter_factor: float = POND_SHELTER_FACTOR,
+        shelter_factor: Optional[float] = None,
     ) -> dict:
         """Projects cumulative loss forward from the CURRENT accumulated
         state (no longer from a retroactive estimate). Operates on local
         copies only - never mutates the engine - so it is safe to call
         from a read-only endpoint.
+
+        shelter_factor None uses the pond's (self.shelter_factor). A given
+        factor is read relative to POND_SHELTER_FACTOR and scaled onto the
+        pond's, so the uncertainty scenarios (koi/models/uncertainty.py)
+        spread around a fitted value; without a fit it is used as given.
+        The fitted water/air lag is not applied here: the days are daily
+        means, so only the offset matters.
 
         When the horizon outruns daily_environment, the LAST entry repeats:
         NEA only publishes 4 days, and holding the final forecast day
@@ -577,6 +823,8 @@ class EvaporationFeedEngine:
 
         area = self.config.surface_area_m2
         volume = self.config.volume_litres
+        shelter_factor = (self.shelter_factor if shelter_factor is None
+                          else shelter_factor * self.shelter_factor / POND_SHELTER_FACTOR)
 
         cumulative = self._cumulative_loss_litres
         trajectory = []
@@ -674,6 +922,10 @@ class EvaporationFeedEngine:
             "last_topup_time": self._last_topup_time.isoformat() if self._last_topup_time else None,
             "recent_env": self._recent_env[-200:],
             "last_evaporation_mm_per_day": self._last_evaporation_mm_per_day,
+            # Issue #32; absent from older snapshots, which load uncalibrated.
+            "shelter_factor": self._shelter_factor,
+            "water_air_lag_hours": self._water_air_lag_hours,
+            "calibration_versions": dict(self._calibration_versions),
         }
 
     @classmethod
@@ -687,6 +939,9 @@ class EvaporationFeedEngine:
         engine._last_topup_time = datetime.fromisoformat(ltt) if ltt else None
         engine._recent_env = list(snapshot.get("recent_env", []))
         engine._last_evaporation_mm_per_day = snapshot.get("last_evaporation_mm_per_day", 0.0)
+        engine._shelter_factor = snapshot.get("shelter_factor")
+        engine._water_air_lag_hours = snapshot.get("water_air_lag_hours")
+        engine._calibration_versions = dict(snapshot.get("calibration_versions") or {})
         return engine
 
 
