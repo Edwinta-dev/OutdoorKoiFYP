@@ -253,9 +253,14 @@ def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, rati
         events=events, ratings=ratings)
 
     # --- chemistry ---
+    assessed_at = schemas.utc_now()
+    observed_rain = fail_soft(lambda: forecast_utils.observed_rain_24h(
+        _storage(), _storage().fetch_dashboard_sources(user_id), assessed_at), None)
     chem = provenance.stamp(CHEMISTRY, twin.chemistry.assess(
         rain_incoming=ctx["rain_incoming"],
         rain_intensity=ctx["rain_intensity"],
+        observed_rain=observed_rain,
+        depth_m=twin.depth_m_at(assessed_at),
     ).to_dict())
     _storage().push_evaluation(user_id, chem)
 

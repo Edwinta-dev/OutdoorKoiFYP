@@ -359,6 +359,10 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         now_conditions.get("wind_ms"), first_forecast.get("wind_ms"), 2.0
     )
     rainfall_mm = now_conditions.get("rainfall_mm")
+    # Rolling 24-hour station rain from the observation history (#24),
+    # for the chemistry rain term (#27). Unreadable leaves it unknown.
+    observed_rain = fail_soft(lambda: forecast_utils.observed_rain_24h(
+        storage, storage.fetch_dashboard_sources(user_id), now), None)
 
     evaporation_env = ev.DayEnvironment(
         air_temp_c=float(air_temp),
@@ -453,6 +457,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
             rain_intensity=rain_intensity,
             measured_water_temp_c=water_temp,
             sensor_warnings=sensor_warnings,
+            observed_rain=observed_rain,
         )
         outcome["sensor"] = {
             "inputs": len(provenance),

@@ -3,6 +3,31 @@
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
 
+## Chemistry rain term by pond depth and observed rain (issue #27)
+
+| Term | Old | New |
+|---|---|---|
+| Source | Forecast wording (`forecast_utils.rain_context_from_text` on the 2-hour nowcast, else today's 4-day outlook) | Observed rain at the pond's assigned rainfall station over the rolling 24 hours before the assessment (`weather_rainfall_total`, issue #24), and the depth from the pond profile |
+| Points | +2 for "thundery" or "heavy", +1 for "shower" or "rain" | +1 for each level the dilution `1 - exp(-R/D)` reaches, R and D in metres |
+| Levels | none | `WaterChemistryEngine.RAIN_DILUTION_LEVELS = (0.08, 0.16)` |
+| Projection (`project_forward`) | the outlook's wording scored each forecast day | forecast days carry no rain points |
+
+Why: the 24-hour forecast uses thundery wording on about 72 % of days and
+the Watch threshold is 3, so with the old term most days showed Amber with
+any one other point. The dilution rain actually causes is small: 30 mm on
+a 1.2 m pond replaces about 2.5 % of the water. The first level (0.08)
+needs about 101 mm on a 1.2 m pond and about 34 mm on a 0.4 m pond; the
+second (0.16) about 209 mm and 70 mm.
+
+Missing or partial station rain, no assigned station, or a profile with no
+depth leave the term unassessed (`rain_dilution.status` insufficient_data,
+`confidence` reduced) rather than reading as zero dilution. A partial
+window's total is a lower bound, so points it already reaches still count.
+The forecast wording still sets the evaporation rain category and the
+add-hardener hint at Watch; forecast rain advice is the lead-time ladder's
+NOWCAST rule. The ladder's REACT rule keeps its own window (yesterday's
+local day, 50 mm).
+
 ## Backtest baseline (issue #33)
 
 `Backend/backtest_baseline.json` holds the backtest metrics that
