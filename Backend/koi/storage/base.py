@@ -232,10 +232,11 @@ class Storage(Protocol):
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
-                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
+                     gcc: Optional[float] = None, colour: Optional[dict] = None,
+                     regions: Optional[dict] = None) -> None:
         """mask_version and baseline_reset (migration 0010), quality and
-        thumbnail_path (migration 0011), gcc and colour (migration 0021)
-        are left out when None, preserving inserts without observations."""
+        thumbnail_path (migration 0011), gcc and colour (migration 0021),
+        regions (migration 0023) are left out when None, preserving inserts without observations."""
         ...
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str: ...
@@ -246,17 +247,19 @@ class Storage(Protocol):
 
     # --- camera water mask (camera_config, migration 0010) -------------
     def fetch_camera_mask(self, user_id: int | str) -> Optional[dict]:
-        """The pond's camera_config row {pond_id, mask, mask_version,
-        updated_at}, or None when no mask has been saved."""
+        """The pond's camera_config row {pond_id, mask, regions,
+        mask_version, updated_at}, or None when no mask has been saved.
+        mask or regions (migration 0023) may be None, not both."""
         ...
 
     def fetch_camera_mask_versions(self, user_id: int | str) -> list[dict]:
         """Every saved mask of the pond {pond_id, mask_version, mask,
-        created_at}, oldest version first."""
+        regions, created_at}, oldest version first."""
         ...
 
-    def save_camera_mask(self, user_id: int, mask: list) -> dict:
-        """Stores mask (a validated polygon, koi/camera/mask.py) as the
+    def save_camera_mask(self, user_id: int, mask: Optional[list], regions: Optional[dict] = None) -> dict:
+        """Stores mask (a validated polygon, koi/camera/mask.py, or None)
+        and regions (validate_regions, or None; not both None) as the
         pond's next mask version and makes it the one in force, in one
         step (save_camera_mask). Returns the new camera_config row."""
         ...
@@ -365,12 +368,12 @@ class Storage(Protocol):
 _BIOMASS_KG_TO_GRAMS = 1000.0
 
 # imageTable columns the services read (mask_version, baseline_reset: 0010;
-# quality, thumbnail_path: 0011; gcc, colour: 0021).
+# quality, thumbnail_path: 0011; gcc, colour: 0021; regions: 0023).
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
-                 "quality", "thumbnail_path", "gcc", "colour")
-# camera_config and camera_mask_version columns (migration 0010).
-CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "mask_version", "updated_at")
-CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "created_at")
+                 "quality", "thumbnail_path", "gcc", "colour", "regions")
+# camera_config and camera_mask_version columns (migration 0010; regions 0023).
+CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "regions", "mask_version", "updated_at")
+CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "regions", "created_at")
 
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",

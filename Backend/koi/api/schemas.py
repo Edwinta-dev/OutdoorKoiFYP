@@ -248,17 +248,40 @@ class ProfileUpdate(_Body):
 class CameraMaskUpdate(_Body):
     """PUT /v1/ponds/{pond}/camera/mask: the pond's water mask, a polygon
     of [x, y] points as fractions (0..1) of the frame's width and height,
-    origin top-left (koi/camera/mask.py). Each save is a new mask version."""
+    origin top-left (koi/camera/mask.py), and optionally its named regions
+    (issue #91). Each save is a new mask version."""
 
-    polygon: list[list[float]]
+    polygon: Optional[list[list[float]]] = Field(
+        description="The water mask; null for none (then regions must be sent).")
+    regions: Optional[dict[str, list[list[float]]]] = Field(
+        default=None, description="water_gap, rim, plants and optional reference polygons. "
+                                  "Left out: the regions in force are kept. null: none.")
 
     @field_validator("polygon")
     @classmethod
-    def _valid_polygon(cls, value: list[list[float]]) -> list[list[float]]:
+    def _valid_polygon(cls, value: Optional[list[list[float]]]) -> Optional[list[list[float]]]:
+        if value is None:
+            return None
         try:
             return camera_mask.validate_polygon(value)
         except ValueError as exc:
             raise PydanticCustomError("mask_invalid", "{reason}", {"reason": str(exc)}) from None
+
+    @field_validator("regions")
+    @classmethod
+    def _valid_regions(cls, value: Optional[dict]) -> Optional[dict[str, list[list[float]]]]:
+        if value is None:
+            return None
+        try:
+            return camera_mask.validate_regions(value)
+        except ValueError as exc:
+            raise PydanticCustomError("regions_invalid", "{reason}", {"reason": str(exc)}) from None
+
+    @model_validator(mode="after")
+    def _mask_or_regions(self) -> "CameraMaskUpdate":
+        if self.polygon is None and self.regions is None:
+            raise PydanticCustomError("mask_empty", "Send a polygon, regions or both.")
+        return self
 
 
 @cache

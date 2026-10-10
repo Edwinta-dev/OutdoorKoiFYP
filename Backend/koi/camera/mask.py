@@ -54,4 +54,35 @@ def validate_polygon(points: object) -> list[list[float]]:
     return polygon
 
 
-__all__ = ["MAX_POINTS", "MIN_AREA", "MIN_POINTS", "polygon_area", "validate_polygon"]
+# Named regions (issue #91, migration 0023). Each is a polygon checked by
+# validate_polygon; camera_regions_are_valid in migration 0023 enforces the
+# same rules in the database.
+REQUIRED_REGIONS = ("water_gap", "rim", "plants")
+OPTIONAL_REGIONS = ("reference",)
+REGION_NAMES = REQUIRED_REGIONS + OPTIONAL_REGIONS
+
+
+def validate_regions(value: object) -> dict[str, list[list[float]]]:
+    """value as {name: polygon}: water_gap, rim and plants, optionally
+    reference, and nothing else. Raises ValueError naming the first
+    region and rule it breaks."""
+    if not isinstance(value, dict):
+        raise ValueError("regions must be an object of named polygons")
+    unknown = sorted(str(name) for name in value if name not in REGION_NAMES)
+    if unknown:
+        raise ValueError(f"unknown region {unknown[0]!r}; regions are {', '.join(REGION_NAMES)}")
+    missing = [name for name in REQUIRED_REGIONS if name not in value]
+    if missing:
+        raise ValueError(f"region {missing[0]!r} is required ({', '.join(REQUIRED_REGIONS)} are)")
+    regions = {}
+    for name in REGION_NAMES:
+        if name in value:
+            try:
+                regions[name] = validate_polygon(value[name])
+            except ValueError as exc:
+                raise ValueError(f"region {name!r}: {exc}") from None
+    return regions
+
+
+__all__ = ["MAX_POINTS", "MIN_AREA", "MIN_POINTS", "OPTIONAL_REGIONS", "REGION_NAMES", "REQUIRED_REGIONS",
+           "polygon_area", "validate_polygon", "validate_regions"]

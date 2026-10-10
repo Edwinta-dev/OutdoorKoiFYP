@@ -227,12 +227,12 @@ def test_mask_sql_rls_on_and_closed_to_the_app_roles(db):
             assert db.fetchone() == {"s": False, "i": False}
         db.execute("select has_table_privilege('service_role', %s, 'select') as s", (f"public.{table}",))
         assert db.fetchone()["s"] is True
-    for function in ("public.save_camera_mask(bigint, jsonb)", "public.camera_mask_is_valid(jsonb)",
+    for function in ("public.save_camera_mask(bigint, jsonb, jsonb)", "public.camera_mask_is_valid(jsonb)",
                      "public.refuse_camera_mask_version_change()"):
         for role in ("anon", "authenticated"):
             db.execute("select has_function_privilege(%s, %s, 'execute') as x", (role, function))
             assert db.fetchone()["x"] is False, (role, function)
-    db.execute("select has_function_privilege('service_role', 'public.save_camera_mask(bigint, jsonb)', "
+    db.execute("select has_function_privilege('service_role', 'public.save_camera_mask(bigint, jsonb, jsonb)', "
                "'execute') as x")
     assert db.fetchone()["x"] is True
 

@@ -97,7 +97,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "userid", "image_id", "image_url", "severity", "is_obstructed",
         "green_ratio_at_rating", "image_captured_at", "rated_at", "notes"),
     "imageTable": ("id", "created_at", "user_ID", "green_ratio", "current_state", "imageURL", "mask_version",
-                   "baseline_reset", "quality", "thumbnail_path", "gcc", "colour"),
+                   "baseline_reset", "quality", "thumbnail_path", "gcc", "colour", "regions"),
     "camera_config": CAMERA_CONFIG_COLUMNS,
     "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
@@ -622,12 +622,13 @@ class MemoryStorage:
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
-                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
+                     gcc: Optional[float] = None, colour: Optional[dict] = None,
+                     regions: Optional[dict] = None) -> None:
         self._check("insert_image")
         row = {"user_ID": user_id, "green_ratio": green_ratio, "current_state": current_state,
                "imageURL": image_url}
         optional = {"mask_version": mask_version, "baseline_reset": baseline_reset, "quality": quality,
-                    "thumbnail_path": thumbnail_path, "gcc": gcc, "colour": colour}
+                    "thumbnail_path": thumbnail_path, "gcc": gcc, "colour": colour, "regions": regions}
         row.update({k: v for k, v in optional.items() if v is not None})
         self._insert("insert_image", "imageTable", [row])
 
@@ -652,17 +653,19 @@ class MemoryStorage:
         rows = sorted(self._select("camera_mask_version", user_id), key=lambda r: r["mask_version"])
         return [self._project(r, CAMERA_MASK_VERSION_COLUMNS) for r in rows]
 
-    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+    def save_camera_mask(self, user_id: int, mask: Optional[list], regions: Optional[dict] = None) -> dict:
         self._check("save_camera_mask")
+        if mask is None and regions is None:
+            raise StorageError("save_camera_mask", "a camera config needs a mask or regions")
         with self._lock:
             current = self._select("camera_config", user_id, limit=1)
             version = (current[0]["mask_version"] if current else 0) + 1
             self._insert("save_camera_mask", "camera_mask_version",
-                         [{"pond_id": user_id, "mask_version": version, "mask": mask}])
+                         [{"pond_id": user_id, "mask_version": version, "mask": mask, "regions": regions}])
             table = self._tables["camera_config"]
             table[:] = [r for r in table if not _same_user(r, "pond_id", user_id)]
             return self._insert("save_camera_mask", "camera_config", [{
-                "pond_id": user_id, "mask": mask, "mask_version": version,
+                "pond_id": user_id, "mask": mask, "regions": regions, "mask_version": version,
                 "updated_at": self._clock().isoformat()}])[0]
 
     # --- device health --------------------------------------------------

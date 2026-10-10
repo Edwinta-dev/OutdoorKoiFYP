@@ -6,9 +6,10 @@ Run from Backend/: python -m pytest -q -k mask
 """
 from datetime import datetime, timezone
 
+import pytest
 from test_supabase_storage import _storage as supabase_storage
 
-from koi.storage import MemoryStorage
+from koi.storage import MemoryStorage, StorageError
 
 RIGHT_HALF = [[0.5, 0.0], [1.0, 0.0], [1.0, 1.0], [0.5, 1.0]]
 TOP_HALF = [[0.0, 0.0], [1.0, 0.0], [1.0, 0.5], [0.0, 0.5]]
@@ -24,7 +25,8 @@ def test_mask_memory_save_numbers_versions_per_pond_and_keeps_them():
     assert storage.save_camera_mask(15, RIGHT_HALF)["mask_version"] == 1
     assert storage.save_camera_mask(16, TOP_HALF)["mask_version"] == 1
     saved = storage.save_camera_mask(15, TOP_HALF)
-    assert saved == {"pond_id": 15, "mask": TOP_HALF, "mask_version": 2, "updated_at": "2026-10-02T00:00:00+00:00"}
+    assert saved == {"pond_id": 15, "mask": TOP_HALF, "regions": None, "mask_version": 2,
+                     "updated_at": "2026-10-02T00:00:00+00:00"}
     assert storage.fetch_camera_mask("15") == saved
     assert [(v["mask_version"], v["mask"]) for v in storage.fetch_camera_mask_versions(15)] == [
         (1, RIGHT_HALF), (2, TOP_HALF)]
@@ -74,3 +76,35 @@ def test_mask_supabase_image_history_selects_the_mask_columns():
     storage.fetch_image_history(15, limit=1)
     [select] = [args[0] for method, args, _ in client.queries[-1].calls if method == "select"]
     assert "mask_version" in select and "baseline_reset" in select
+
+
+# --- named regions (issue #91, migration 0023) ----------------------------------
+
+REGIONS = {"water_gap": TOP_HALF, "rim": RIGHT_HALF, "plants": RIGHT_HALF}
+
+
+def test_regions_memory_save_keeps_regions_in_the_version():
+    storage = _memory()
+    saved = storage.save_camera_mask(15, None, REGIONS)
+    assert saved["mask"] is None and saved["regions"] == REGIONS and saved["mask_version"] == 1
+    assert storage.fetch_camera_mask_versions(15)[0]["regions"] == REGIONS
+    with pytest.raises(StorageError):
+        storage.save_camera_mask(15, None, None)
+
+
+def test_regions_supabase_save_passes_regions_only_when_set():
+    row = {"pond_id": 15, "mask": None, "regions": REGIONS, "mask_version": 1}
+    storage, client = supabase_storage(data={"rpc:save_camera_mask": [row]})
+    assert storage.save_camera_mask(15, None, REGIONS) == row
+    assert client.queries[-1].calls == [
+        ("rpc", ("save_camera_mask", {"p_pond_id": 15, "p_mask": None, "p_regions": REGIONS}), {})]
+
+
+def test_regions_supabase_reads_and_writes_the_regions_columns():
+    storage, client = supabase_storage(data={"camera_config": [], "imageTable": []})
+    storage.fetch_camera_mask(15)
+    [select] = [args[0] for method, args, _ in client.queries[-1].calls if method == "select"]
+    assert "regions" in select
+    storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u", regions={"version": 1})
+    [(_, (row,), _)] = client.queries[-1].calls
+    assert row["regions"] == {"version": 1}

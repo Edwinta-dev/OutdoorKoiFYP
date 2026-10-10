@@ -552,13 +552,16 @@ class PondProfileResponse(_Closed):
 class CameraMaskVersion(_Open):
     pond_id: int
     mask_version: int
-    mask: list[list[float]]
+    mask: Optional[list[list[float]]]
+    regions: Optional[dict[str, list[list[float]]]] = None
     created_at: Optional[str] = None
 
 
 class CameraMaskResponse(_Closed):
     pond_id: int
     mask: Optional[list[list[float]]] = Field(description="null: the whole frame is analysed.")
+    regions: Optional[dict[str, list[list[float]]]] = Field(
+        description="Named regions measured per frame (water_gap, rim, plants, optional reference); null: none.")
     mask_version: Optional[int]
     updated_at: Optional[str]
     versions: list[CameraMaskVersion]

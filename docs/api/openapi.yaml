@@ -525,7 +525,8 @@ paths:
       summary: Save a new camera water mask
       tags:
       - pond
-      description: Saves the body's polygon as the pond's next mask version.
+      description: Saves the body's polygon, and its regions or the ones in force, as the pond's next
+        mask version.
       parameters:
       - name: pond
         in: path
@@ -2855,6 +2856,19 @@ components:
           - type: 'null'
           description: 'null: the whole frame is analysed.'
           title: Mask
+        regions:
+          anyOf:
+          - additionalProperties:
+              items:
+                items:
+                  type: number
+                type: array
+              type: array
+            type: object
+          - type: 'null'
+          description: 'Named regions measured per frame (water_gap, rim, plants, optional reference);
+            null: none.'
+          title: Regions
         mask_version:
           anyOf:
           - type: integer
@@ -2873,6 +2887,7 @@ components:
       required:
       - pond_id
       - mask
+      - regions
       - mask_version
       - updated_at
       - versions
@@ -2883,15 +2898,34 @@ components:
 
         of [x, y] points as fractions (0..1) of the frame''s width and height,
 
-        origin top-left (koi/camera/mask.py). Each save is a new mask version.'
+        origin top-left (koi/camera/mask.py), and optionally its named regions
+
+        (issue #91). Each save is a new mask version.'
       properties:
         polygon:
-          items:
-            items:
-              type: number
+          anyOf:
+          - items:
+              items:
+                type: number
+              type: array
             type: array
+          - type: 'null'
+          description: The water mask; null for none (then regions must be sent).
           title: Polygon
-          type: array
+        regions:
+          anyOf:
+          - additionalProperties:
+              items:
+                items:
+                  type: number
+                type: array
+              type: array
+            type: object
+          - type: 'null'
+          default: null
+          description: 'water_gap, rim, plants and optional reference polygons. Left out: the regions
+            in force are kept. null: none.'
+          title: Regions
       required:
       - polygon
       title: CameraMaskUpdate
@@ -2906,12 +2940,26 @@ components:
           title: Mask Version
           type: integer
         mask:
-          items:
-            items:
-              type: number
+          anyOf:
+          - items:
+              items:
+                type: number
+              type: array
             type: array
+          - type: 'null'
           title: Mask
-          type: array
+        regions:
+          anyOf:
+          - additionalProperties:
+              items:
+                items:
+                  type: number
+                type: array
+              type: array
+            type: object
+          - type: 'null'
+          default: null
+          title: Regions
         created_at:
           anyOf:
           - type: string

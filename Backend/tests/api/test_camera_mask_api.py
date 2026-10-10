@@ -39,7 +39,8 @@ def assert_error(resp, status, code):
 
 def test_mask_get_without_a_saved_mask_is_the_whole_frame(client):
     body = client.get(url()).get_json()
-    assert body == {"pond_id": USER, "mask": None, "mask_version": None, "updated_at": None, "versions": []}
+    assert body == {"pond_id": USER, "mask": None, "regions": None, "mask_version": None, "updated_at": None,
+                    "versions": []}
 
 
 def test_mask_put_saves_version_1_and_get_returns_it(client):
@@ -95,3 +96,42 @@ def test_mask_of_another_pond_is_forbidden(client, app):
 def test_mask_storage_failure_is_a_503(client, app):
     app.extensions["koi_storage"].failing.add("save_camera_mask")
     assert_error(client.put(url(), json={"polygon": RIGHT_HALF}), 503, "storage_unavailable")
+
+
+# --- named regions (issue #91) -------------------------------------------------
+
+REGIONS = {"water_gap": [[0.3, 0.4], [0.45, 0.4], [0.45, 0.55], [0.3, 0.55]],
+           "rim": [[0.7, 0.0], [0.8, 0.0], [0.8, 1.0], [0.7, 1.0]],
+           "plants": [[0.0, 0.2], [0.6, 0.2], [0.6, 1.0], [0.0, 1.0]]}
+
+
+def test_mask_put_regions_without_a_mask(client):
+    body = client.put(url(), json={"polygon": None, "regions": REGIONS}).get_json()
+    assert body["mask"] is None and body["regions"] == REGIONS and body["mask_version"] == 1
+    assert body["versions"][0]["regions"] == REGIONS and body["versions"][0]["mask"] is None
+
+
+def test_mask_put_polygon_only_keeps_the_regions_and_is_a_new_version(client):
+    client.put(url(), json={"polygon": RIGHT_HALF, "regions": REGIONS})
+    body = client.put(url(), json={"polygon": TOP_HALF}).get_json()
+    assert body["mask"] == TOP_HALF and body["regions"] == REGIONS and body["mask_version"] == 2
+
+
+def test_mask_put_regions_null_removes_them(client):
+    client.put(url(), json={"polygon": RIGHT_HALF, "regions": REGIONS})
+    body = client.put(url(), json={"polygon": RIGHT_HALF, "regions": None}).get_json()
+    assert body["regions"] is None and body["mask_version"] == 2
+
+
+@pytest.mark.parametrize("body, field", [
+    ({"polygon": None}, None),
+    ({"polygon": None, "regions": None}, None),
+    ({"polygon": None, "regions": {"water_gap": REGIONS["water_gap"]}}, "regions"),
+    ({"polygon": RIGHT_HALF, "regions": {**REGIONS, "bottle": RIGHT_HALF}}, "regions"),
+    ({"polygon": RIGHT_HALF, "regions": {**REGIONS, "rim": [[0, 0], [1, 0]]}}, "regions"),
+    ({"polygon": RIGHT_HALF, "regions": [RIGHT_HALF]}, "regions"),
+])
+def test_mask_put_rejects_invalid_regions(client, app, body, field):
+    error = assert_error(client.put(url(), json=body), 400, "validation_failed")
+    assert field in [d["field"] for d in error["details"]["fields"]], error
+    assert app.extensions["koi_storage"].fetch_camera_mask(USER) is None

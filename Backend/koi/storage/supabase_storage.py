@@ -498,7 +498,8 @@ class SupabaseStorage:
     def insert_image(self, user_id: int | str, green_ratio: float, current_state: Any, image_url: str,
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
-                     gcc: Optional[float] = None, colour: Optional[dict] = None) -> None:
+                     gcc: Optional[float] = None, colour: Optional[dict] = None,
+                     regions: Optional[dict] = None) -> None:
         with _operation("insert_image"):
             row = {
                 "user_ID": user_id,
@@ -511,6 +512,7 @@ class SupabaseStorage:
                 "thumbnail_path": thumbnail_path,
                 "gcc": gcc,
                 "colour": colour,
+                "regions": regions,
             }
             self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
 
@@ -550,9 +552,14 @@ class SupabaseStorage:
             )
             return list(res.data or [])
 
-    def save_camera_mask(self, user_id: int, mask: list) -> dict:
+    def save_camera_mask(self, user_id: int, mask: Optional[list], regions: Optional[dict] = None) -> dict:
         with _operation("save_camera_mask"):
-            res = self._db().rpc("save_camera_mask", {"p_pond_id": user_id, "p_mask": mask}).execute()
+            # p_regions only when set, so a mask-only save is the same call
+            # as before migration 0023.
+            params: dict[str, Any] = {"p_pond_id": user_id, "p_mask": mask}
+            if regions is not None:
+                params["p_regions"] = regions
+            res = self._db().rpc("save_camera_mask", params).execute()
             return res.data[0]
 
     # --- device health (migration 0018) ----------------------------------
