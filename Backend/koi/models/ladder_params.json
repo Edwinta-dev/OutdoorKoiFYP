@@ -1,0 +1,21 @@
+{
+  "source": "NEA_Data_Analysis/daily_climate.csv, exploration_outputs/daily_labels.csv, and intervention_validation.csv",
+  "train_end": "2024-12-31",
+  "hot_quantile": 0.7,
+  "outlook_hot_quantile": 0.75,
+  "window_quantile": 0.16,
+  "react_rain_mm": 50.0,
+  "dry_day_rain_mm": 1.0,
+  "temperature_threshold_c": {
+    "old": 32.6,
+    "new": 31.86
+  },
+  "outlook_hot_threshold_c": 29.125,
+  "pooled_dry_rank_max": 0.1,
+  "evidence": {
+    "preempt_precision": 0.8850574712643678,
+    "window_precision": 0.859504132231405,
+    "nowcast_warning_minutes_median": 50
+  },
+  "limitations": "PREEMPT's hot_next3 target is not present in the committed daily label export; held-out precision is taken from the committed notebook validation export."
+}

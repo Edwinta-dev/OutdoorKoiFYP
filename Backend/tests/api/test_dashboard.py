@@ -83,6 +83,18 @@ def test_dashboard_scenarios_match_the_schema(name):
     api_contract.validate("Dashboard", dashboard_for(memory_storage(), pond, now))
 
 
+def test_dashboard_and_actions_route_keep_missing_weather_unassessed(scenario_app, clock):
+    app, _, client = scenario_app
+    clock(NOW)
+    dashboard = client.get("/v1/ponds/9101/dashboard")
+    response = client.get("/v1/ponds/9101/actions")
+    assert dashboard.status_code == 200
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["status"] == "insufficient_data"
+    assert {r["rule"] for r in body["rules"]} == {"REACT", "PREEMPT", "WINDOW", "NOWCAST"}
+
+
 def test_dashboard_complete_pond(scenario_app, clock):
     _, _, client = scenario_app
     r = client.get("/v1/ponds/9101/dashboard")

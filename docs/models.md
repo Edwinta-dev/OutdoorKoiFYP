@@ -57,6 +57,48 @@ The uncertainty scenarios (issue #31) are scaled onto a fitted value:
 shelter 0.4/0.6/0.8 becomes 2/3, 1 and 4/3 of the fitted factor, and the
 nitrification ranges are multiplied by the scale.
 
+## Lead-time weather action ladder (issue #26)
+
+`Backend/koi/models/ladder.py::react` checks the previous Singapore local
+calendar day at its assigned rainfall station. It fires REACT at 50 mm or
+more, only when retained station intervals cover the full day. A partial or
+absent window is `insufficient_data`; a covered day below 50 mm is an
+assessed no-action result.
+
+`Backend/koi/models/ladder.py::preempt` requires both a measured daily Tmax
+and an issued hot outlook. The observed hot thresholds are regime-aware:
+32.60 °C for the validation's older two-station cluster and 31.86 °C for its
+later full-network regime, regenerated from the committed CSV. The notebook's
+saved run reports 31.80 °C for the latter regime, a 0.06 °C difference from
+the committed snapshot. The validation reports held-out precision 0.885.
+This evidence is a network-mean series; it has not been shown to transfer to
+one pond's assigned weather station. The live API leaves PREEMPT unassessed
+until a complete station-day maximum and matching as-of outlook are
+available.
+
+`Backend/koi/models/ladder.py::window` accepts the notebook's pooled 24-hour
+forecast rank and compares it with the training-period 16th percentile
+(rank 0.10 in the committed daily export; ties mean this is not exactly 16%
+of days). It recommends a water change or scrub. The CSV's TEST rows
+reproduce held-out precision 0.8595 for a dry day (<1 mm). The runtime
+assigned regional forecast is not the same pooled network series, so the API
+reports `insufficient_data` for WINDOW until a comparable series is retained.
+
+`Backend/koi/models/ladder.py::nowcast` checks only the 2-hour issuance
+available and valid at decision time. A rain call prompts securing exposed
+feed and pausing outdoor pond work; a valid non-rain call is a no-action
+result. The validation reports a median warning of about 50 minutes. This
+is a short-fuse rain alert, not a pond-safety prediction.
+
+`Backend/tools/regenerate_ladder_params.py` derives observed heat thresholds
+and forecast cutoffs from committed climate and daily-label CSVs through
+2024-12-31 and writes `Backend/koi/models/ladder_params.json`. The compact
+daily-label CSV omits PREEMPT's future three-day heat target, so its 0.8851
+held-out precision is read from the committed notebook validation export;
+the test checks its recorded sample count and precision. Precision figures
+are validation evidence, not runtime confidence. The runtime network/station
+definition gap limits which rules can currently fire in the API.
+
 ## Salt addition and filter cleaning (issue #29)
 
 `Backend/koi/models/engine.py`: SALT increases expected TDS by nominal

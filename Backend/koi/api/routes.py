@@ -55,8 +55,8 @@ dashboard screen needs (koi/api/dashboard.py).
 """
 import dataclasses
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional, TypeVar
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal, Optional, TypeVar
 
 # Flask's Blueprint, under a name that the no-print check (grep for a
 # print call in koi/, issue #10) does not mistake for one.
@@ -74,15 +74,17 @@ from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
-from koi.models import device_health, forecast_utils, uncertainty
+from koi.models import device_health, forecast_utils, ladder, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
+from koi.models.local_time import local_date
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
 from koi.storage.base import parse_timestamp
+from koi.weather.history import local_day_window
 from koi.worker import poller
 
 bp = RouteGroup("twin", __name__)
@@ -95,6 +97,12 @@ POND_ERRORS = (401, 403, 404, 503)
 log = logging.getLogger(__name__)
 
 M = TypeVar("M", bound=BaseModel)
+
+
+class LeadTimeActions(BaseModel):
+    status: Literal["assessed", "insufficient_data"]
+    rules: list[dict[str, Any]]
+    actions: list[dict[str, Any]]
 
 
 def _storage() -> Storage:
@@ -1064,6 +1072,7 @@ def get_dashboard(user_id):
         _require_pond(user_id)
     profiles = _profiles_for(user_id)
     now = schemas.utc_now()
+    action_payload = _lead_time_actions(user_id, sources, now)
     assessments = {
         "chemistry": _storage().fetch_latest_evaluation(user_id),
         "evaporation": fail_soft(lambda: _storage().fetch_latest_evaporation_evaluation(user_id), None),
@@ -1077,8 +1086,43 @@ def get_dashboard(user_id):
         aeration=profiles.at(now).aeration if profiles is not None else None,
         hypoxia_thresholds=_registry().hypoxia_thresholds,
         now=now,
+        next_actions=action_payload["actions"],
     )
     return jsonify(dashboard.model_dump(mode="json")), 200
+
+
+def _lead_time_actions(user_id: int, sources: dict, now: datetime) -> dict:
+    """Evaluate using only retained weather visible at this decision instant."""
+    slots = sources.get("stations") or {}
+    rainfall_station = slots.get("rainfall") if isinstance(slots, dict) else None
+    day = local_date(now) - timedelta(days=1)
+    start, end = local_day_window(day)
+    rain = (_storage().fetch_rainfall_total(rainfall_station, start, end, as_of=now)
+            if rainfall_station else None)
+    nowcast_slot = slots.get("two-hr-forecast") if isinstance(slots, dict) else None
+    nowcast_row = (_storage().fetch_forecast_as_of("2hr", nowcast_slot, now, valid_at=now)
+                   if nowcast_slot else None)
+    nowcast_data = (nowcast_row or {}).get("payload") or {}
+    nowcast_value = nowcast_data.get("forecast") if isinstance(nowcast_data, dict) else None
+    nowcast_text = (nowcast_value.get("text") if isinstance(nowcast_value, dict) else nowcast_value)
+    if not isinstance(nowcast_text, str):
+        nowcast_text = None
+    # The current NEA realtime feed is sub-daily and does not provide the
+    # notebook's daily network Tmax or pooled 24-hour period rank. Preserve
+    # these as unassessed until their matching retained series is available.
+    evaluated = ladder.actions(decision_time=now, rain=rain, nowcast_text=nowcast_text,
+                               observed_tmax_c=None, temperature_regime=None, outlook_high_c=None,
+                               pooled_rank=None, dry_band_max=None)
+    return evaluated
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/actions", summary="Lead-time weather actions",
+       tag="forecasts", response=LeadTimeActions, errors=POND_ERRORS)
+def get_actions(user_id: int):
+    """Evaluate weather actions from retained observations and forecasts as of now."""
+    _require_pond(user_id)
+    now = schemas.utc_now()
+    return jsonify(_lead_time_actions(user_id, _storage().fetch_dashboard_sources(user_id), now))
 
 
 # ===================================================================
