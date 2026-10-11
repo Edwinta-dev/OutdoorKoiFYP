@@ -151,10 +151,13 @@ def test_sql_dashboard_sources_is_read_only_and_backend_only(db):
         assert db.fetchone()["ok"] is allowed, role
 
 
-def test_sql_sensor_upload_grants_unchanged(db):
-    # The sensor sketch inserts into SensorData with the publishable key.
-    db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok")
-    assert db.fetchone()["ok"] is True
+def test_sql_sensor_upload_goes_through_ingest_readings(db):
+    # Since 0026 the node writes through ingest_readings (0025), not a
+    # direct insert with the publishable key.
+    db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok, "
+               "has_function_privilege('anon', 'public.ingest_readings(text, jsonb)', 'execute') as rpc")
+    row = db.fetchone()
+    assert row["ok"] is False and row["rpc"] is True
 
 
 def test_sql_latest_reading_index_matches_the_read(db):

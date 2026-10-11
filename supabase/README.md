@@ -29,6 +29,8 @@ change belongs in a migration; do not make an unrecorded live-only change.
 | `0022_pond_calibration.sql` | Per-pond calibration versions (issue #32): the append-only `pond_calibration` table (pond, `parameter` one of `evaporation_shelter_factor`, `water_air_temperature`, `nitrification_rate_scale`; `status` `fitted` or `pending`; `value`, `lag_hours`, `fitted_at`, `effective_from`, `sample_count`, `error` and `details` as `jsonb` objects, training and evaluation intervals with evaluation after training, `method_version`), checks that a fitted row has a finite value and a pending one none; index `pond_calibration_in_force` (pond, parameter, `effective_from`, id). The reference to `UserData` is `on update cascade` with no cascading delete. The version in force at a time is the newest fitted row with `effective_from` at or before it. RLS on with no policies; table and identity sequence revoked from `anon` and `authenticated`, granted to `service_role`. Existing tables unchanged. | Applied before 2026-10-11 (date not recorded; `migration list` and a dry-run push confirmed 2026-10-11). |
 | `0023_camera_regions.sql` | Named camera regions (issue #91): `camera_regions_are_valid`, nullable `regions jsonb` on `camera_config` and `camera_mask_version` (`water_gap`, `rim`, `plants`, optional `reference`), `mask` made nullable there (a row needs a mask, regions or both), `save_camera_mask(p_pond_id, p_mask, p_regions default null)` replacing the two-argument version, and nullable `imageTable.regions` (per-region metrics). Rows with a mask and no regions behave as before; the camera's `POST /upload` is unchanged. | Applied before 2026-10-11 (date not recorded; `migration list` and a dry-run push confirmed 2026-10-11). |
 | `0024_notification_outbox.sql` | The notification outbox (issue #36): `notification_outbox` (pond, kind, severity, title, body, data, `dedupe_key`, `created_at`, `sent_at`, error) and `enqueue_notification` with a per-key cool-down. Backend only: RLS on with no policies, revoked from anon and authenticated, granted to `service_role`. Existing tables unchanged. | Applied before 2026-10-11 (date not recorded; `migration list` and a dry-run push confirmed 2026-10-11). |
+| `0025_device_tokens.sql` | Per-device tokens and token-scoped sensor ingest (issue #12): `devices` gains `device_id` (uuid, unique), `revoked_at` and the rate-limit window columns, all defaulted or nullable; `device_tokens` (sha256 hash only, `created_at`, `expires_at` for rotation overlap, `revoked_at`, `last_used_at`); owner-only `issue_device_token(p_pond_id, p_overlap default 24 hours, p_label)` and `revoke_device_token(p_token_id)`; `ingest_readings(device_token, rows)` (security definer, executable by `anon` and `service_role`): pond from the token, only `sensor_type`/`data1`, six channels with ranges, at most 32 rows and 6 calls per device per minute. Rules in the file header. The direct `SensorData` insert still works. | Not applied. Apply alone, before 0026 (see below). |
+| `0026_least_privilege.sql` | Least-privilege grants (issue #12): default privileges of `postgres` no longer grant `anon`/`authenticated` (or `PUBLIC` execute); `http` moved from `public` to `extensions`; definer and app-callable functions get `search_path=''` and qualified names; `get_bundled_dashboard_payload` and `get_pond_telemetry_history` become invoker and backend only; `get_historical_graph_payload` refuses `p_days` outside 1..366; every table, sequence and function revoked from `PUBLIC`, `anon`, `authenticated`, then the app's signed-out calls granted back. Ends the node's direct `SensorData` insert. Matrix in [docs/access-matrix.md](../docs/access-matrix.md). | Not applied. Apply only after the node uploads through `ingest_readings`. |
 
 How each file was derived, the live evidence and every known difference
 and defect are in
@@ -135,14 +137,41 @@ The same steps, without `migration repair`, for the next batch:
 The repository was unlinked again afterwards (`supabase unlink`), so local
 commands cannot reach live by accident. The next migration is `0012`.
 
+## Applying 0025 and 0026 (owner, issue #12)
+
+`supabase db push` applies every pending migration, and `0026` ends the
+sensor node's direct insert, so the two go in separately:
+
+1. In a clean worktree of this commit, delete
+   `supabase/migrations/0026_least_privilege.sql` (locally only), then
+   `supabase db push --dry-run` must list only `0025`; push.
+2. In the SQL editor: `select public.issue_device_token(<pond id>);` and put
+   the token in the node's `secrets.h` as `SENSOR_DEVICE_TOKEN`. Flash the
+   node and check new `SensorData` rows arrive and the serial log shows
+   `ingest_readings -> n stored` (`full_sketch`: `Supabase: n of m stored`).
+3. Restore the file (`git checkout -- supabase/migrations`), dry-run (only
+   `0026`), push. No backend code changed and the API, worker and camera
+   service use the secret key, so a redeploy is optional; check the
+   API's `/ready` (the worker's lease and status) and that the pond's
+   snapshot keeps updating, a new camera frame row,
+   and the app signed out (onboarding, events, species, camera history,
+   history graph).
+
+Full order and checks in
+[docs/decisions/0012-least-privilege-access.md](../docs/decisions/0012-least-privilege-access.md).
+
 ## Rules for new migrations
 
 - Name files `NNNN_short_description.sql`, using the next unused number.
 - Add nullable or defaulted columns and explicit backfills. Preserve
   unknown legacy values instead of inventing them.
-- The live default privileges grant `anon` and `authenticated` everything on
-  new tables and functions. Until issue #12 changes that, revoke explicitly
-  and enable RLS on backend-only objects, as `0002`, `0003` and `0005` do.
+- From `0026` on, new tables, sequences and functions created by `postgres`
+  grant nothing to `anon` or `authenticated` and functions are not
+  executable by `PUBLIC`; `service_role` keeps access. Grant anything the
+  app or the node needs explicitly, enable RLS on backend-only tables, and
+  update [docs/access-matrix.md](../docs/access-matrix.md). Until `0026` is
+  applied on live, keep the explicit revokes as `0002`-`0024` do. Create
+  extensions in `extensions`, never in `public`.
 - Every changed RPC needs documented inputs, outputs and access rules, and
   a test in `Backend/tests/sql`.
 - After adding a migration, run `supabase db reset`, the rehearsal and the

@@ -11,3 +11,4 @@
 #include "sleep_backoff.h"
 #include "wifi_retry.h"
 #include "camera_wake.h"
+#include "ingest_reply.h"

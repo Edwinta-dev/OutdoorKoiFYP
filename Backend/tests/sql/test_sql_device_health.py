@@ -240,8 +240,9 @@ def test_device_tables_and_functions_are_backend_only(db):
         assert not r["anon"] and not r["auth"] and r["service"]
 
 
-def test_device_migration_leaves_sensordata_insert_open_to_the_node(db):
-    """The node's anonymous insert path is unchanged: anon may still insert
-    a battery_mv or reset_reason row."""
+def test_device_sensordata_insert_is_closed_to_the_node_key(db):
+    """Since 0026 the node sends battery_mv and reset_reason rows through
+    ingest_readings (tests/sql/test_sql_least_privilege.py), not a direct
+    anonymous insert."""
     db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok")
-    assert db.fetchone()["ok"]
+    assert not db.fetchone()["ok"]

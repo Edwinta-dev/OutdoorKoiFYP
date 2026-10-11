@@ -222,6 +222,24 @@ void test_camera_wake() {
   CHECK(cameraWakeSleepSeconds(true, now, true, now + 10LL * 86400, 60, 900, 86400) == 86400);
 }
 
+// ---- Issue #12: the ingest_readings reply (ingest_reply.h) ----
+
+void test_ingest_reply() {
+  int n = -1;
+  CHECK(ingestAccepted(200, "{\"format\": \"v1\", \"accepted\": 4, \"rejected\": []}", n) && n == 4);
+  CHECK(ingestAccepted(200, "{\"accepted\":0,\"rejected\":[{\"index\":0}]}", n) && n == 0);
+  n = -1;
+  CHECK(!ingestAccepted(401, "{\"code\":\"PT401\",\"message\":\"device token not accepted\"}", n) && n == -1);
+  CHECK(!ingestAccepted(200, "{\"code\":\"x\"}", n));
+  CHECK(!ingestAccepted(200, "{\"accepted\": \"four\"}", n));
+  CHECK(!ingestAccepted(200, nullptr, n));
+  CHECK(!ingestAccepted(-1, "", n));
+  CHECK(strstr(ingestStatusText(401), "SENSOR_DEVICE_TOKEN") != nullptr);
+  CHECK(strstr(ingestStatusText(429), "rate limited") != nullptr);
+  CHECK(strcmp(ingestStatusText(-1), "no connection") == 0);
+  CHECK(strcmp(ingestStatusText(500), "upload failed") == 0);
+}
+
 int main() {
   test_median_filter();
   test_tds_sensor();
@@ -232,6 +250,7 @@ int main() {
   test_adaptive_settle();
   test_wifi_retry();
   test_camera_wake();
+  test_ingest_reply();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

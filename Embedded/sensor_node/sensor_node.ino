@@ -22,17 +22,16 @@
  * time-multiplexed, deep-sleep sensor cycle (Round-3 refactored version, this
  * Embedded/sensor_bench/sensor_bench.ino) plus esp32cam_pythonanywhere.ino's
  * bounded-retry Wi-Fi pattern (wifi_retry.h, sleep_backoff.h), driving
- * the same batched single-request Supabase upload TempSensor.ino already did
- * correctly (all 4 readings in one JSON array, one insert() call - that part
- * of the original was fine and is kept as-is).
+ * the same batched single-request upload TempSensor.ino already did
+ * correctly (all readings in one JSON array, one request).
  *
- * NOT compiled or flashed - no ESP32 toolchain in this environment, and it
- * depends on the ESPSupabase library already used by TempSensor.ino. Treat
- * this as a reviewed design to build and bench-test, not a drop-in.
- * OPEN QUESTION for whoever wires this up: TempSensor.ino's SensorData rows
- * carry no pond/device id. Check how Backend/DigitalTwin keys incoming
- * readings before deciding whether this needs a DEVICE_ID field added to the
- * payload - that's a Backend-side question, out of scope for this pass.
+ * Upload (issue #12): one POST to Supabase's /rest/v1/rpc/ingest_readings
+ * with {"device_token": SENSOR_DEVICE_TOKEN, "rows": [{"sensor_type", "data1"}]}.
+ * The database finds the pond from the token, so the payload carries no pond
+ * id; a direct insert into SensorData is refused since migration 0026.
+ *
+ * Compiled by tools/check.py; not yet flashed. Treat this as a reviewed
+ * design to build and bench-test, not a drop-in.
  */
 
 #include <Arduino.h>
@@ -40,7 +39,9 @@
 #include <OneWire.h>
 #include <WiFi.h>
 #include <Preferences.h>
-#include <ESPSupabase.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include "driver/gpio.h"
 #include "esp_sleep.h"
 
@@ -65,14 +66,14 @@ const int      N_SAMPLES        = 31;
 const int      SAMPLE_GAP_MS    = 20;
 const int      DS_MAX_TRIES     = 3;
 
-// ---- Network: WIFI_SSID, WIFI_PASS, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY ----
+// ---- Network: WIFI_SSID, WIFI_PASS, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SENSOR_DEVICE_TOKEN ----
 // Kept out of git. Copy secrets.h.example to secrets.h in this folder and fill it in.
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
 #error "sensor_node: secrets.h not found. Copy Embedded/sensor_node/secrets.h.example to secrets.h and fill in the values."
 #endif
-const char *TABLE = "SensorData";
+const char *INGEST_PATH = "/rest/v1/rpc/ingest_readings";
 const int   WIFI_MAX_ATTEMPTS         = 2;
 const unsigned long WIFI_ATTEMPT_TIMEOUT_MS = 12000;
 const unsigned long DEFAULT_SLEEP_ON_FAIL_S  = 1800;
@@ -81,7 +82,6 @@ RTC_DATA_ATTR uint32_t wifiFailStreak = 0;
 
 Preferences prefs;
 OneWire ow(DS_DATA_PIN);
-Supabase db;
 
 void allPowerOff() { for (int i = 0; i < N_POWER_PINS; i++) digitalWrite(POWER_PINS[i], LOW); }
 
@@ -181,6 +181,24 @@ bool readLux(float &luxOut) {
 }
 
 // ---- Wi-Fi: bounded attempts with timeout, using wifi_retry.h's policy ----
+// POSTs one batch to ingest_readings with the publishable key; code is the
+// HTTP status (negative when there was no connection). TLS is not
+// certificate-checked, as with the ESPSupabase upload this replaces.
+String postIngest(const String &json, int &code) {
+  WiFiClientSecure tls;
+  tls.setInsecure();
+  HTTPClient http;
+  String reply;
+  code = -1;
+  if (!http.begin(tls, String(SUPABASE_URL) + INGEST_PATH)) return reply;
+  http.addHeader("apikey", SUPABASE_PUBLISHABLE_KEY);
+  http.addHeader("Content-Type", "application/json");
+  code = http.POST(json);
+  if (code > 0) reply = http.getString();
+  http.end();
+  return reply;
+}
+
 bool connectWifi() {
   WiFi.mode(WIFI_STA);
   for (int attempt = 0; wifiShouldStartAnotherAttempt(attempt, WIFI_MAX_ATTEMPTS); attempt++) {
@@ -253,31 +271,42 @@ void setup() {
                 ph, compensationTempC, tds,
                 luxOk ? String(lux, 1).c_str() : "FAILED");
 
-  // ---- Upload: bounded Wi-Fi, single batched insert (as TempSensor.ino already did) ----
+  // ---- Upload: bounded Wi-Fi, one ingest_readings call ----
   unsigned long sleepSec = wifiFailSleepSeconds(wifiFailStreak, DEFAULT_SLEEP_ON_FAIL_S);
   if (connectWifi()) {
     wifiFailStreak = 0;
-    db.begin(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-
     // Only report a temp reading when the sensor actually produced one - never
     // upload the compensation fallback as if it were real data (that's the
     // exact bug in the original TempSensor.ino: it uploads DallasTemperature's
     // -127C DEVICE_DISCONNECTED_C sentinel as a normal reading, with nothing
     // downstream able to tell a disconnected sensor from a very cold pond).
+    // The same rule now covers lux: a failed read is left out (ingest_readings
+    // rejects the old -1 placeholder as out of range).
     JsonDocument doc;
+    doc["device_token"] = SENSOR_DEVICE_TOKEN;
+    JsonArray rows = doc["rows"].to<JsonArray>();
     if (tempOk) {
-      JsonObject tempObj = doc.createNestedObject();
+      JsonObject tempObj = rows.add<JsonObject>();
       tempObj["sensor_type"] = "temp"; tempObj["data1"] = measuredTempC;
     }
-    JsonObject tdsObj  = doc.createNestedObject(); tdsObj["sensor_type"]  = "TDS";  tdsObj["data1"]  = tds;
-    JsonObject phObj   = doc.createNestedObject(); phObj["sensor_type"]   = "pH";   phObj["data1"]   = ph;
-    JsonObject luxObj  = doc.createNestedObject(); luxObj["sensor_type"]  = "LUX";  luxObj["data1"]  = luxOk ? lux : -1.0f;
+    JsonObject tdsObj  = rows.add<JsonObject>(); tdsObj["sensor_type"]  = "TDS";  tdsObj["data1"]  = tds;
+    JsonObject phObj   = rows.add<JsonObject>(); phObj["sensor_type"]   = "pH";   phObj["data1"]   = ph;
+    if (luxOk) {
+      JsonObject luxObj = rows.add<JsonObject>();
+      luxObj["sensor_type"] = "LUX"; luxObj["data1"] = lux;
+    }
     if (!tempOk) Serial.println("NOTE: temp sensor failed this cycle - omitted from upload, not faked as 25C");
+    if (!luxOk)  Serial.println("NOTE: lux sensor failed this cycle - omitted from upload");
 
     String json; serializeJson(doc, json);
-    int code = db.insert(TABLE, json, false);
-    Serial.printf("Supabase insert -> %d\n", code);
-    db.urlQuery_reset();
+    int code = -1;
+    String reply = postIngest(json, code);
+    int accepted = 0;
+    if (ingestAccepted(code, reply.c_str(), accepted)) {
+      Serial.printf("ingest_readings -> %d stored %s\n", accepted, reply.c_str());
+    } else {
+      Serial.printf("ingest_readings -> HTTP %d: %s %s\n", code, ingestStatusText(code), reply.c_str());
+    }
     sleepSec = SLEEP_S;   // normal cadence resumes once the network is healthy
   } else {
     wifiFailStreak++;
