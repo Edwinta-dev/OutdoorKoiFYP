@@ -14,7 +14,12 @@ import '../widgets/dashboard/solar_outcome_card.dart';
 import '../widgets/dashboard/ph_outcome_card.dart';
 import '../widgets/dashboard/today_action_feed.dart';
 import '../widgets/modals/nea_full_forecast_modal.dart';
+import '../utils/pond_dashboard.dart';
 import 'detail_graph_screen.dart';
+
+/// Koi comfort range used by the temperature card and the simple view.
+const double comfortMinTempC = 24;
+const double comfortMaxTempC = 28;
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -56,6 +61,8 @@ class DashboardViewState extends ConsumerState<DashboardView> {
     final todayActions = pondDashboard?.nextActions
         .map(PondAction.fromJson)
         .toList();
+    final detailed =
+        ref.watch(displayModeProvider).value == DisplayMode.detailed;
 
     return Scaffold(
       backgroundColor: AppColors.of(
@@ -85,84 +92,88 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                     children: [
                       TodayActionFeed(actions: todayActions),
                       const SizedBox(height: AppSpace.lg),
-                      NeaWeatherRibbon(
-                        forecastData: forecastData,
-                        telemetryData: telemetryData,
-                        onOpenFullForecast: () =>
-                            showNeaFullForecastModal(context, forecastData),
-                      ),
+                      if (!detailed)
+                        SimplePondStatus(dashboard: pondDashboard)
+                      else ...[
+                        NeaWeatherRibbon(
+                          forecastData: forecastData,
+                          telemetryData: telemetryData,
+                          onOpenFullForecast: () =>
+                              showNeaFullForecastModal(context, forecastData),
+                        ),
 
-                      const SizedBox(
-                        height: 16,
-                      ), // 1. TEMPERATURE & FEED MONITOR
-                      _buildHudSectionHeader(
-                        icon: Icons.thermostat_outlined,
-                        title: 'Temperature & Feed Monitor',
-                        color: const Color.fromARGB(255, 252, 252, 252),
-                        onTap: () => _navigateToDetailGraph(
-                          'temperature',
-                          'Detailed Temperature',
+                        const SizedBox(
+                          height: 16,
+                        ), // 1. TEMPERATURE & FEED MONITOR
+                        _buildHudSectionHeader(
+                          icon: Icons.thermostat_outlined,
+                          title: 'Temperature & Feed Monitor',
+                          color: const Color.fromARGB(255, 252, 252, 252),
+                          onTap: () => _navigateToDetailGraph(
+                            'temperature',
+                            'Detailed Temperature',
+                          ),
                         ),
-                      ),
-                      TemperatureOutcomeCard(
-                        sensorData: dashboardData['raw_sensor'] ?? {},
-                        telemetryData: dashboardData['nea_telemetry'] ?? {},
-                        forecastData: dashboardData['nea_forecasts'] ?? {},
-                        targetMinTemp: 24,
-                        targetMaxTemp: 28,
-                        onTap: () => _navigateToDetailGraph(
-                          'temperature',
-                          'Detailed Temperature',
+                        TemperatureOutcomeCard(
+                          sensorData: dashboardData['raw_sensor'] ?? {},
+                          telemetryData: dashboardData['nea_telemetry'] ?? {},
+                          forecastData: dashboardData['nea_forecasts'] ?? {},
+                          targetMinTemp: comfortMinTempC,
+                          targetMaxTemp: comfortMaxTempC,
+                          onTap: () => _navigateToDetailGraph(
+                            'temperature',
+                            'Detailed Temperature',
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: AppSpace.lg),
+                        const SizedBox(height: AppSpace.lg),
 
-                      // 2. pH & BUFFER HEALTH
-                      _buildHudSectionHeader(
-                        icon: Icons.water_drop_outlined,
-                        title: 'pH & Buffer Health',
-                        color: AppColors.of(
-                          context,
-                        ).text, // Optimal green default
-                        onTap: () => _navigateToDetailGraph(
-                          'ph',
-                          'pH & Buffer Stability',
+                        // 2. pH & BUFFER HEALTH
+                        _buildHudSectionHeader(
+                          icon: Icons.water_drop_outlined,
+                          title: 'pH & Buffer Health',
+                          color: AppColors.of(
+                            context,
+                          ).text, // Optimal green default
+                          onTap: () => _navigateToDetailGraph(
+                            'ph',
+                            'pH & Buffer Stability',
+                          ),
                         ),
-                      ),
-                      PhOutcomeCard(
-                        sensorData: dashboardData['raw_sensor'] ?? {},
-                        forecastData: dashboardData['nea_forecasts'] ?? {},
-                        telemetryHistory: telemetryHistory,
-                        backendAssessment: phAssessment,
-                        onTap: () => _navigateToDetailGraph(
-                          'ph',
-                          'pH & Buffer Stability',
+                        PhOutcomeCard(
+                          sensorData: dashboardData['raw_sensor'] ?? {},
+                          forecastData: dashboardData['nea_forecasts'] ?? {},
+                          telemetryHistory: telemetryHistory,
+                          backendAssessment: phAssessment,
+                          onTap: () => _navigateToDetailGraph(
+                            'ph',
+                            'pH & Buffer Stability',
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: AppSpace.lg),
+                        const SizedBox(height: AppSpace.lg),
 
-                      // 3. ALGAL & SOLAR MONITOR
-                      _buildHudSectionHeader(
-                        icon: Icons.wb_sunny_outlined,
-                        title: 'Algal & Solar Monitor',
-                        color: AppColors.of(
-                          context,
-                        ).text, // Aquatic cyan default
-                        onTap: () => _navigateToDetailGraph(
-                          'lux',
-                          'Solar & Algae Risk Analysis',
+                        // 3. ALGAL & SOLAR MONITOR
+                        _buildHudSectionHeader(
+                          icon: Icons.wb_sunny_outlined,
+                          title: 'Algal & Solar Monitor',
+                          color: AppColors.of(
+                            context,
+                          ).text, // Aquatic cyan default
+                          onTap: () => _navigateToDetailGraph(
+                            'lux',
+                            'Solar & Algae Risk Analysis',
+                          ),
                         ),
-                      ),
-                      SolarOutcomeCard(
-                        sensorData: dashboardData['raw_sensor'] ?? {},
-                        forecastData: dashboardData['nea_forecasts'] ?? {},
-                        onTap: () => _navigateToDetailGraph(
-                          'lux',
-                          'Solar & Algae Risk Analysis',
+                        SolarOutcomeCard(
+                          sensorData: dashboardData['raw_sensor'] ?? {},
+                          forecastData: dashboardData['nea_forecasts'] ?? {},
+                          onTap: () => _navigateToDetailGraph(
+                            'lux',
+                            'Solar & Algae Risk Analysis',
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -186,4 +197,122 @@ class DashboardViewState extends ConsumerState<DashboardView> {
   // ROUND 2 FIX: _buildBorderlessInstrumentWrap was dead code - defined but
   // never called anywhere in this file. Removed rather than left to imply a
   // "Cockpit HUD wrap" is actually applied somewhere.
+}
+
+/// The simple view's status list: one plain line per pond concern, with
+/// measured values and model estimates labelled as such.
+class SimplePondStatus extends StatelessWidget {
+  /// Null when the dashboard could not be loaded.
+  final PondDashboard? dashboard;
+
+  const SimplePondStatus({super.key, required this.dashboard});
+
+  static String _reading(SensorReading r, String name) => switch (r.status) {
+    'stale' => 'The last $name reading is old; check the sensor is online.',
+    'invalid' =>
+      'The $name sensor sent a value outside its range; '
+          'check the probe.',
+    _ => 'No $name reading has arrived from the pond sensor.',
+  };
+
+  static String temperatureLine(SensorReading r) {
+    final v = r.value;
+    if (r.status != 'ok' || v == null) return _reading(r, 'water temperature');
+    final measured = 'Water is ${v.toStringAsFixed(1)} °C (measured)';
+    const range =
+        '${comfortMinTempC ~/ 1}-${comfortMaxTempC ~/ 1} °C koi comfort range';
+    if (v < comfortMinTempC) {
+      return '$measured, below the $range. Koi eat less in cool water.';
+    }
+    if (v > comfortMaxTempC) {
+      return '$measured, above the $range. Warm water holds less oxygen.';
+    }
+    return '$measured, inside the $range.';
+  }
+
+  static String phLine(SensorReading r, WaterChemistryAssessment? chemistry) {
+    final v = r.value;
+    final measured = r.status == 'ok' && v != null
+        ? 'pH is ${v.toStringAsFixed(1)} (measured).'
+        : _reading(r, 'pH');
+    if (chemistry == null) {
+      return '$measured No water chemistry estimate yet.';
+    }
+    final advisory = chemistry.advisory.isEmpty ? '' : ' ${chemistry.advisory}';
+    return '$measured Water chemistry: ${chemistry.category} '
+        '(model estimate).$advisory';
+  }
+
+  static String oxygenLine(HypoxiaFlag h) {
+    if (h.level == 'unknown' && h.explanation.isEmpty) {
+      return 'Low-oxygen risk could not be estimated yet.';
+    }
+    final level = switch (h.level) {
+      'none' => 'low',
+      'watch' => 'raised',
+      'high' => 'high',
+      _ => 'unknown',
+    };
+    final explanation = h.explanation.isEmpty ? '' : ' ${h.explanation}';
+    return 'Low-oxygen risk is $level (model estimate).$explanation';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final d = dashboard;
+    final lines = d == null
+        ? const [
+            (
+              Icons.cloud_off_outlined,
+              'Pond status could not be loaded. Pull down to try again.',
+            ),
+          ]
+        : [
+            (Icons.thermostat_outlined, temperatureLine(d.readings.waterTemp)),
+            (
+              Icons.water_drop_outlined,
+              phLine(d.readings.ph, d.assessments.chemistry),
+            ),
+            (Icons.air, oxygenLine(d.assessments.hypoxia)),
+          ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          icon: Icons.checklist_outlined,
+          title: 'POND STATUS',
+        ),
+        for (final (icon, text) in lines)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 20, color: colors.textSecondary),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: AppType.style(
+                      fontSize: AppType.body,
+                      color: colors.text,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: AppSpace.md),
+        Text(
+          'Model values, confidence, evidence and charts are in the detailed '
+          'view: turn on Detailed view in Settings.',
+          style: AppType.style(
+            fontSize: AppType.label,
+            color: colors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
 }
