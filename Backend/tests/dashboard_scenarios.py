@@ -21,6 +21,14 @@ Ponds (one per acceptance case of issue #13):
                           same created_at (the higher id wins)
   9107 UV                 fresh at 13:30, when there is no 13:00 UV report
                           today (only yesterday's 13:00 slot)
+  9108 payload v2         rows with a node sample time (issue #17): pH
+                          sampled 3 minutes ago with a flag; TDS from an
+                          old-firmware row 10 minutes ago and a cycle
+                          sampled 5 hours ago but uploaded 1 minute ago
+                          (the older sample must not win); water
+                          temperature only from that late cycle (stale by
+                          its sample time though just stored); no light
+                          row (the failed read was left out)
 """
 from __future__ import annotations
 
@@ -52,15 +60,20 @@ PONDS: dict[int, Any] = {
     9106: {"air-temperature": "S24", "rainfall": "S24", "wind-speed": "S24", "two-hr-forecast": "Changi",
            "twenty-four-hr-forecast": "REG_EAST"},
     9107: CENTRAL,
+    9108: CENTRAL,
 }
 
 
 def _readings() -> list[dict]:
     rows: list[dict] = []
 
-    def add(pond: int, n: int, sensor: str, value: float, created_at: str) -> None:
-        rows.append({"id": pond * 100 + n, "userID": pond, "sensor_type": sensor, "data1": value,
-                     "created_at": created_at})
+    def add(pond: int, n: int, sensor: str, value: float, created_at: str, sampled_at: str | None = None,
+            flags: int | None = None) -> None:
+        row = {"id": pond * 100 + n, "userID": pond, "sensor_type": sensor, "data1": value,
+               "created_at": created_at}
+        if sampled_at is not None or flags is not None:
+            row.update(sampled_at=sampled_at, flags=flags)
+        rows.append(row)
 
     # 9101: an older cycle, then the current one.
     for n, (sensor, value) in enumerate([("pH", 7.2), ("TDS", 200.0), ("temp", 28.5), ("LUX", 9000.0)], 1):
@@ -78,6 +91,10 @@ def _readings() -> list[dict]:
         add(9105, n, sensor, value, ago(days=3))
     add(9106, 1, "pH", 6.75, ago(minutes=2))
     add(9106, 2, "pH", 6.5, ago(minutes=2))  # same instant, higher id: this one
+    add(9108, 1, "TDS", 205.0, ago(minutes=10))  # old firmware: no sample time
+    add(9108, 2, "TDS", 260.0, ago(minutes=1), sampled_at=ago(hours=5), flags=0)  # late cycle
+    add(9108, 3, "temp", 31.0, ago(minutes=1), sampled_at=ago(hours=2), flags=0)
+    add(9108, 4, "pH", 7.4, ago(minutes=1), sampled_at=ago(minutes=3), flags=4)
     for n, (sensor, value) in enumerate([("TDS", 300.0), ("temp", 30.5), ("LUX", 5000.0)], 3):
         add(9106, n, sensor, value, ago(minutes=2))
     for n, (sensor, value) in enumerate([("pH", 7.5), ("TDS", 230.0), ("temp", 31.0), ("LUX", 40000.0)], 1):
@@ -172,6 +189,7 @@ SCENARIOS: list[tuple[str, int, datetime]] = [
     ("second_pond", 9106, NOW),
     ("daylight_missing_uv", 9107, NOW + timedelta(hours=1)),
     ("night", 9107, NOW + timedelta(hours=10)),
+    ("payload_v2", 9108, NOW),
 ]
 
 
@@ -192,9 +210,10 @@ def seed_sql(cur: Any) -> None:
                     "values (%s, %s, %s, %s)",
                     (u["userID"], u["volume"], u["biomass"], json.dumps(u["ClosestStations"])))
     for r in data["SensorData"]:
-        cur.execute('insert into public."SensorData" (id, created_at, sensor_type, data1, "userID") '
-                    "values (%s, %s, %s, %s, %s)",
-                    (r["id"], r["created_at"], r["sensor_type"], r["data1"], r["userID"]))
+        cur.execute('insert into public."SensorData" (id, created_at, sensor_type, data1, "userID", sampled_at, '
+                    "flags) values (%s, %s, %s, %s, %s, %s, %s)",
+                    (r["id"], r["created_at"], r["sensor_type"], r["data1"], r["userID"], r.get("sampled_at"),
+                     r.get("flags")))
     for t in data["weather_telemetry"]:
         cur.execute("insert into public.weather_telemetry (station_id, metric_type, data, source_times, valid_start, "
                     "valid_end, updated_at) values (%s, %s, %s, %s, %s, %s, %s)",

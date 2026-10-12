@@ -20,12 +20,13 @@
  *
  * Library: OneWire by Paul Stoffregen (v2.3.8+ for ESP32 core 3.x). Everything else is built in.
  *
- * Upload: after all five sensors are powered off, the node connects to WiFi, inserts the
- * readings into the SensorData table (same long format as the original firmware: one row
- * per sensor, {"sensor_type": ..., "data1": ...}), switches WiFi off, then sleeps.
- * No sensor is ever powered while WiFi transmits.
+ * Upload: after all five sensors are powered off, the node connects to WiFi and sends the
+ * readings to Supabase's ingest_readings RPC (issue #12) in the same long format as the
+ * original firmware (one row per sensor, {"sensor_type": ..., "data1": ...}), with the
+ * node's SENSOR_DEVICE_TOKEN; the database stores them under the token's pond. It then
+ * switches WiFi off and sleeps. No sensor is ever powered while WiFi transmits.
  *
- * Libraries: ESPSupabase (jhagas) and ArduinoJson v7, as in the original upload sketch.
+ * Libraries: ArduinoJson v7; HTTPClient and WiFiClientSecure from the ESP32 core.
  *
  * Serial Monitor @ 115200, line ending "Newline".
  * After each cycle there is a 3 s window: type any command to enter SERVICE MODE
@@ -51,12 +52,14 @@
 #include "esp_sleep.h"
 #include <WiFi.h>
 #include <ArduinoJson.h>
-#include <ESPSupabase.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <ingest_reply.h>   // koi_sensing library
 
 // =====================================================================
 // WiFi / Supabase (from the original upload sketch)
 // =====================================================================
-// Network: WIFI_SSID, WIFI_PASS, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY.
+// Network: WIFI_SSID, WIFI_PASS, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SENSOR_DEVICE_TOKEN.
 // Kept out of git. Copy secrets.h.example to secrets.h in this folder and fill it in.
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -64,20 +67,16 @@
 #error "full_sketch: secrets.h not found. Copy Embedded/full_sketch/secrets.h.example to secrets.h and fill in the values."
 #endif
 
-String table        = "SensorData";
-const bool UPSERT   = false;
-
-// Every row carries the user id. Column name must match SensorData exactly (case-sensitive).
-const char *COL_USER_ID = "userID";
-const int   USER_ID     = 455;
+// The pond is not sent: ingest_readings takes it from the device token (it was
+// userID 455 when the sketch inserted into SensorData directly).
+const char *INGEST_PATH = "/rest/v1/rpc/ingest_readings";
 
 // Extra rows. GY-33 goes up as four new sensor_type values (GY33_R/G/B/C) in data1,
-// so no new columns are needed. Turn on once the backend expects them.
+// so no new columns are needed. Turn on once the backend expects them: until then
+// ingest_readings rejects them as unknown_sensor_type (the other rows are stored).
 const bool UPLOAD_GY33 = false;
 
 const uint32_t WIFI_TIMEOUT_MS = 15000;
-
-Supabase db;
 
 // =====================================================================
 // Pins
@@ -572,7 +571,6 @@ void wifiOff() {
 // instead of being uploaded as a wrong number.
 void addRow(JsonArray &rows, const char *type, float value) {
   JsonObject o = rows.add<JsonObject>();
-  o[COL_USER_ID]   = USER_ID;
   o["sensor_type"] = type;
   o["data1"]       = value;
 }
@@ -581,7 +579,8 @@ bool uploadReadings() {
   allPowerOff();                                     // guarantee: no sensor on during TX
 
   JsonDocument doc;
-  JsonArray rows = doc.to<JsonArray>();
+  doc["device_token"] = SENSOR_DEVICE_TOKEN;
+  JsonArray rows = doc["rows"].to<JsonArray>();
 
   if (!r_tempFallback)        addRow(rows, "temp", r_tempC);
   else                        Serial.println("  skip temp: sensor read failed");
@@ -607,13 +606,25 @@ bool uploadReadings() {
   serializeJson(doc, json);
 
   if (!ensureWifi()) return false;
-  db.begin(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  int code = db.insert(table, json, UPSERT);
-  db.urlQuery_reset();
+  // TLS is not certificate-checked, as with the ESPSupabase upload this replaces.
+  WiFiClientSecure tls;
+  tls.setInsecure();
+  HTTPClient http;
+  int code = -1;
+  String reply;
+  if (http.begin(tls, String(SUPABASE_URL) + INGEST_PATH)) {
+    http.addHeader("apikey", SUPABASE_PUBLISHABLE_KEY);
+    http.addHeader("Content-Type", "application/json");
+    code = http.POST(json);
+    if (code > 0) reply = http.getString();
+    http.end();
+  }
 
-  bool ok = (code >= 200 && code < 300);
-  Serial.printf("  Supabase: %s (HTTP %d) %s\n", ok ? "uploaded" : "upload FAILED", code, json.c_str());
+  int accepted = 0;
+  bool ok = ingestAccepted(code, reply.c_str(), accepted);
+  if (ok) Serial.printf("  Supabase: %d of %u stored %s\n", accepted, (unsigned)rows.size(), reply.c_str());
+  else    Serial.printf("  Supabase: upload FAILED (HTTP %d: %s) %s\n", code, ingestStatusText(code), reply.c_str());
   return ok;
 }
 

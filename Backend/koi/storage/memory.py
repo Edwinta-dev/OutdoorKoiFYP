@@ -109,9 +109,11 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "id", "created_at", "userID", "event_type", "event_timestamp", "volume_percentage",
         "volume_litres", "food_grams", "protein_percentage", "algae_method", "event_id", "salt_grams", "notes"),
     "daily_sensor_averages": ("id", "userid", "sensor_type", "avg_value", "min_value", "max_value",
-                              "record_date"),
-    # The sensor node's readings, read by fetch_dashboard_sources.
-    "SensorData": ("id", "created_at", "sensor_type", "data1", "userID"),
+                              "record_date", "sample_count", "sample_time_count"),
+    # The sensor node's readings, read by fetch_dashboard_sources; the
+    # payload v2 columns (migration 0027) are null on older rows.
+    "SensorData": ("id", "created_at", "sensor_type", "data1", "userID", "device_id", "boot_id", "cycle_seq",
+                   "sampled_at", "flags", "reset_reason", "battery_mv"),
     "pond_profile": PROFILE_COLUMNS,
     # Supabase Auth's session table, read by auth_session_active (0007).
     "auth.sessions": ("id", "user_id", "not_after"),
@@ -400,8 +402,7 @@ class MemoryStorage:
         rows.sort(key=self._reading_key)
         return {"cursor": cursor["watermark"] if cursor is not None else None,
                 "scan_from": scan_from.isoformat() if scan_from is not None else None,
-                "rows": [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
-                          "created_at": r["created_at"]} for r in rows[:limit]]}
+                "rows": [self._sensor_row(r) for r in rows[:limit]]}
 
     def fetch_ingested_sensor_rows(self, user_id: int, sensor_types: tuple[str, ...], after: Optional[datetime],
                                    until: datetime) -> list[dict]:
@@ -414,8 +415,15 @@ class MemoryStorage:
                     if int(r["id"]) in times and r.get("sensor_type") in sensor_types
                     and (after is None or times[int(r["id"])] > after) and times[int(r["id"])] <= until]
         rows.sort(key=lambda item: (item[0], int(item[1]["id"])))
-        return [{"id": r["id"], "sensor_type": r["sensor_type"], "value": r.get("data1"),
-                 "created_at": r["created_at"]} for _, r in rows]
+        return [self._sensor_row(r) for _, r in rows]
+
+    @staticmethod
+    def _sensor_row(row: dict) -> dict:
+        """A SensorData row as sensor_ingest_pending and
+        sensor_ingest_history return it (migration 0027 added sampled_at
+        and flags)."""
+        return {"id": row["id"], "sensor_type": row["sensor_type"], "value": row.get("data1"),
+                "created_at": row["created_at"], "sampled_at": row.get("sampled_at"), "flags": row.get("flags")}
 
     # --- interventions ------------------------------------------------
     def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
@@ -865,9 +873,10 @@ class MemoryStorage:
             if sensor_type is None:
                 continue
             current = newest.get(sensor_type)
-            if current is None or self._reading_key(row) > self._reading_key(current):
+            if current is None or self._latest_key(row) > self._latest_key(current):
                 newest[sensor_type] = row
-        readings = [{"id": r["id"], "sensor_type": t, "value": r.get("data1"), "created_at": r["created_at"]}
+        readings = [{"id": r["id"], "sensor_type": t, "value": r.get("data1"), "created_at": r["created_at"],
+                     "sampled_at": r.get("sampled_at"), "flags": r.get("flags")}
                     for t, r in sorted(newest.items())]
 
         assigned = {v for k, v in slots.items() if k in ("air-temperature", "rainfall", "wind-speed")}
@@ -896,8 +905,14 @@ class MemoryStorage:
 
     @staticmethod
     def _reading_key(row: dict) -> tuple[datetime, int]:
-        """Newest SensorData row: created_at, then id (the SQL tie breaker)."""
+        """SensorData insert order: created_at, then id (the SQL tie breaker)."""
         return parse_timestamp(row["created_at"]), int(row["id"])
+
+    @staticmethod
+    def _latest_key(row: dict) -> tuple[datetime, int]:
+        """Newest SensorData reading (migration 0027): its reading time,
+        sampled_at when the node sent one, else created_at, then id."""
+        return parse_timestamp(row.get("sampled_at") or row["created_at"]), int(row["id"])
 
     def fetch_recent_feeding_events(self, user_id: int, limit: int = 30) -> list[dict]:
         self._check("fetch_recent_feeding_events")

@@ -11,8 +11,11 @@ docs/api/README.md. In short:
   for a light sensor that did not answer, a non-number) or a station
   that is not assigned gives value null and a status saying which.
 - Every reading carries its own row's times. SensorData.created_at is
-  the insert time; the sample time is unknown until the node sends one
-  (issue #17), so freshness is judged from the insert time.
+  the insert time; sampled_at (payload v2, issue #17) is when the probe
+  was read, null on rows from older firmware or from a node whose clock
+  was not set. The newest reading and its freshness go by the reading
+  time: sampled_at when present, else created_at. A late upload of an
+  old sample is therefore neither "newest" nor "fresh".
 - A weather value comes only from the cache row of the station assigned
   for that metric, with the metric present in the row.
 - Forecast issue time (source_issued_at), validity window and cache
@@ -40,7 +43,7 @@ from koi.storage.base import parse_timestamp
 from koi.weather.nea import SINGAPORE
 from koi.weather.nea import parse_time as _parse_nea_time
 
-# How long after its insert time a sensor reading counts as fresh. The
+# How long after its reading time a sensor reading counts as fresh. The
 # node reports every 15 s when awake and the poller runs every 15 min, so
 # 30 min without a row means the node has stopped reporting.
 READING_FRESH_FOR = timedelta(minutes=30)
@@ -122,16 +125,26 @@ def _forecast_text(value: Any) -> tuple[Optional[str], Optional[str]]:
 def _reading(channel: str, rows: list[dict], now: datetime) -> r.SensorReading:
     spellings, unit = CHANNELS[channel]
     candidates = [row for row in rows if row.get("sensor_type") in spellings]
-    base: dict[str, Any] = {"channel": channel, "unit": unit, "sample_time": None, "sample_time_basis": "unknown"}
+    base: dict[str, Any] = {"channel": channel, "unit": unit, "sample_time": None, "sample_time_basis": "unknown",
+                            "flags": None}
     if not candidates:
         return r.SensorReading.model_validate({
             **base, "status": "missing", "value": None, "sensor_type": None, "source_row_id": None,
             "ingested_at": None, "fresh_until": None, "note": "No reading has been stored."})
-    row = max(candidates, key=lambda c: (_db_time(c.get("created_at")) or datetime.min.replace(tzinfo=now.tzinfo),
+
+    def reading_time(c: dict) -> Optional[datetime]:
+        return _db_time(c.get("sampled_at")) or _db_time(c.get("created_at"))
+
+    row = max(candidates, key=lambda c: (reading_time(c) or datetime.min.replace(tzinfo=now.tzinfo),
                                          int(c.get("id") or 0)))
     ingested = _db_time(row.get("created_at"))
-    fresh_until = ingested + READING_FRESH_FOR if ingested is not None else None
+    sampled = _db_time(row.get("sampled_at"))
+    reference = sampled or ingested
+    fresh_until = reference + READING_FRESH_FOR if reference is not None else None
+    flags = row.get("flags")
     base.update(sensor_type=row.get("sensor_type"), source_row_id=row.get("id"), ingested_at=ingested,
+                sample_time=sampled, sample_time_basis="sample" if sampled is not None else "unknown",
+                flags=flags if isinstance(flags, int) and not isinstance(flags, bool) else None,
                 fresh_until=fresh_until)
     value = _number(row.get("value"))
     if value is None or (channel == "lux" and value < 0):

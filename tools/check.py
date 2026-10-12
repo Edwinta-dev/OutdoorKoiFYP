@@ -56,10 +56,20 @@ LOCAL_DB_CONTAINER = "supabase_db_OutdoorKoiFYP"
 
 # Sketch folder -> arduino-cli board (FQBN).
 SKETCHES = [
-    ("sensor_bench", "esp32:esp32:esp32"),
     ("sensor_node", "esp32:esp32:esp32"),
     ("camera_node", "esp32:esp32:esp32cam"),
 ]
+# Extra builds of a sketch with a preprocessor flag: (sketch, FQBN, macro).
+# sensor_node's service mode (calibration and bench commands, issue #17)
+# replaced the retired sensor_bench sketch.
+SKETCH_VARIANTS = [
+    ("sensor_node", "esp32:esp32:esp32", "KOI_SERVICE_MODE"),
+]
+
+
+def compile_targets() -> list[tuple[str, str, Optional[str]]]:
+    """Every firmware compile: (sketch, FQBN, macro or None)."""
+    return [(s, fqbn, None) for s, fqbn in SKETCHES] + list(SKETCH_VARIANTS)
 
 
 # Committed-credential scan: (label, pattern). Written so that this file
@@ -270,8 +280,9 @@ def check_firmware(r: Runner) -> None:
 
     cli = shutil.which("arduino-cli")
     cores = installed_cores(cli) if cli else set()
-    for sketch, fqbn in SKETCHES:
-        name = f"firmware: compile {sketch} ({fqbn})"
+    for sketch, fqbn, macro in compile_targets():
+        label = f"{sketch} -D{macro}" if macro else sketch
+        name = f"firmware: compile {label} ({fqbn})"
         if not cli:
             r.skip(name, "arduino-cli")
             continue
@@ -279,9 +290,10 @@ def check_firmware(r: Runner) -> None:
         if core not in cores:
             r.skip(name, f"arduino-cli core {core}")
             continue
-        r.run(name, [cli, "compile", "--fqbn", fqbn,
+        extra = ["--build-property", f"compiler.cpp.extra_flags=-D{macro}"] if macro else []
+        r.run(name, [cli, "compile", "--fqbn", fqbn, *extra,
                      "--libraries", str(EMBEDDED / "libraries"),
-                     "--build-path", str(BUILD / "arduino" / sketch),
+                     "--build-path", str(BUILD / "arduino" / (f"{sketch}-{macro}" if macro else sketch)),
                      str(stage_sketch(sketch))], ROOT)
 
 

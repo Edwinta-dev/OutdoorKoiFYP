@@ -120,10 +120,12 @@ def test_provenance_shape_check_refuses_bad_values(db, table, column, value):
 
 
 @pytest.mark.parametrize("table", TABLES)
-def test_provenance_table_grants_are_unchanged(db, table):
+def test_provenance_tables_are_backend_only(db, table):
+    # 0016 left the grants as they were; 0026 (issue #12) closed the
+    # evaluation tables to the app's roles.
     db.execute("select grantee, string_agg(privilege_type, ',' order by privilege_type) as p "
                "from information_schema.role_table_grants where table_schema = 'public' and table_name = %s "
                "and grantee in ('anon', 'authenticated', 'service_role') group by grantee", (table,))
     grants = {r["grantee"]: r["p"] for r in db.fetchall()}
     full = "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-    assert grants == {"anon": full, "authenticated": full, "service_role": full}
+    assert grants == {"service_role": full}

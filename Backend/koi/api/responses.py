@@ -601,11 +601,17 @@ class SensorReading(_Closed):
     source_row_id: Optional[int] = Field(description="SensorData.id of the row.")
     ingested_at: Optional[datetime] = Field(
         description="SensorData.created_at: when the database stored the row, not when the probe sampled.")
-    sample_time: Optional[datetime] = Field(description="When the probe sampled. Always null until the node "
-                                                        "sends a sample time (issue #17).")
-    sample_time_basis: Literal["unknown"] = Field(description="unknown: the node sends no sample time yet.")
-    fresh_until: Optional[datetime] = Field(description="ingested_at plus fresh_for_seconds; status turns stale "
-                                                        "after it.")
+    sample_time: Optional[datetime] = Field(description="SensorData.sampled_at: when the probe sampled, by the "
+                                                        "node's SNTP-set clock. Null when the row has none (older "
+                                                        "firmware, or the node's clock was not set).")
+    sample_time_basis: Literal["sample", "unknown"] = Field(
+        description="sample: sample_time is the node's sample time; unknown: the row has no sample time, so "
+                    "ingested_at is the only time known.")
+    flags: Optional[int] = Field(description="SensorData.flags set by the node: 1 clock not set, 2 pH/TDS "
+                                             "compensated at 25 C because the temperature read failed, 4 pH not "
+                                             "calibrated, 8 light sensor saturated. Null on older rows.")
+    fresh_until: Optional[datetime] = Field(description="sample_time (or ingested_at when there is none) plus "
+                                                        "fresh_for_seconds; status turns stale after it.")
     note: Optional[str] = None
 
 
@@ -782,7 +788,8 @@ class ChannelHealth(_Closed):
         "Time of the newest usable reading the model applied: the last usable sample, not when the node was last "
         "seen."))
     time_basis: Optional[Literal["ingestion", "sample"]] = Field(description=(
-        "ingestion: timed when the database stored it (no node sample time yet, issue #17)."))
+        "ingestion: timed when the database stored it (the row has no node sample time); sample: the node's "
+        "sample time."))
     age_seconds: Optional[int]
     status: Literal["fresh", "late", "old", "never_seen"] = Field(description=(
         "fresh: within 2 expected intervals; late: within 3; old: beyond 3; never_seen: no reading ever."))

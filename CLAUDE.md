@@ -4,9 +4,9 @@ Read README.md for the project, layout and run commands. This file is only
 the working rules for agents.
 
 ## Before you commit
-- Run `python tools/check.py all`. Everything must be PASS. Flutter is
-  installed here; arduino-cli is, but without the esp32 core, so the three
-  firmware compile SKIPs are expected; CI runs them with --strict. After
+- Run `python tools/check.py all`. Everything must be PASS, with no SKIPs:
+  Flutter and arduino-cli with the esp32 core are installed here, so the
+  three firmware compiles run (CI runs them with --strict). After
   pushing, confirm with `gh run list`.
 - One issue per commit (or a small series), message `issue #N: <summary>`.
 - Mobile goldens are Linux-only and `check.py` skips them on Windows: after

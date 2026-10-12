@@ -53,7 +53,7 @@ def test_firmware_without_tools_skips_every_step(monkeypatch):
     monkeypatch.setattr(check.shutil, "which", lambda name: None)
     r = check.Runner(strict=False)
     check.check_firmware(r)
-    assert [x.status for x in r.results] == ["SKIP"] * (1 + len(check.SKETCHES))
+    assert [x.status for x in r.results] == ["SKIP"] * (1 + len(check.compile_targets()))
     assert r.results[0].detail == "g++ not found"
     assert all(x.detail == "arduino-cli not found" for x in r.results[1:])
 
@@ -245,7 +245,7 @@ def test_firmware_skips_compile_when_board_core_missing(monkeypatch):
     r = check.Runner(strict=False)
     check.check_firmware(r)
     compiles = r.results[1:]
-    assert [x.status for x in compiles] == ["SKIP"] * len(check.SKETCHES)
+    assert [x.status for x in compiles] == ["SKIP"] * len(check.compile_targets())
     assert compiles[0].detail == "arduino-cli core esp32:esp32 not found"
     assert not r.failed
 
@@ -292,3 +292,36 @@ def test_backend_runs_the_backtest_against_its_baseline(monkeypatch):
     assert cwd == check.BACKEND
     out = "WORSE  demo_pond.x: 2\n10 of 11 metrics within baseline version 3, 1 worse\n"
     assert summarise(out) == "10 of 11 metrics within baseline version 3"
+
+
+def test_firmware_compiles_sensor_node_with_and_without_service_mode(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(self, name, cmd, cwd, summarise=None):
+        calls.append((name, cmd))
+        return check.Result(name, "PASS")
+
+    monkeypatch.setattr(check.shutil, "which",
+                        lambda name: "arduino-cli" if name == "arduino-cli" else None)
+    monkeypatch.setattr(check, "installed_cores", lambda cli: {"esp32:esp32"})
+    monkeypatch.setattr(check, "stage_sketch", lambda sketch: tmp_path / sketch)
+    monkeypatch.setattr(check.Runner, "run", fake_run)
+    check.check_firmware(check.Runner(strict=False))
+    names = [n for n, _ in calls]
+    assert names == ["firmware: compile sensor_node (esp32:esp32:esp32)",
+                     "firmware: compile camera_node (esp32:esp32:esp32cam)",
+                     "firmware: compile sensor_node -DKOI_SERVICE_MODE (esp32:esp32:esp32)"]
+    service = calls[2][1]
+    assert "compiler.cpp.extra_flags=-DKOI_SERVICE_MODE" in service
+    assert service[service.index("--build-path") + 1].endswith("sensor_node-KOI_SERVICE_MODE")
+    assert "--build-property" not in calls[0][1]
+
+
+def test_sensor_bench_is_retired_into_service_mode():
+    assert not (check.EMBEDDED / "sensor_bench").exists()
+    ino = (check.EMBEDDED / "sensor_node" / "sensor_node.ino").read_text(encoding="utf-8")
+    assert "#ifdef KOI_SERVICE_MODE" in ino
+    for test in ('cmd.startsWith("cal")', 'cmd == "show"', 'cmd == "clear"', 'cmd.startsWith("tdscal ")',
+                 'cmd == "temp"', 'cmd == "settle ph"', 'cmd == "settle tds"', 'cmd == "scan"',
+                 'cmd == "sample"', 'cmd == "run"'):
+        assert test in ino, test

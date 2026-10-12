@@ -190,6 +190,25 @@ def test_dashboard_old_rows():
     assert "2026-10-02" not in [d["date"] for d in body["forecast"]["outlook"]]
 
 
+def test_dashboard_payload_v2_reading_times():
+    pond, now = SCENARIO["payload_v2"]
+    readings = dashboard_for(memory_storage(), pond, now)["readings"]
+    ph = readings["ph"]
+    assert (ph["status"], ph["value"], ph["sample_time_basis"], ph["flags"]) == ("ok", 7.4, "sample", 4)
+    assert ph["sample_time"] == "2026-10-03T04:27:00Z" and ph["ingested_at"] == "2026-10-03T04:29:00Z"
+    assert ph["fresh_until"] == "2026-10-03T04:57:00Z"
+    # The cycle sampled 5 hours ago arrived last but is not the newest reading.
+    tds = readings["tds"]
+    assert (tds["value"], tds["source_row_id"], tds["sample_time_basis"], tds["sample_time"]) == (
+        205.0, 910801, "unknown", None)
+    # Stored a minute ago, sampled two hours ago: stale by its sample time.
+    temp = readings["water_temp"]
+    assert (temp["status"], temp["value"], temp["sample_time"]) == ("stale", 31.0, "2026-10-03T02:30:00Z")
+    assert temp["fresh_until"] == "2026-10-03T03:00:00Z"
+    lux = readings["lux"]
+    assert (lux["status"], lux["value"], lux["flags"]) == ("missing", None, None)
+
+
 def test_dashboard_two_ponds_do_not_mix():
     storage = memory_storage()
     first = dashboard_for(storage, 9101, NOW)

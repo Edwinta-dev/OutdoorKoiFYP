@@ -141,8 +141,9 @@ known, and `status` says why. No value is ever substituted.
 | `raw_sensor.temp` | `readings.water_temp.value` (degC) | `temp` (DS18B20, water) |
 | `raw_sensor.LUX` | `readings.lux.value` (lux) | `LUX`, or `lux`; the newer row wins |
 | (none) | `readings.*.ingested_at` | That row's `SensorData.created_at`, the insert time |
-| (none) | `readings.*.sample_time`, `sample_time_basis` | Always null and `unknown` until the node sends a sample time (#17) |
-| (none) | `readings.*.fresh_until`, `status` | `ingested_at` + 30 min; `ok`, `stale` after it, `missing` with no row, `invalid` for a non-number or the light sensor's -1 |
+| (none) | `readings.*.sample_time`, `sample_time_basis` | That row's `SensorData.sampled_at` and `sample`; null and `unknown` when the row has none (older firmware, or the node's clock was not set; migration 0027) |
+| (none) | `readings.*.flags` | That row's `SensorData.flags` (1 clock not set, 2 pH/TDS compensated at 25 C, 4 pH uncalibrated, 8 light saturated); null on older rows |
+| (none) | `readings.*.fresh_until`, `status` | `sample_time` (else `ingested_at`) + 30 min; `ok`, `stale` after it, `missing` with no row, `invalid` for a non-number or the light sensor's -1 |
 | (none) | `readings.*.source_row_id` | `SensorData.id` |
 | `telemetry_history` | (not in `/v1`) | See "Which SQL it wraps" |
 | `nea_telemetry.air_temp.value` | `weather.air_temperature.value` (degC) | Station `ClosestStations."air-temperature"`, its `weather_telemetry` row with `metric_type` `realtime_sensor`, key `air_temperature` |
@@ -169,12 +170,15 @@ caches.
 
 ### Latest row and tie breaker
 
-The newest row of a channel is the one with the latest `created_at`. When
-two rows have the same `created_at`, the higher `id` wins. SQL
-(`order by created_at desc, id desc`) and MemoryStorage apply the same
-rule. Migration 0013 adds the index `idx_sensordata_user_type_latest`
-(`userID`, `sensor_type`, `created_at desc`, `id desc`) in that order, so
-the read does not scan the pond's rows.
+The newest row of a channel is the one with the latest reading time:
+`sampled_at` when the row has one, else `created_at` (migration 0027).
+When two rows have the same reading time, the higher `id` wins. SQL
+(`order by coalesce(sampled_at, created_at) desc, id desc`) and
+MemoryStorage apply the same rule, so a cycle uploaded hours late never
+replaces a newer reading. Migration 0027 adds the index
+`idx_sensordata_pond_type_effective` (`userID`, `sensor_type`, reading
+time desc, `id desc`) in that order, so the read does not scan the
+pond's rows.
 
 ## GET /v1/ponds/{pond}/devices and data_confidence
 
@@ -186,8 +190,8 @@ the read does not scan the pond's rows.
   channel's `last_sample_at` is the time of its newest usable reading,
   so a node that reconnects with old buffered readings shows as seen
   while its channels stay `old`. `clock` says how far those sample
-  times can be trusted; until the node sends sample times (issue #17)
-  they are receipt times.
+  times can be trusted; rows without a node sample time (older firmware,
+  or a node whose clock was not set; issue #17) are timed by receipt.
 - `expected_interval_seconds` comes from the `devices` row when set
   (`interval_source` `device`), else the backend's sensor cadence
   (`default`) or the camera's last wake (`schedule`).

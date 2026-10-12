@@ -199,12 +199,16 @@ class HistoryStorage(ReplayStorage):
 
     def fetch_dashboard_payload(self, user_id: int) -> Optional[dict]:
         at = self._now()
+        # Newest by reading time (sampled_at, else created_at), then id, as
+        # migration 0027 orders raw_sensor; a row exists once created.
+        def reading_key(row: dict) -> tuple:
+            return parse_timestamp(row.get("sampled_at") or row["created_at"]), int(row["id"])
+
         latest: dict[str, dict] = {}
         for row in self._tables.get("SensorData", []):
             created = parse_timestamp(row["created_at"])
             current = latest.get(row["sensor_type"])
-            if created <= at and (current is None or (created, int(row["id"])) >
-                                  (parse_timestamp(current["created_at"]), int(current["id"]))):
+            if created <= at and (current is None or reading_key(row) > reading_key(current)):
                 latest[row["sensor_type"]] = row
         weather, missing = weather_payload_as_of(self._storage, self._stations, at, self._time_zone)
         self.weather.append((at, missing))

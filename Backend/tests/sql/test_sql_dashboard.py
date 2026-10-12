@@ -151,10 +151,13 @@ def test_sql_dashboard_sources_is_read_only_and_backend_only(db):
         assert db.fetchone()["ok"] is allowed, role
 
 
-def test_sql_sensor_upload_grants_unchanged(db):
-    # The sensor sketch inserts into SensorData with the publishable key.
-    db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok")
-    assert db.fetchone()["ok"] is True
+def test_sql_sensor_upload_goes_through_ingest_readings(db):
+    # Since 0026 the node writes through ingest_readings (0025), not a
+    # direct insert with the publishable key.
+    db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok, "
+               "has_function_privilege('anon', 'public.ingest_readings(text, jsonb)', 'execute') as rpc")
+    row = db.fetchone()
+    assert row["ok"] is False and row["rpc"] is True
 
 
 def test_sql_latest_reading_index_matches_the_read(db):
@@ -167,9 +170,14 @@ def test_sql_latest_reading_index_matches_the_read(db):
 
 
 def test_sql_latest_reading_read_can_use_the_index(db):
+    # Since 0027 the newest reading is chosen by reading time
+    # (coalesce(sampled_at, created_at)), then id. Several indexes start
+    # with "userID", so sorting is disabled too: the plan must take the
+    # order from an index.
     db.execute("set local enable_seqscan = off")
+    db.execute("set local enable_sort = off")
     db.execute('explain select distinct on (d.sensor_type) d.id from public."SensorData" d '
                'where d."userID" = 9101 and d.sensor_type is not null '
-               'order by d.sensor_type, d.created_at desc, d.id desc')
+               'order by d.sensor_type, coalesce(d.sampled_at, d.created_at) desc, d.id desc')
     plan = "\n".join(r["QUERY PLAN"] for r in db.fetchall())
-    assert "idx_sensordata_user_type_latest" in plan, plan
+    assert "idx_sensordata_pond_type_effective" in plan, plan

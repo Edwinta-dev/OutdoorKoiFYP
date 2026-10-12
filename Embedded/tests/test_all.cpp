@@ -222,6 +222,94 @@ void test_camera_wake() {
   CHECK(cameraWakeSleepSeconds(true, now, true, now + 10LL * 86400, 60, 900, 86400) == 86400);
 }
 
+// ---- Issue #12: the ingest_readings reply (ingest_reply.h) ----
+
+void test_ingest_reply() {
+  int n = -1;
+  CHECK(ingestAccepted(200, "{\"format\": \"v1\", \"accepted\": 4, \"rejected\": []}", n) && n == 4);
+  CHECK(ingestAccepted(200, "{\"accepted\":0,\"rejected\":[{\"index\":0}]}", n) && n == 0);
+  // 0027's reply (jsonb orders keys by length): a re-sent cycle counts as accepted.
+  CHECK(ingestAccepted(200, "{\"format\": \"v2\", \"stored\": 1, \"accepted\": 5, \"rejected\": [], "
+                            "\"received_at\": \"2026-10-11T08:00:00+00:00\", \"already_stored\": 4}", n) && n == 5);
+  n = -1;
+  CHECK(!ingestAccepted(401, "{\"code\":\"PT401\",\"message\":\"device token not accepted\"}", n) && n == -1);
+  CHECK(!ingestAccepted(200, "{\"code\":\"x\"}", n));
+  CHECK(!ingestAccepted(200, "{\"accepted\": \"four\"}", n));
+  CHECK(!ingestAccepted(200, nullptr, n));
+  CHECK(!ingestAccepted(-1, "", n));
+  CHECK(strstr(ingestStatusText(401), "SENSOR_DEVICE_TOKEN") != nullptr);
+  CHECK(strstr(ingestStatusText(429), "rate limited") != nullptr);
+  CHECK(strcmp(ingestStatusText(-1), "no connection") == 0);
+  CHECK(strcmp(ingestStatusText(500), "upload failed") == 0);
+}
+
+void test_sample_cycle() {
+  // Boot id: NVS counter high, random low; 16 lowercase hex characters.
+  char id[17];
+  formatBootId(makeBootId(7, 0xDEADBEEF), id);
+  CHECK(strcmp(id, "00000007deadbeef") == 0);
+  formatBootId(makeBootId(0xFFFFFFFF, 0), id);
+  CHECK(strcmp(id, "ffffffff00000000") == 0 && strlen(id) == 16);
+  // A rolled-back counter with a new random half is a different id.
+  CHECK(makeBootId(7, 1) != makeBootId(7, 2));
+
+  // Clock: an unset ESP32 clock reads 1970.
+  CHECK(!clockLooksSet(0));
+  CHECK(!clockLooksSet(1767225599LL));
+  CHECK(clockLooksSet(1767225600LL));
+
+  // Sample time worked back from millis(), including across the wrap.
+  CHECK(sampleEpochMs(1791705600000LL, 15000, 3000) == 1791705588000LL);
+  CHECK(sampleEpochMs(1791705600000LL, 100, 0xFFFFFF00UL) == 1791705600000LL - 356);
+
+  char iso[25];
+  CHECK(formatUtcIso8601(0, iso, sizeof iso) && strcmp(iso, "1970-01-01T00:00:00.000Z") == 0);
+  CHECK(formatUtcIso8601(1791705600123LL, iso, sizeof iso) && strcmp(iso, "2026-10-11T08:00:00.123Z") == 0);
+  CHECK(formatUtcIso8601(1709164799999LL, iso, sizeof iso) && strcmp(iso, "2024-02-28T23:59:59.999Z") == 0);
+  CHECK(formatUtcIso8601(1709251200000LL, iso, sizeof iso) && strcmp(iso, "2024-03-01T00:00:00.000Z") == 0);
+  CHECK(formatUtcIso8601(1798761599000LL, iso, sizeof iso) && strcmp(iso, "2026-12-31T23:59:59.000Z") == 0);
+  CHECK(!formatUtcIso8601(-1, iso, sizeof iso) && iso[0] == '\0');
+  char small[10];
+  CHECK(!formatUtcIso8601(0, small, sizeof small));
+
+  CHECK(strcmp(resetReasonName(1), "power_on") == 0);
+  CHECK(strcmp(resetReasonName(8), "deep_sleep_wake") == 0);
+  CHECK(strcmp(resetReasonName(9), "brownout") == 0);
+  CHECK(strcmp(resetReasonName(99), "unknown") == 0);
+  CHECK(strcmp(resetReasonName(-1), "unknown") == 0);
+
+  CHECK(ingestShouldRetry(-1) && ingestShouldRetry(0) && ingestShouldRetry(429) && ingestShouldRetry(503));
+  CHECK(!ingestShouldRetry(200) && !ingestShouldRetry(400) && !ingestShouldRetry(401) && !ingestShouldRetry(413));
+
+  CHECK(strcmp(channelSensorType(Channel::Temp), "temp") == 0);
+  CHECK(strcmp(channelSensorType(Channel::Tds), "TDS") == 0);
+  CHECK(strcmp(channelSensorType(Channel::Ph), "pH") == 0);
+  CHECK(strcmp(channelSensorType(Channel::Lux), "LUX") == 0);
+
+  // Queue: oldest first, the oldest dropped when full.
+  PendingCycles q;
+  pendingClear(q);
+  CHECK(q.count == 0);
+  for (uint32_t seq = 1; seq <= (uint32_t)PENDING_CYCLE_CAPACITY; seq++) {
+    PendingCycle c = {};
+    c.cycleSeq = seq;
+    CHECK(!pendingPush(q, c));
+  }
+  CHECK(q.count == PENDING_CYCLE_CAPACITY && pendingAt(q, 0).cycleSeq == 1);
+  PendingCycle next = {};
+  next.cycleSeq = 5;
+  CHECK(pendingPush(q, next));
+  CHECK(q.count == PENDING_CYCLE_CAPACITY);
+  CHECK(pendingAt(q, 0).cycleSeq == 2 && pendingAt(q, PENDING_CYCLE_CAPACITY - 1).cycleSeq == 5);
+  pendingClear(q);
+  CHECK(q.count == 0);
+
+  PendingCycle c = {};
+  for (int i = 0; i < MAX_READINGS_PER_CYCLE; i++) CHECK(pendingAddReading(c, Channel::Ph, 7.0f, 0));
+  CHECK(!pendingAddReading(c, Channel::Ph, 7.0f, 0));
+  CHECK(c.nReadings == MAX_READINGS_PER_CYCLE);
+}
+
 int main() {
   test_median_filter();
   test_tds_sensor();
@@ -232,6 +320,8 @@ int main() {
   test_adaptive_settle();
   test_wifi_retry();
   test_camera_wake();
+  test_ingest_reply();
+  test_sample_cycle();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

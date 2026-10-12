@@ -179,7 +179,7 @@ def test_sql_daily_aggregate_uses_singapore_dates_and_skips_dark_lux(db):
                "('2026-03-01 17:30+00', 'LUX', 20, %s), "
                "('2026-03-01 18:30+00', 'LUX', 900, %s)",
                (POND_A, POND_A, POND_A))
-    db.execute("select public.aggregate_daily_sensor_data()")
+    db.execute("select public.aggregate_daily_sensor_data('2026-03-01', '2026-03-02')")
     db.execute("select sensor_type, record_date::text as d, avg_value from public.daily_sensor_averages "
                "where userid = %s order by sensor_type", (POND_A,))
     rows = db.fetchall()

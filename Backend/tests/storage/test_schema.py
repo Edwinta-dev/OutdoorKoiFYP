@@ -11,7 +11,9 @@ migration defines:
   .rpc() names and parameters and storage bucket names.
 - Dart (MobileUI/mobile_app/lib): the same for .from('...') chains,
   .rpc() calls and storage .from() buckets.
-- Firmware (Embedded/*/*.ino): the table and JSON keys of db.insert().
+- Firmware (Embedded/*/*.ino): the table and JSON keys of db.insert(), and
+  the RPC named in a "/rest/v1/rpc/<name>" path with the top-level keys
+  of the sketch's JsonDocument as its parameters.
 
 It also checks that get_bundled_dashboard_payload and
 get_historical_graph_payload build every key the poller, the conftest
@@ -414,6 +416,14 @@ def firmware_refs(text: str, filename: str) -> list[Ref]:
         refs.append(Ref("table", table, "", where))
         for obj in objects:
             refs += [Ref("column", table, k, where) for k in re.findall(rf'\b{obj}\["(\w+)"\]\s*=', text)]
+    docs = set(re.findall(r"\bJsonDocument\s+(\w+)", text))
+    for m in re.finditer(r'"/rest/v1/rpc/(\w+)"', text):
+        fn = m.group(1)
+        where = f"{filename}:{text.count(chr(10), 0, m.start()) + 1}"
+        refs.append(Ref("rpc", fn, "", where))
+        for doc in docs:
+            refs += [Ref("rpc_param", fn, k, where)
+                     for k in re.findall(rf'\b{doc}\["(\w+)"\]\s*(?:=|\.to<)', text)]
     return refs
 
 
@@ -710,3 +720,14 @@ db.insert(TABLE, json, false);
 '''
     problems = undefined_refs(parse_sql(SYNTHETIC_SQL), firmware_refs(ino, "x.ino"))
     assert problems == ["x.ino:4: column Pond.unknown"]
+
+    ino = '''
+const char *PATH = "/rest/v1/rpc/pond_summary";
+JsonDocument body; body["p_user_id"] = 1; body["p_typo"] = 2;
+JsonArray rows = body["p_days"].to<JsonArray>();
+const char *OTHER = "/rest/v1/rpc/no_such_rpc";
+'''
+    problems = undefined_refs(parse_sql(SYNTHETIC_SQL), firmware_refs(ino, "x.ino"))
+    assert problems == ["x.ino:2: rpc_param pond_summary.p_typo", "x.ino:5: rpc no_such_rpc",
+                        "x.ino:5: rpc_param no_such_rpc.p_days", "x.ino:5: rpc_param no_such_rpc.p_typo",
+                        "x.ino:5: rpc_param no_such_rpc.p_user_id"]

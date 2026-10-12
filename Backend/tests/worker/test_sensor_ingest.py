@@ -273,3 +273,33 @@ def test_a_ledger_conflict_fails_the_whole_save():
                                      ingest={"rows": [entry], "watermark": minutes(5).isoformat()})
     assert storage.fetch_snapshot_version(POND) == version
     assert storage.rows("sensor_ingest_cursor")[0]["watermark"] == minutes(0).isoformat()
+
+
+def test_a_cycle_with_a_node_sample_time_is_timed_by_it():
+    # Payload v2 (issue #17, migration 0027): the cycle was sampled at
+    # minute 0 and uploaded at minute 40; the ledger records the sample
+    # time and basis "sample", and the watermark stays the insert time.
+    storage = make_storage()
+    rows = storage.add_rows("SensorData", [
+        {"userID": POND, "sensor_type": t, "data1": v, "created_at": minutes(40).isoformat(),
+         "sampled_at": minutes(0).isoformat(), "flags": 0, "boot_id": "0000000100a1b2c3", "cycle_seq": 3}
+        for t, v in FULL.items()])
+    found = storage.fetch_pending_sensor_rows(POND, ("temp", "TDS", "pH", "LUX"), None, None, 3600, 100)
+    assert {(r["sampled_at"], r["flags"]) for r in found["rows"]} == {(minutes(0).isoformat(), 0)}
+    result = poll(EngineRegistry(storage), minutes(41))
+    assert (result.sensor["inputs"], result.sensor["rows"]) == (1, 4)
+    entries = [r for r in storage.rows("sensor_ingest_ledger") if r["pond_id"] == POND]
+    assert {(e["time_basis"], e["effective_sample_time"]) for e in entries} == {("sample", minutes(0).isoformat())}
+    assert sorted(e["sensor_row_id"] for e in entries) == sorted(r["id"] for r in rows)
+    assert storage.rows("sensor_ingest_cursor")[0]["watermark"] == minutes(40).isoformat()
+    history = storage.fetch_ingested_sensor_rows(POND, ("temp", "TDS", "pH", "LUX"), None, minutes(60))
+    assert {r["sampled_at"] for r in history} == {minutes(0).isoformat()}
+
+
+def test_old_rows_without_v2_fields_still_read_as_ingestion_time():
+    storage = make_storage()
+    upload(storage, minutes(0))
+    found = storage.fetch_pending_sensor_rows(POND, ("temp", "TDS", "pH", "LUX"), None, None, 3600, 100)
+    assert {(r["sampled_at"], r["flags"]) for r in found["rows"]} == {(None, None)}
+    poll(EngineRegistry(storage), minutes(1))
+    assert {r["time_basis"] for r in storage.rows("sensor_ingest_ledger")} == {"ingestion"}
