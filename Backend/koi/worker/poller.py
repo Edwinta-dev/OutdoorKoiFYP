@@ -217,6 +217,7 @@ class Worker:
         self.settings = settings
         self.registry = registry
         self.registry.tds_prompt_config = settings.tds_prompt_config
+        self.registry.algae_signal_config = settings.algae_signal_config
         self.holder = holder or default_holder()
         self.failures_total: dict[str, int] = {}
         self.last_success_at: Optional[str] = None
@@ -447,6 +448,10 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         algae_env = ae.AlgaeDayEnvironment(
             lux=float(lux_now), temp_c=float(model_temp), no3_ppm=no3_now
         )
+        # The GCC path's tuning (issue #92) comes from Settings and is
+        # persisted with the engine, so API reads use the same values.
+        if registry.algae_signal_config is not None:
+            twin.algae.signal_config = registry.algae_signal_config
 
         outcome = twin.ingest_environment(
             now=now,

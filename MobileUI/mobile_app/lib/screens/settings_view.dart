@@ -15,6 +15,8 @@ class SettingsView extends ConsumerStatefulWidget {
 class _SettingsViewState extends ConsumerState<SettingsView> {
   @override
   Widget build(BuildContext context) {
+    final displayMode = ref.watch(displayModeProvider);
+    final detailed = displayMode.value == DisplayMode.detailed;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SingleChildScrollView(
@@ -30,6 +32,20 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
             const SizedBox(
               height: AppSpace.lg,
             ), // Adds clean spacing between elements
+            SwitchListTile(
+              key: const ValueKey('displayModeSwitch'),
+              title: const Text('Detailed view'),
+              subtitle: Text(
+                detailed
+                    ? 'The dashboard shows model values, confidence, '
+                          'evidence and charts.'
+                    : 'The dashboard shows pond status, what to do today '
+                          'and plain explanations.',
+              ),
+              value: detailed,
+              onChanged: displayMode.hasValue ? _setDetailed : null,
+            ),
+            const SizedBox(height: AppSpace.lg),
             // 2. The Menu Section Title
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
@@ -80,6 +96,21 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
         ),
       ),
     );
+  }
+
+  Future<void> _setDetailed(bool detailed) async {
+    try {
+      await ref
+          .read(displayModeProvider.notifier)
+          .set(detailed ? DisplayMode.detailed : DisplayMode.simple);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not save the display setting. Try again.'),
+        ),
+      );
+    }
   }
 
   void deletePondData() async {

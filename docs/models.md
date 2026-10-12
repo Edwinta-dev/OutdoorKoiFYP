@@ -275,6 +275,89 @@ saturation bound initially catches highly saturated casts; the lower
 bound allows neutral grey. Per-pond replay in #92 must establish useful
 thresholds. No existing model numeric constant changed.
 
+## Algae on GCC (issue #92)
+
+Files: `Backend/koi/models/algae_engine.py` (`GccSignalConfig`,
+`gcc_daily_series`, `gcc_growth`, `resolve_gcc_thresholds`, `gcc_zones`,
+`AlgaeGrowthEngine`), `Backend/koi/settings.py`
+(`Settings.algae_signal_config`), `Backend/koi/worker/poller.py`.
+Decision record: `docs/decisions/0092-algae-engine-on-gcc.md`.
+
+**Signal.** Each passing, non-obstructed frame contributes its `water_gap`
+region GCC when the frame was measured with regions (#91), otherwise the
+frame GCC (#90). A gap marked `usable: false` contributes nothing; it does
+not fall back to the frame. `green_ratio` is still stored, blended and
+shown, but drives status only for a history with no GCC (legacy rows,
+`rate_source_detail: legacy_green_ratio`) or once severity labels have
+calibrated the thresholds (`threshold_mode: label_calibrated`).
+
+**Daily series.** Per local day (`KOI_TIMEZONE`), frames from
+`KOI_ALGAE_DAY_START_HOUR` (7) to before `KOI_ALGAE_DAY_END_HOUR` (19) give
+one value: their 90th percentile (linear interpolation), or the median with
+`KOI_ALGAE_DAILY_STATISTIC=median`. The windowed value is the mean of the
+daily values within the trailing `KOI_ALGAE_WINDOW_DAYS` (3) calendar days;
+missing days are not filled in. Frames are kept for
+`KOI_ALGAE_HISTORY_DAYS` (30) and at most `MAX_GCC_FRAMES` (1000).
+
+**Status.** watch = quiet level + `KOI_ALGAE_WATCH_OFFSET` (0.03 GCC),
+action = quiet level + `KOI_ALGAE_ACTION_OFFSET` (0.06 GCC), compared with
+the latest windowed value. The quiet level is the median of the lower half
+of the windowed values since the last baseline reset. The offsets are
+starting values, not fitted: they need replay over pond 455 frames.
+`ABSOLUTE_WATCH_RATIO`, `ABSOLUTE_ACTION_RATIO` and the 3x / 6x multipliers
+in `resolve_thresholds` are unchanged and apply to the legacy path only.
+
+**Growth.** `rate_per_day` is the least-squares slope of the daily values
+over the last `KOI_ALGAE_GROWTH_WINDOW_DAYS` (3) days; `slow_rate_per_day`
+the same over `KOI_ALGAE_GROWTH_SLOW_WINDOW_DAYS` (7). noise is the
+standard deviation of day-to-day changes of the windowed series on days
+before the short window, needing `KOI_ALGAE_GROWTH_MIN_QUIET_DIFFS` (7)
+changes. Growth is flagged when `rate_per_day` > max(`KOI_ALGAE_GROWTH_K`
+(3) x noise, `KOI_ALGAE_GROWTH_MIN_RATE` (0.001 GCC/day)). On synthetic
+flat series (per-frame noise 0.004, 6 frames a day) this flagged 0.3% of
+daily evaluations; a rise at 1.2x the threshold flagged after a median of 3
+days (decision record 0092 has the method).
+
+**Zone rule.** On the colour grid (#90, row-major), the reference cells
+(`KOI_ALGAE_REFERENCE_CELLS`, default 6,7,8: the bottom row, assumed
+floor) are averaged per frame and subtracted from the pond cells (all
+others, minus `KOI_ALGAE_OBJECT_CELLS`). Per cell and local day (per frame
+with `TEST_MODE`), the value is the median adjusted GCC. A cell's baseline
+is the median of its values before the last `KOI_ALGAE_CELL_RUN` (2), and
+needs `ZONE_MIN_BASELINE` (3) of them. noise = 1.4826 (`MAD_TO_SD`) x the
+median absolute deviation of the baseline residuals pooled over the pond
+cells, floored at `ZONE_NOISE_FLOOR` (0.001). A cell flags when its excess
+stays above `KOI_ALGAE_CELL_K` (3) x noise for `KOI_ALGAE_CELL_RUN`
+consecutive values; a shorter run that fell back is a spike (newest
+`MAX_REPORTED_SPIKES` = 10 kept), an open shorter run is pending. A cell
+whose own spread exceeds `KOI_ALGAE_CELL_UNRELIABLE_RATIO` (4) x the pooled
+noise is reported unreliable and not judged. The pond-wide series is never
+reference-adjusted, so a rise of the whole frame still shows there.
+
+**Baseline reset.** The newest `imageTable.baseline_reset` the engine has
+not yet applied clears both camera histories, the GCC frames, the level,
+the thresholds and the growth fit; the batch is then assimilated again from
+that frame. The reset's time and reason are reported with the assessment.
+
+**Projection.** GCC sits near 1/3 for clear water, so the logistic model
+(fitted on ln green_ratio) is not used for GCC: the forecast carries the
+windowed trend forward (`projection_method: windowed_gcc_trend`, with
+`projection_note`), holding a falling trend level. A scrub removes
+`SCRUB_REMOVAL_EFFICIENCY` (0.70, unchanged) of the excess over the quiet
+level. The legacy path reports `projection_method: logistic`.
+
+**Snapshot.** Twin snapshot version 6 (`pond_twin.py::SNAPSHOT_VERSION`)
+adds `gcc_frames`, `baseline_reset` and `signal_config` to the algae block.
+Older algae blocks load with none of them: the green_ratio path runs until
+GCC frames arrive, and the next batch's newest reset restarts the engine.
+
+**Camera state machine.** Unchanged: the dynamic / obstruction states still
+run on green_ratio. No stored pond 455 frames are available to this
+repository, so the replay the issue asks for has not been run (decision
+record 0092, Not verified).
+
+No existing numeric constant changed.
+
 ## Local calendar days in the chemistry engine (issue #15)
 
 No numeric constant changed. `DAILY_RETENTION_DAYS` is still 30, and the

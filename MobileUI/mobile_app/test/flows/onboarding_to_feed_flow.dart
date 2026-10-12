@@ -82,9 +82,11 @@ Future<void> runOnboardingToFeedFlow(WidgetTester tester) async {
   expect(find.byType(OnboardingScreen), findsNothing);
   expect(find.byType(DashboardView), findsOneWidget);
   expect(find.text('Pond Dashboard Centre'), findsOneWidget);
-  expect(find.text('TEMPERATURE & FEED MONITOR'), findsOneWidget);
+  // A new account gets the simple view: status lines, no model cards.
+  expect(find.text('POND STATUS'), findsOneWidget);
+  expect(find.text('TEMPERATURE & FEED MONITOR'), findsNothing);
   expect(fake.callsTo('fetchDashboardPayload').last.args['userId'], '7');
-  expect(find.text(Fixtures.assessment().advisory), findsOneWidget);
+  expect(find.textContaining(Fixtures.assessment().advisory), findsOneWidget);
 
   // --- Log a feed ---
   await tester.tap(find.text('Log'));

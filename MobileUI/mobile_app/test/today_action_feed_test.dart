@@ -379,6 +379,7 @@ void main() {
       await pumpScreen(
         tester,
         const DashboardView(),
+        prefs: {...onboardedPrefs, displayModeKey: 'detailed'},
         source: FakePondDataSource(
           dashboardPayload: {
             ...Fixtures.dashboardPayload(),
@@ -395,6 +396,27 @@ void main() {
         topOf(tester, 'TODAY'),
         lessThan(topOf(tester, 'TEMPERATURE & FEED MONITOR')),
       );
+      expect(find.text('Log water change'), findsOneWidget);
+      await unmount(tester);
+    });
+
+    testWidgets('simple view: the Today feed sits above the pond status', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const DashboardView(),
+        source: FakePondDataSource(
+          dashboardPayload: {
+            ...Fixtures.dashboardPayload(),
+            'next_actions': [ladderActions[2]],
+          },
+        ),
+      );
+      await settle(tester);
+
+      expect(find.text(ladderActions[2]['action'] as String), findsOneWidget);
+      expect(topOf(tester, 'TODAY'), lessThan(topOf(tester, 'POND STATUS')));
       expect(find.text('Log water change'), findsOneWidget);
       await unmount(tester);
     });

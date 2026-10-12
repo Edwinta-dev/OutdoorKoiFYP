@@ -2042,6 +2042,67 @@ components:
           - type: 'null'
           default: null
           title: Label Count
+        signal:
+          anyOf:
+          - enum:
+            - gcc
+            - green_ratio
+            type: string
+          - type: 'null'
+          default: null
+          title: Signal
+        rate_source_detail:
+          anyOf:
+          - enum:
+            - gcc_windowed_trend
+            - legacy_green_ratio
+            type: string
+          - type: 'null'
+          default: null
+          title: Rate Source Detail
+        gcc:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Gcc
+        gcc_source:
+          anyOf:
+          - enum:
+            - water_gap
+            - frame
+            type: string
+          - type: 'null'
+          default: null
+          title: Gcc Source
+        gcc_baseline:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Gcc Baseline
+        growth:
+          anyOf:
+          - $ref: '#/components/schemas/GccGrowth'
+          - type: 'null'
+          default: null
+        zones:
+          anyOf:
+          - $ref: '#/components/schemas/GccZones'
+          - type: 'null'
+          default: null
+        baseline_reset_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Baseline Reset At
+        baseline_reset_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Baseline Reset Reason
       required:
       - status
       - category
@@ -2090,8 +2151,18 @@ components:
           title: Days From Now
           type: integer
         green_ratio:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Absent on a GCC projection.
           title: Green Ratio
-          type: number
+        gcc:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Gcc
         growth_rate_per_day:
           anyOf:
           - type: number
@@ -2124,7 +2195,6 @@ components:
           title: No3 Ppm Assumed
       required:
       - days_from_now
-      - green_ratio
       title: AlgaeDay
       type: object
     AlgaeForecast:
@@ -2161,6 +2231,43 @@ components:
           - type: 'null'
           default: null
           title: Current Green Ratio
+        current_gcc:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Current Gcc
+        projection_method:
+          anyOf:
+          - enum:
+            - logistic
+            - windowed_gcc_trend
+            type: string
+          - type: 'null'
+          default: null
+          title: Projection Method
+        projection_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Projection Note
+        slow_rate_per_day:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Slow Rate Per Day
+        growth:
+          anyOf:
+          - $ref: '#/components/schemas/GccGrowth'
+          - type: 'null'
+          default: null
+        zones:
+          anyOf:
+          - $ref: '#/components/schemas/GccZones'
+          - type: 'null'
+          default: null
         predicted_scrub_days_from_now:
           anyOf:
           - type: integer
@@ -2188,6 +2295,15 @@ components:
           - literature_fallback
           title: Rate Source
           type: string
+        rate_source_detail:
+          anyOf:
+          - enum:
+            - gcc_windowed_trend
+            - legacy_green_ratio
+            type: string
+          - type: 'null'
+          default: null
+          title: Rate Source Detail
         intrinsic_rate_per_day:
           anyOf:
           - type: number
@@ -4061,6 +4177,164 @@ components:
       - ingested_at
       title: ForecastPeriod
       type: object
+    GccCell:
+      additionalProperties: true
+      properties:
+        index:
+          title: Index
+          type: integer
+        since:
+          title: Since
+          type: string
+        run_length:
+          title: Run Length
+          type: integer
+        latest_excess:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Latest Excess
+        excess:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Excess
+      required:
+      - index
+      - since
+      - run_length
+      title: GccCell
+      type: object
+    GccGrowth:
+      additionalProperties: true
+      description: d(GCC)/dt of the windowed daily series (algae_engine.gcc_growth).
+      properties:
+        rate_per_day:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Rate Per Day
+        slow_rate_per_day:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Slow Rate Per Day
+        noise:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Std of day-to-day window changes before the window.
+          title: Noise
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Threshold
+        flagged:
+          title: Flagged
+          type: boolean
+        quiet_differences:
+          title: Quiet Differences
+          type: integer
+        window_days:
+          title: Window Days
+          type: integer
+        slow_window_days:
+          title: Slow Window Days
+          type: integer
+      required:
+      - flagged
+      - quiet_differences
+      - window_days
+      - slow_window_days
+      title: GccGrowth
+      type: object
+    GccZones:
+      additionalProperties: true
+      description: The cell-grid zone rule (algae_engine.gcc_zones).
+      properties:
+        run_unit:
+          enum:
+          - day
+          - frame
+          title: Run Unit
+          type: string
+        reference_cells:
+          items:
+            type: integer
+          title: Reference Cells
+          type: array
+        pond_cells:
+          items:
+            type: integer
+          title: Pond Cells
+          type: array
+        object_cells:
+          items:
+            type: integer
+          title: Object Cells
+          type: array
+        noise:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Noise
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Threshold
+        flagged:
+          items:
+            $ref: '#/components/schemas/GccCell'
+          title: Flagged
+          type: array
+        spikes:
+          items:
+            $ref: '#/components/schemas/GccCell'
+          title: Spikes
+          type: array
+        pending:
+          items:
+            $ref: '#/components/schemas/GccCell'
+          title: Pending
+          type: array
+        unreliable:
+          items:
+            type: integer
+          title: Unreliable
+          type: array
+        insufficient:
+          items:
+            type: integer
+          title: Insufficient
+          type: array
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Note
+      required:
+      - run_unit
+      - reference_cells
+      - pond_cells
+      - object_cells
+      - flagged
+      - spikes
+      - pending
+      - unreliable
+      - insufficient
+      title: GccZones
+      type: object
     GeneralForecast:
       additionalProperties: false
       properties:
@@ -5148,6 +5422,12 @@ components:
           - type: 'null'
           default: null
           title: Post Scrub Green Ratio
+        post_scrub_gcc:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Post Scrub Gcc
       title: ScrubBenefit
       type: object
     SensorReading:

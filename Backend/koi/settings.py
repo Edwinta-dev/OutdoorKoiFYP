@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from koi.models.algae_engine import GccSignalConfig
 from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.sensor_inputs import IngestConfig
 from koi.models.tds_prompts import PromptConfig
@@ -130,6 +131,66 @@ class Settings(BaseSettings):
         default=200.0, ge=0, le=255, allow_inf_nan=False,
         validation_alias=AliasChoices("CAMERA_S_MEAN_MAX", "camera_s_mean_max"))
 
+    # Algae on GCC (issue #92; docs/models.md "Algae on GCC"). Daily value:
+    # p90 (or median) of the frames between the day hours, local time, then
+    # a trailing window. Growth flags when the short-window slope passes
+    # max(k x the measured day-to-day spread, the minimum rate). Status:
+    # watch / action = the quiet GCC level + the offsets. Zone rule: cells
+    # are row-major grid indices; reference cells cancel colour drift,
+    # object cells are ignored, a cell flags after cell_run values above
+    # cell_k x the pooled noise (frames instead of days with TEST_MODE).
+    algae_daily_statistic: Literal["p90", "median"] = Field(
+        default="p90", validation_alias=AliasChoices("KOI_ALGAE_DAILY_STATISTIC", "algae_daily_statistic"))
+    algae_day_start_hour: int = Field(
+        default=7, ge=0, le=23, validation_alias=AliasChoices("KOI_ALGAE_DAY_START_HOUR", "algae_day_start_hour"))
+    algae_day_end_hour: int = Field(
+        default=19, ge=1, le=24, validation_alias=AliasChoices("KOI_ALGAE_DAY_END_HOUR", "algae_day_end_hour"))
+    algae_window_days: int = Field(
+        default=3, ge=1, le=14, validation_alias=AliasChoices("KOI_ALGAE_WINDOW_DAYS", "algae_window_days"))
+    algae_growth_window_days: int = Field(
+        default=3, ge=1, le=14,
+        validation_alias=AliasChoices("KOI_ALGAE_GROWTH_WINDOW_DAYS", "algae_growth_window_days"))
+    algae_growth_slow_window_days: int = Field(
+        default=7, ge=2, le=28,
+        validation_alias=AliasChoices("KOI_ALGAE_GROWTH_SLOW_WINDOW_DAYS", "algae_growth_slow_window_days"))
+    algae_growth_k: float = Field(
+        default=3.0, gt=0, allow_inf_nan=False, validation_alias=AliasChoices("KOI_ALGAE_GROWTH_K", "algae_growth_k"))
+    algae_growth_min_rate: float = Field(
+        default=0.001, ge=0, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_ALGAE_GROWTH_MIN_RATE", "algae_growth_min_rate"))
+    algae_growth_min_quiet_diffs: int = Field(
+        default=7, ge=2,
+        validation_alias=AliasChoices("KOI_ALGAE_GROWTH_MIN_QUIET_DIFFS", "algae_growth_min_quiet_diffs"))
+    algae_watch_offset: float = Field(
+        default=0.03, gt=0, le=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_ALGAE_WATCH_OFFSET", "algae_watch_offset"))
+    algae_action_offset: float = Field(
+        default=0.06, gt=0, le=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_ALGAE_ACTION_OFFSET", "algae_action_offset"))
+    algae_reference_cells: Annotated[tuple[int, ...], NoDecode] = Field(
+        default=(6, 7, 8), validation_alias=AliasChoices("KOI_ALGAE_REFERENCE_CELLS", "algae_reference_cells"))
+    algae_object_cells: Annotated[tuple[int, ...], NoDecode] = Field(
+        default=(), validation_alias=AliasChoices("KOI_ALGAE_OBJECT_CELLS", "algae_object_cells"))
+    algae_cell_k: float = Field(
+        default=3.0, gt=0, allow_inf_nan=False, validation_alias=AliasChoices("KOI_ALGAE_CELL_K", "algae_cell_k"))
+    algae_cell_run: int = Field(
+        default=2, ge=2, validation_alias=AliasChoices("KOI_ALGAE_CELL_RUN", "algae_cell_run"))
+    algae_cell_unreliable_ratio: float = Field(
+        default=4.0, gt=1, allow_inf_nan=False,
+        validation_alias=AliasChoices("KOI_ALGAE_CELL_UNRELIABLE_RATIO", "algae_cell_unreliable_ratio"))
+    algae_history_days: int = Field(
+        default=30, ge=7, le=90, validation_alias=AliasChoices("KOI_ALGAE_HISTORY_DAYS", "algae_history_days"))
+
+    @model_validator(mode="after")
+    def _algae_signal_ordered(self) -> "Settings":
+        if not self.algae_day_start_hour < self.algae_day_end_hour:
+            raise ValueError("KOI_ALGAE_DAY_START_HOUR must be before KOI_ALGAE_DAY_END_HOUR")
+        if not self.algae_watch_offset < self.algae_action_offset:
+            raise ValueError("KOI_ALGAE_WATCH_OFFSET must be below KOI_ALGAE_ACTION_OFFSET")
+        if any(not 0 <= i < 81 for i in (*self.algae_reference_cells, *self.algae_object_cells)):
+            raise ValueError("KOI_ALGAE_REFERENCE_CELLS and KOI_ALGAE_OBJECT_CELLS are grid indices from 0")
+        return self
+
     @model_validator(mode="after")
     def ordered_colour_bands(self) -> Settings:
         if self.camera_gcc_min > self.camera_gcc_max or self.camera_s_mean_min > self.camera_s_mean_max:
@@ -237,6 +298,13 @@ class Settings(BaseSettings):
             return tuple(o.strip() for o in value.split(",") if o.strip())
         return value
 
+    @field_validator("algae_reference_cells", "algae_object_cells", mode="before")
+    @classmethod
+    def _split_cells(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(v.strip() for v in value.split(",") if v.strip())
+        return value
+
     @field_validator("camera_dynamic_rate_levels", mode="before")
     @classmethod
     def _split_levels(cls, value: object) -> object:
@@ -293,6 +361,21 @@ class Settings(BaseSettings):
     def tds_prompt_config(self) -> PromptConfig:
         return PromptConfig(self.tds_prompts, self.tds_prompt_min_step_ppm,
                             self.tds_prompt_confidence_threshold, self.tds_prompt_cooldown_hours)
+
+    @property
+    def algae_signal_config(self) -> GccSignalConfig:
+        return GccSignalConfig(
+            daily_statistic=self.algae_daily_statistic, day_start_hour=self.algae_day_start_hour,
+            day_end_hour=self.algae_day_end_hour, window_days=self.algae_window_days,
+            growth_window_days=self.algae_growth_window_days,
+            slow_window_days=self.algae_growth_slow_window_days, growth_k=self.algae_growth_k,
+            growth_min_rate=self.algae_growth_min_rate, min_quiet_diffs=self.algae_growth_min_quiet_diffs,
+            watch_offset=self.algae_watch_offset, action_offset=self.algae_action_offset,
+            reference_cells=self.algae_reference_cells, object_cells=self.algae_object_cells,
+            cell_k=self.algae_cell_k, cell_run=self.algae_cell_run,
+            cell_unreliable_ratio=self.algae_cell_unreliable_ratio,
+            run_unit="frame" if self.test_mode else "day", timezone=self.timezone,
+            history_days=self.algae_history_days)
 
     @property
     def sensor_ingest(self) -> IngestConfig:

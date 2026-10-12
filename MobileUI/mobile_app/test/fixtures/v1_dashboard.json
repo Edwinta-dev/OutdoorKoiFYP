@@ -240,6 +240,8 @@
       "algae": {
         "action_threshold": 0.12,
         "advisory": "No scrub needed.",
+        "baseline_reset_at": null,
+        "baseline_reset_reason": null,
         "calibrated": null,
         "camera_drift": null,
         "category": "clear",
@@ -248,7 +250,11 @@
         "days_to_scrub": 9,
         "evaluated_at": null,
         "forecast_issued_at": null,
+        "gcc": null,
+        "gcc_baseline": null,
+        "gcc_source": null,
         "green_ratio": 0.03,
+        "growth": null,
         "growth_rate_per_day": 0.1,
         "id": null,
         "input_cutoff": null,
@@ -257,12 +263,15 @@
         "label_count": 3,
         "model_version": null,
         "rate_source": "fitted_from_camera",
+        "rate_source_detail": null,
         "sample_count": 6,
         "scrub_now": false,
+        "signal": null,
         "status": "Green",
         "threshold_mode": "relative",
         "userid": null,
-        "watch_threshold": 0.06
+        "watch_threshold": 0.06,
+        "zones": null
       },
       "chemistry": {
         "add_hardener_now": false,

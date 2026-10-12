@@ -19,6 +19,47 @@ final localProfileProvider = FutureProvider(
   (ref) => ref.watch(localProfileRepositoryProvider).load(),
 );
 
+/// How much the dashboard shows: [simple] is status, actions and plain
+/// explanations; [detailed] adds model values, confidence, evidence and
+/// charts.
+enum DisplayMode { simple, detailed }
+
+/// Local profile key holding the [DisplayMode] name.
+const String displayModeKey = 'displayMode';
+
+/// The device's display mode. A profile without the key (a new account, or
+/// an install from before the setting existed) gets [DisplayMode.simple];
+/// an unrecognised stored value also falls back to simple.
+class DisplayModeNotifier extends AsyncNotifier<DisplayMode> {
+  @override
+  Future<DisplayMode> build() async {
+    final profile = await ref.watch(localProfileProvider.future);
+    return DisplayMode.values
+            .asNameMap()['${profile.values[displayModeKey]}'] ??
+        DisplayMode.simple;
+  }
+
+  /// Switches at once; if the save fails the previous mode comes back and
+  /// the error is rethrown for the caller to report.
+  Future<void> set(DisplayMode mode) async {
+    final previous = state;
+    state = AsyncData(mode);
+    try {
+      await ref.read(localProfileRepositoryProvider).save({
+        displayModeKey: mode.name,
+      });
+    } catch (_) {
+      state = previous;
+      rethrow;
+    }
+  }
+}
+
+final displayModeProvider =
+    AsyncNotifierProvider<DisplayModeNotifier, DisplayMode>(
+      DisplayModeNotifier.new,
+    );
+
 final pondProfileRepositoryProvider = Provider<PondProfileRepository>(
   (ref) => ref.watch(pondDataSourceProvider),
 );
