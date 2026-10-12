@@ -294,9 +294,12 @@ class Storage(Protocol):
     def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
         """{devices, contacts, battery, reset} for the pond
         (pond_device_activity): its devices rows, its contacts since
-        since plus each kind's newest one before it, its battery_mv rows
-        since since ([{at, mv}]) and its newest reset_reason row ({at,
-        code} or None)."""
+        since plus each kind's newest one before it, its battery readings
+        since since ([{at, mv, low}]: legacy battery_mv rows with low None,
+        and one per payload v2 cycle with low from the battery_low flag;
+        migration 0028) and its newest reset ({at, code, reason}: code from
+        a legacy reset_reason row, reason from a v2 row, at the start of
+        that boot; or None)."""
         ...
 
     # --- pond config (UserData) ---------------------------------------

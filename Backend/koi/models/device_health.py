@@ -3,9 +3,9 @@ device_health.py
 
 Device freshness and health (issue #23), and the confidence each
 assessment carries. Pure: no I/O. Storage supplies the rows (devices,
-device_contact and the battery and reset rows of SensorData, migration
-0018) and the engine snapshot supplies each channel's newest usable
-sample.
+device_contact and the battery and reset readings of SensorData,
+migrations 0018 and 0028) and the engine snapshot supplies each channel's
+newest usable sample.
 
 Two times are kept apart:
 
@@ -62,9 +62,13 @@ SILENT_AFTER_INTERVALS = 3
 GRACE_FRACTION = 0.5
 
 # SensorData.sensor_type spellings for the node's own health (migration
-# 0018). data1 holds millivolts, or the esp_reset_reason_t code.
+# 0018). data1 holds millivolts, or the esp_reset_reason_t code. Payload
+# v2 nodes send the battery_mv and reset_reason columns instead (0027).
 BATTERY_TYPE = "battery_mv"
 RESET_TYPE = "reset_reason"
+# SensorData.flags bit the node sets when the cycle's battery reading is
+# below its own low threshold (migration 0028, issue #42).
+FLAG_BATTERY_LOW = 16
 
 # Battery trend: least-squares slope over the window's battery_mv rows.
 # At least this many readings spanning this long are needed; a slope
@@ -86,7 +90,14 @@ RESET_REASONS = {
     8: "deep_sleep_wake",
     9: "brownout",
     10: "sdio",
+    11: "usb",
+    12: "jtag",
+    13: "efuse",
+    14: "power_glitch",
+    15: "cpu_lockup",
 }
+# The names payload v2 sends (koi_sensing/sample_cycle.h resetReasonName).
+RESET_CODES = {name: code for code, name in RESET_REASONS.items()}
 
 # The sensor channels each assessment domain reads.
 DOMAIN_CHANNELS = {
@@ -183,10 +194,19 @@ def battery_trend(samples: list[dict]) -> dict:
 
 
 def last_reset(row: Optional[dict]) -> Optional[dict]:
-    """{reason, code, at} from the newest reset_reason row ({at, code}),
-    or None when the node has never sent one."""
-    if not row or row.get("code") is None:
+    """{reason, code, at} from pond_device_activity's reset: a legacy
+    reset_reason row ({at, code}) or a payload v2 one ({at, reason}, the
+    name the node sends; migration 0028). None when the node has never
+    sent one."""
+    if not row:
         return None
+    if row.get("code") is None:
+        reason = row.get("reason")
+        if not isinstance(reason, str) or not reason:
+            return None
+        known = reason in RESET_CODES
+        return {"reason": reason if known else "unknown", "code": RESET_CODES[reason] if known else 0,
+                "at": _iso(_time(row.get("at")))}
     try:
         code = int(row["code"])
     except (TypeError, ValueError):

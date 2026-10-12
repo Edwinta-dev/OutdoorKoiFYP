@@ -310,6 +310,40 @@ void test_sample_cycle() {
   CHECK(c.nReadings == MAX_READINGS_PER_CYCLE);
 }
 
+void test_battery_monitor() {
+  // 100k over 47k: the midpoint is 47/147 of the battery.
+  CHECK(batteryMvFromAdc(1400.0f, 100000.0f, 47000.0f) == 4379);   // 1400 * 147 / 47 = 4378.7
+  CHECK(batteryMvFromAdc(1000.0f, 100000.0f, 100000.0f) == 2000);  // equal halves
+  CHECK(batteryMvFromAdc(3300.0f, 0.0f, 47000.0f) == 3300);        // no top resistor: the pin itself
+  CHECK(batteryMvFromAdc(0.0f, 100000.0f, 47000.0f) == 0);
+  CHECK(batteryMvFromAdc(-1.0f, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(NAN, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(INFINITY, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, 100000.0f, 0.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, -1.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, NAN, 47000.0f) == -1);
+  // The database's 0..20000 range: 20000 is sent, anything above is not.
+  CHECK(batteryMvFromAdc(4000.0f, 400000.0f, 100000.0f) == 20000);
+  CHECK(batteryMvFromAdc(4001.0f, 400000.0f, 100000.0f) == -1);
+
+  CHECK(batteryIsLow(4399, 4400));
+  CHECK(!batteryIsLow(4400, 4400));                                  // at the threshold is not low
+  CHECK(!batteryIsLow(-1, 4400));                                    // not measured
+  CHECK(!batteryIsLow(0, 4400));                                     // no divider connected
+
+  CHECK(SAMPLE_FLAG_BATTERY_LOW == 16);
+  CHECK((SAMPLE_FLAG_BATTERY_LOW & (SAMPLE_FLAG_TIME_UNSYNCED | SAMPLE_FLAG_TEMP_FALLBACK |
+                                    SAMPLE_FLAG_PH_UNCALIBRATED | SAMPLE_FLAG_LUX_SATURATED)) == 0);
+  CHECK(uploadRowFlags(0, true, 5200, 4400) == 0);
+  CHECK(uploadRowFlags(0, false, 5200, 4400) == SAMPLE_FLAG_TIME_UNSYNCED);
+  CHECK(uploadRowFlags(SAMPLE_FLAG_PH_UNCALIBRATED, true, 4300, 4400) ==
+        (SAMPLE_FLAG_PH_UNCALIBRATED | SAMPLE_FLAG_BATTERY_LOW));
+  CHECK(uploadRowFlags(0, false, 4300, 4400) == (SAMPLE_FLAG_TIME_UNSYNCED | SAMPLE_FLAG_BATTERY_LOW));
+  CHECK(uploadRowFlags(0, true, -1, 4400) == 0);                     // no divider: never flagged
+  CHECK(uploadRowFlags(0, true, 11500, 11800) == SAMPLE_FLAG_BATTERY_LOW);  // threshold is the caller's
+  CHECK(uploadRowFlags(0x0F, false, 1, 4400) == 31);                 // every bit fits 0028's 0..31
+}
+
 int main() {
   test_median_filter();
   test_tds_sensor();
@@ -322,6 +356,7 @@ int main() {
   test_camera_wake();
   test_ingest_reply();
   test_sample_cycle();
+  test_battery_monitor();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

@@ -192,7 +192,7 @@ def test_cycle_key_constraints(db):
                 "values ('pH', 7, %s, '0000000100a1b2c3')",
                 "insert into public.\"SensorData\" (sensor_type, data1, \"userID\", boot_id, cycle_seq) "
                 "values ('pH', 7, %s, 'ABC', 1)",
-                "insert into public.\"SensorData\" (sensor_type, data1, \"userID\", flags) values ('pH', 7, %s, 16)"):
+                "insert into public.\"SensorData\" (sensor_type, data1, \"userID\", flags) values ('pH', 7, %s, 32)"):
         with pytest.raises(errors.CheckViolation), db.connection.transaction():
             db.execute(bad, (POND_A,))
 
@@ -261,7 +261,7 @@ def test_ingest_refuses_spoofed_ids(db):
     ({"boot_id": BOOT_1, "cycle_seq": 1.5}, "invalid_cycle"),
     ({"boot_id": BOOT_1, "cycle_seq": 1e30}, "invalid_cycle"),
     ({"boot_id": BOOT_1, "cycle_seq": "7"}, "invalid_cycle"),
-    ({"flags": 16}, "invalid_flags"),
+    ({"flags": 32}, "invalid_flags"),   # 16 (battery_low) is valid since 0028
     ({"flags": -1}, "invalid_flags"),
     ({"flags": 2.5}, "invalid_flags"),
     ({"flags": None}, "invalid_flags"),

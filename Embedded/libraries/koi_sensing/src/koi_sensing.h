@@ -13,3 +13,4 @@
 #include "camera_wake.h"
 #include "ingest_reply.h"
 #include "sample_cycle.h"
+#include "battery_monitor.h"

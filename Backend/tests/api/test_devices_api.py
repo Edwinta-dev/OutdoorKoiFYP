@@ -11,6 +11,7 @@ import pytest
 
 from conftest import USER, add_upload, api_client, make_settings, make_storage
 from koi.api import create_app, schemas
+from koi.models.sensor_inputs import parse_timestamp
 from koi.worker import poller
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
@@ -147,6 +148,29 @@ def test_device_falling_battery_and_reset_reason(setup):
     # Battery and reset rows are not model inputs.
     ledgered = {r["sensor_type"] for r in storage.rows("sensor_ingest_ledger")}
     assert ledgered == {"temp", "TDS", "pH", "LUX"}
+
+
+def test_device_battery_trend_and_reset_from_payload_v2_rows(setup):
+    """Issue #42: a v2 node sends battery_mv and reset_reason as columns on
+    every row of its cycle (migration 0028); the summary counts one
+    reading per cycle and dates the reset from the boot's first cycle."""
+    storage, client, poll, _ = setup
+    boot = "0000000300a1b2c3"
+    rows = []
+    for i in range(12):
+        at = NOW - timedelta(hours=12) + i * timedelta(hours=1)
+        for channel, value in FULL.items():
+            rows.append({"created_at": (at + timedelta(seconds=40)).isoformat(), "sampled_at": at.isoformat(),
+                         "sensor_type": channel, "data1": value, "userID": USER, "boot_id": boot,
+                         "cycle_seq": i + 1, "flags": 0, "reset_reason": "brownout", "battery_mv": 5200 - 20 * i})
+    storage.add_rows("SensorData", rows)
+    poll(NOW - timedelta(minutes=30))
+    sensor = client.get(f"/v1/ponds/{USER}/devices").get_json()["devices"][0]
+    assert sensor["battery"]["samples"] == 12, "one reading per cycle, not one per row"
+    assert sensor["battery"]["trend"] == "falling"
+    assert sensor["battery"]["latest_mv"] == 4980.0
+    assert sensor["last_reset"]["reason"] == "brownout" and sensor["last_reset"]["code"] == 9
+    assert parse_timestamp(sensor["last_reset"]["at"]) == NOW - timedelta(hours=12)
 
 
 def test_device_configured_interval_is_used_for_confidence(setup):
