@@ -430,10 +430,12 @@ def resolve_thresholds(
 # floating plants and the camera's view more than the water. GCC
 # (G / (R + G + B)) is the colour of the water itself, and the PhenoCam
 # method makes it robust: one high quantile per local day of the passing
-# daytime frames, then a short moving window. Status is an offset above the
-# pond's own quiet level, growth is the windowed slope against the measured
-# day-to-day spread, and a 3x3 cell grid gives a local signal next to the
-# pond-wide one. docs/models.md documents every value below.
+# daytime frames, then a short moving window. Status compares the windowed
+# level with offsets above the pond's own quiet level. Growth is the slope of
+# the daily values (not the windowed ones, see gcc_growth and decision record
+# 0092) against the spread of windowed day-to-day changes, and a 3x3 cell
+# grid gives a local signal next to the pond-wide one. docs/models.md
+# documents every value below.
 
 # MAD x 1.4826 estimates a normal standard deviation (robust spread).
 MAD_TO_SD = 1.4826
@@ -1051,6 +1053,8 @@ class AlgaeGrowthEngine:
 
     def _rate_source_detail(self) -> Optional[str]:
         if self.uses_gcc:
+            # API value, kept as is: the rate is the slope of the daily
+            # values, not of the windowed series (gcc_growth).
             return "gcc_windowed_trend"
         return "legacy_green_ratio" if self._camera_history else None
 
