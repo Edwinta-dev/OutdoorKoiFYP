@@ -31,6 +31,7 @@ change belongs in a migration; do not make an unrecorded live-only change.
 | `0024_notification_outbox.sql` | The notification outbox (issue #36): `notification_outbox` (pond, kind, severity, title, body, data, `dedupe_key`, `created_at`, `sent_at`, error) and `enqueue_notification` with a per-key cool-down. Backend only: RLS on with no policies, revoked from anon and authenticated, granted to `service_role`. Existing tables unchanged. | Applied before 2026-10-11 (date not recorded; `migration list` and a dry-run push confirmed 2026-10-11). |
 | `0025_device_tokens.sql` | Per-device tokens and token-scoped sensor ingest (issue #12): `devices` gains `device_id` (uuid, unique), `revoked_at` and the rate-limit window columns, all defaulted or nullable; `device_tokens` (sha256 hash only, `created_at`, `expires_at` for rotation overlap, `revoked_at`, `last_used_at`); owner-only `issue_device_token(p_pond_id, p_overlap default 24 hours, p_label)` and `revoke_device_token(p_token_id)`; `ingest_readings(device_token, rows)` (security definer, executable by `anon` and `service_role`): pond from the token, only `sensor_type`/`data1`, six channels with ranges, at most 32 rows and 6 calls per device per minute. Rules in the file header. The direct `SensorData` insert still works. | Not applied. Apply alone, before 0026 (see below). |
 | `0026_least_privilege.sql` | Least-privilege grants (issue #12): default privileges of `postgres` no longer grant `anon`/`authenticated` (or `PUBLIC` execute); `http` moved from `public` to `extensions`; definer and app-callable functions get `search_path=''` and qualified names; `get_bundled_dashboard_payload` and `get_pond_telemetry_history` become invoker and backend only; `get_historical_graph_payload` refuses `p_days` outside 1..366; every table, sequence and function revoked from `PUBLIC`, `anon`, `authenticated`, then the app's signed-out calls granted back. Ends the node's direct `SensorData` insert. Matrix in [docs/access-matrix.md](../docs/access-matrix.md). | Not applied. Apply only after the node uploads through `ingest_readings`. |
+| `0027_sensor_payload_v2.sql` | Sensor payload v2 (issue #17, and the database half of #97): nullable `SensorData` columns `device_id`, `boot_id`, `cycle_seq`, `sampled_at`, `flags`, `reset_reason`, `battery_mv` with checks, the retry key unique (`device_id`, `boot_id`, `cycle_seq`, `sensor_type`) where `boot_id` is set, and three per-pond indexes; `sensor_channel` (canonical spellings: `lux` reads as `LUX`, nothing else is folded); `ingest_readings` accepts v2 rows (server-derived pond and device, row-level checks of the new fields, sample time never filled from receipt, a repeated cycle stored once; v1 rows still accepted); `daily_sensor_averages.sample_count`/`sample_time_count`; `aggregate_daily_sensor_data(p_from, p_to, p_pond_id)` (bounded, skips rows with no pond) replacing the whole-table version; `daily_sensor_refresh` and `reconcile_daily_sensor_averages(p_pond_id, p_days)`, which `get_historical_graph_payload` now calls for the requested pond and window only; `get_pond_telemetry_history` (recreated, adds `time_basis`), `get_bundled_dashboard_payload` (adds `latest_readings`, history `time_basis`), `pond_dashboard_sources`, `sensor_ingest_pending` and `sensor_ingest_history` read `coalesce(sampled_at, created_at)` and return `sampled_at`/`flags`. No backfill. Rules in the file header. | Not applied. Apply after 0026 (see below). |
 
 How each file was derived, the live evidence and every known difference
 and defect are in
@@ -159,6 +160,30 @@ sensor node's direct insert, so the two go in separately:
 
 Full order and checks in
 [docs/decisions/0012-least-privilege-access.md](../docs/decisions/0012-least-privilege-access.md).
+
+## Applying 0027 (owner, issue #17)
+
+`0027` needs `0025` (it references `devices.device_id`) and keeps v1 rows
+working, so it can go in with `0026` or after it. In step 1 above,
+delete both `0026` and `0027` locally; in step 3 restore them and the
+dry-run lists `0026` and `0027`. Then:
+
+1. Deploy the API and worker from the same commit (the dashboard reads
+   `sampled_at` and `flags`; older code ignores them, so the order is not
+   critical).
+2. Flash `sensor_node` (the v2 build). Over serial, check `Cold boot
+   (...)`, a `boot_id`, increasing `cycle` numbers, `Clock set by SNTP`
+   and `sampled_at` times in UTC; `ingest_readings -> n accepted`.
+3. In the SQL editor: `select boot_id, cycle_seq, sampled_at, created_at,
+   flags from public."SensorData" order by id desc limit 8;` shows the
+   sample time before the insert time.
+4. The first graph call per pond recomputes its window. Older history
+   can be recomputed with
+   `select public.aggregate_daily_sensor_data('2026-01-01', '2026-12-31');`
+   (at most 366 days per call).
+
+Full checks in
+[docs/decisions/0017-sensor-payload-v2.md](../docs/decisions/0017-sensor-payload-v2.md).
 
 ## Rules for new migrations
 

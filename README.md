@@ -160,8 +160,7 @@ Backend/koi/tools/                  Owner maintenance commands (rebuild a pond's
 Backend/fixtures/demo_pond/         The demo seed and the script that builds it
 Backend/koi/settings.py             Every environment value, typed (pydantic-settings)
 Backend/tests/                      Backend tests, mirroring the package
-Embedded/sensor_node/               ESP32 sensor node, networked build (uploads to Supabase)
-Embedded/sensor_bench/              ESP32 sensor node, serial-only bench build with service mode
+Embedded/sensor_node/               ESP32 sensor node (uploads to Supabase); service mode with -DKOI_SERVICE_MODE
 Embedded/camera_node/               ESP32-CAM capture and upload
 Embedded/bench_tests/               Single-purpose pH bench sketches
 Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
@@ -184,8 +183,9 @@ python tools/check.py all          # or backend | firmware | mobile
 ```
 
 Runs ruff, mypy and pytest for the backend; the firmware host tests (g++)
-and, if `arduino-cli` is installed, ESP32 compiles of `sensor_bench`,
-`sensor_node` and `camera_node`; and `flutter analyze` and `flutter test`.
+and, if `arduino-cli` is installed, ESP32 compiles of `sensor_node`,
+`sensor_node` with `KOI_SERVICE_MODE` (calibration and bench commands)
+and `camera_node`; and `flutter analyze` and `flutter test`.
 A missing tool prints `SKIP`; `--strict` (used by CI in
 `.github/workflows/ci.yml`) makes it a failure. `python tools/check.py
 database` runs the migration rehearsal, the SQL tests and the dev stack

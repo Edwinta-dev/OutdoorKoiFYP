@@ -1,7 +1,9 @@
 #pragma once
 // Issue #12: reading the reply to the sensor node's upload,
 // POST /rest/v1/rpc/ingest_readings (supabase/migrations/0025_device_tokens.sql).
-// A 200 reply is {"accepted": n, "rejected": [...], "format": "v1", ...};
+// A 200 reply is {"accepted": n, "stored": s, "already_stored": a,
+// "rejected": [...], "format": "v1" | "v2" | "mixed", ...} (0027 added
+// stored and already_stored: a re-sent cycle counts as accepted);
 // any other status means nothing was stored. Kept free of the Arduino core
 // so the host tests can build it.
 #include <stdlib.h>
@@ -27,7 +29,7 @@ inline bool ingestAccepted(int httpStatus, const char* body, int& accepted) {
 inline const char* ingestStatusText(int httpStatus) {
   switch (httpStatus) {
     case 200: return "stored";
-    case 400: return "batch refused (a field other than sensor_type/data1, or not a list)";
+    case 400: return "batch refused (a field the server does not accept, such as a pond id, or not a list)";
     case 401: return "device token refused (check SENSOR_DEVICE_TOKEN in secrets.h; it may be revoked or expired)";
     case 404: return "ingest_readings not found (migration 0025 not applied)";
     case 413: return "too many readings in one batch";

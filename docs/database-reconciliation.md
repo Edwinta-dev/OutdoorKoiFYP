@@ -254,11 +254,11 @@ separate migration owned by the named issue.
 
 | ID | Defect | Effect | Owner |
 |---|---|---|---|
-| D1 | `aggregate_daily_sensor_data` groups by `"userID"` and inserts into `daily_sensor_averages.userid`, which is `not null`. Any `SensorData` row with a null `userID` (the committed sensor node sends none; the owner's newer sketch reportedly does, section 2a) makes the whole insert fail. | `get_historical_graph_payload` errors whenever such a row exists. Row counts are in section 2. | #17 (pond id in payload and backfill), #5 (test) |
+| D1 | `aggregate_daily_sensor_data` groups by `"userID"` and inserts into `daily_sensor_averages.userid`, which is `not null`. Any `SensorData` row with a null `userID` (the committed sensor node sends none; the owner's newer sketch reportedly does, section 2a) makes the whole insert fail. | `get_historical_graph_payload` errors whenever such a row exists. Row counts are in section 2. | #17: fixed by `0027_sensor_payload_v2.sql` (rows with no pond are skipped; tested in `test_sql_sensor_payload_v2.py`), #5 (test) |
 | D2 | `anon` holds `ALL` on every table and on `http_get`/`http_post` etc. | Anyone with the publishable key can read or change any pond's data and make the database send HTTP requests. | #12 |
 | D3 | `SECURITY DEFINER` RPCs take any `p_user_id`, are executable by `anon`, and set no `search_path`. | Any caller can read any pond's dashboard. A mutable `search_path` lets objects in other schemas shadow the ones the functions mean to use. | #12 |
 | D4 | Dashboard history substitutes 7.4 pH, 180 ppm TDS, 26 °C and 500 lx for missing values. | Charts show readings that were never measured. | #50 |
-| D5 | Graph RPC recomputes every day of aggregates on each call. | Cost grows with table size; a read RPC writes rows. | #22 |
+| D5 | Graph RPC recomputes every day of aggregates on each call. | Cost grows with table size; a read RPC writes rows. | #22; since `0027` (#17) it recomputes only the requested pond's never-covered days and days with new rows (it still writes) |
 | D6 | Two `UserData` triggers do the same station lookup, and one makes a blocking OneMap HTTP request inside the write. | Onboarding writes are slow and fail or hang when OneMap is slow. | #53 |
 | D7 | `raw_sensor` has no `recorded_at`. | The poller's `sensor_recorded_at`, `/metrics` sensor age and stale-reading checks get null against live. | #13 (dashboard, `0012`); #18: the poller no longer reads `raw_sensor` and reports each channel's `SensorData.created_at` (`0014`) |
 | D8 | Duplicate index on `pond_chemistry_evaluations (userid, evaluated_at desc)`. | Extra write cost. | #22 |

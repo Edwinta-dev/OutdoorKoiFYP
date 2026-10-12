@@ -1,7 +1,8 @@
 # Database access matrix
 
 Who may do what in the Supabase database, by role, after migrations
-`0025_device_tokens.sql` and `0026_least_privilege.sql` (issue #12). The
+`0025_device_tokens.sql` and `0026_least_privilege.sql` (issue #12), with
+the objects `0027_sensor_payload_v2.sql` (issue #17) adds. The
 "After #116" column is the target once the app signs in (#49) and #116
 enables row level security on the pond tables; #116 implements that column
 as written here.
@@ -33,6 +34,7 @@ as written here.
 | `pond_chemistry_state`, `pond_*_evaluations`, `evaluation_daily`, `pond_profile`, `kit_readings`, `pond_calibration`, `camera_config`, `camera_mask_version`, `algae_severity_ratings`, `notification_outbox` | backend state | none | none | none; reached through the API | all |
 | `devices`, `device_contact`, `device_tokens` | devices | none | none | none | all |
 | `sensor_ingest_cursor`, `sensor_ingest_ledger`, `worker_lease`, `worker_status` | backend bookkeeping (#8, #18) | none | none | none | all |
+| `daily_sensor_refresh` | daily aggregate bookkeeping (#17), RLS on, no policies | none | none | none (written inside `get_historical_graph_payload`) | all |
 | `WeatherStationLookup`, `weather_station_regime`, `weather_observation`, `weather_forecast_issuance`, `weather_ingest_window` | weather reference and history | none | none | none (read by definer triggers and the backend) | all |
 
 Sequences: `anon` and `authenticated` have usage on `UserData_id_seq` and
@@ -49,7 +51,7 @@ owner rule.
 | `get_historical_graph_payload(p_userid, p_days)` | definer, `search_path=''`, p_days 1..366 | execute, any pond | execute, any pond | `authenticated` only, and the function refuses a pond the caller does not own | execute |
 | `ingest_readings(device_token, rows)` | definer, `search_path=''` | execute (token decides pond) | none | unchanged | execute |
 | `get_bundled_dashboard_payload`, `get_pond_telemetry_history`, `pond_dashboard_sources` | invoker | none | none | none | execute |
-| `aggregate_daily_sensor_data`, `resolve_closest_station`, `summarize_evaluation_days` and its merge helpers | invoker (internal) | none | none | none | execute |
+| `aggregate_daily_sensor_data(p_from, p_to, p_pond_id)`, `reconcile_daily_sensor_averages`, `sensor_channel` (#17), `resolve_closest_station`, `summarize_evaluation_days` and its merge helpers | invoker (internal) | none | none | none | execute |
 | `take_worker_lease`, `save_pond_snapshot`, `save_pond_snapshot_with_ingest` (#8) | invoker | none | none | none | execute |
 | other backend RPCs (`sensor_ingest_*`, `record_device_contacts`, `pond_device_activity`, `save_camera_mask`, weather `*_as_of`, `ingest_weather_batch`, `enqueue_notification`, ...) | invoker | none | none | none | execute |
 | `auth_session_active` | definer | none | none | none | execute |
@@ -62,10 +64,14 @@ No function in `public` is executable by `PUBLIC`.
 
 `ingest_readings` authenticates the token (sha256 match in `device_tokens`,
 not revoked, not expired, device not revoked), takes the pond from the
-device row, accepts only `sensor_type` and `data1` per row and only the
-channels `temp`, `TDS`, `pH`, `LUX`, `battery_mv`, `reset_reason`, at most
-32 rows per call and 6 calls per device per minute. Details and ranges are
-in the header of `0025_device_tokens.sql`.
+device row, accepts per row only `sensor_type` and `data1` plus the
+payload v2 fields `boot_id`, `cycle_seq`, `sampled_at`, `flags`,
+`reset_reason` and `battery_mv` (0027), only the channels `temp`, `TDS`,
+`pH`, `LUX`, `battery_mv`, `reset_reason` in that spelling, at most 32
+rows per call and 6 calls per device per minute. `userID`, `device_id`,
+`pond_id`, `id` and `created_at` refuse the whole batch. Details and
+ranges are in the headers of `0025_device_tokens.sql` and
+`0027_sensor_payload_v2.sql`.
 
 ## Extensions and outbound HTTP
 

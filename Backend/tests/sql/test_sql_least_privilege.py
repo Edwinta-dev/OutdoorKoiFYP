@@ -404,7 +404,9 @@ def test_matrix_sensordata_is_closed_to_the_app_roles(db):
 
 
 @pytest.mark.parametrize("call", [
-    "select public.aggregate_daily_sensor_data()",
+    "select public.aggregate_daily_sensor_data(current_date, current_date)",
+    "select public.reconcile_daily_sensor_averages(1, 7)",
+    "select public.sensor_channel('pH')",
     "select * from public.resolve_closest_station(1.3, 103.8, 'AirTemp')",
     "select public.get_bundled_dashboard_payload(1)",
     "select * from public.get_pond_telemetry_history(1, 7)",

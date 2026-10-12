@@ -183,13 +183,15 @@ def test_tables_and_functions_are_closed_to_the_app_roles(db):
 
 
 def test_sensordata_is_left_as_it_was(db):
-    # 0026 closed the direct insert (the node uses ingest_readings); the
-    # table itself is unchanged.
+    # 0026 closed the direct insert (the node uses ingest_readings); 0027
+    # added the nullable payload v2 columns after the original five, and no
+    # trigger.
     db.execute("select has_table_privilege('anon', 'public.\"SensorData\"', 'insert') as ok")
     assert db.fetchone()["ok"] is False, "the sensor sketch writes through ingest_readings"
     db.execute("select string_agg(column_name, ',' order by ordinal_position) as cols from information_schema.columns "
                "where table_schema = 'public' and table_name = 'SensorData'")
-    assert db.fetchone()["cols"] == "id,created_at,sensor_type,data1,userID"
+    assert db.fetchone()["cols"] == ("id,created_at,sensor_type,data1,userID,"
+                                     "device_id,boot_id,cycle_seq,sampled_at,flags,reset_reason,battery_mv")
     db.execute("select count(*) as n from pg_trigger where tgrelid = 'public.\"SensorData\"'::regclass "
                "and not tgisinternal")
     assert db.fetchone()["n"] == 0

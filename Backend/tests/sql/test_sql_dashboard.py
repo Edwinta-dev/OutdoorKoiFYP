@@ -170,9 +170,14 @@ def test_sql_latest_reading_index_matches_the_read(db):
 
 
 def test_sql_latest_reading_read_can_use_the_index(db):
+    # Since 0027 the newest reading is chosen by reading time
+    # (coalesce(sampled_at, created_at)), then id. Several indexes start
+    # with "userID", so sorting is disabled too: the plan must take the
+    # order from an index.
     db.execute("set local enable_seqscan = off")
+    db.execute("set local enable_sort = off")
     db.execute('explain select distinct on (d.sensor_type) d.id from public."SensorData" d '
                'where d."userID" = 9101 and d.sensor_type is not null '
-               'order by d.sensor_type, d.created_at desc, d.id desc')
+               'order by d.sensor_type, coalesce(d.sampled_at, d.created_at) desc, d.id desc')
     plan = "\n".join(r["QUERY PLAN"] for r in db.fetchall())
-    assert "idx_sensordata_user_type_latest" in plan, plan
+    assert "idx_sensordata_pond_type_effective" in plan, plan

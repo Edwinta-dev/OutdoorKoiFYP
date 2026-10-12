@@ -13,8 +13,9 @@ Two clocks are kept apart:
     database insert time. Nothing here moves it.
   * Model event time: when a reading describes the pond. Its
     effective_sample_time is the node's sample time when the row has one
-    (sampled_at, issue #17) and created_at otherwise. Until #17 every
-    reading has time_basis "ingestion": the time is when the database
+    (sampled_at, payload v2, migration 0027) and created_at otherwise.
+    A row without sampled_at (older firmware, or a node whose clock was
+    not set) has time_basis "ingestion": the time is when the database
     stored it, not when the probe sampled, and every time reported from
     here says so.
 
@@ -139,9 +140,9 @@ class Discovery:
 
 
 def group_rows(rows: list[dict]) -> Discovery:
-    """Rows of one pond ({id, sensor_type, value, created_at}, plus
-    sampled_at once #17 adds it) -> the inputs, oldest first. Rows of an
-    unknown sensor_type are left out and not recorded."""
+    """Rows of one pond ({id, sensor_type, value, created_at, sampled_at,
+    flags}; the last two may be absent or null) -> the inputs, oldest
+    first. Rows of an unknown sensor_type are left out and not recorded."""
     known = [r for r in rows if r.get("sensor_type") in _CHANNEL_OF]
     known.sort(key=lambda r: (_group_key(r), int(r["id"])))
     discovery = Discovery()

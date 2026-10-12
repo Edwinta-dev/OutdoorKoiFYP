@@ -126,6 +126,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -139,6 +140,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -152,6 +154,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -165,6 +168,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -425,6 +429,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -438,6 +443,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -451,6 +457,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -464,6 +471,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:55:00Z",
         "ingested_at": "2026-10-03T04:25:00Z",
         "note": null,
@@ -656,6 +664,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": null,
@@ -669,6 +678,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": null,
@@ -682,6 +692,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": null,
@@ -695,6 +706,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": null,
@@ -887,6 +899,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -900,6 +913,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -913,6 +927,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -926,6 +941,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -1118,6 +1134,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1131,6 +1148,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1144,6 +1162,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1157,6 +1176,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T05:55:00Z",
         "ingested_at": "2026-10-03T05:25:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1349,6 +1369,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:56:00Z",
         "ingested_at": "2026-10-03T04:26:00Z",
         "note": null,
@@ -1362,6 +1383,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T04:56:00Z",
         "ingested_at": "2026-10-03T04:26:00Z",
         "note": null,
@@ -1375,6 +1397,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": null,
         "ingested_at": null,
         "note": "No reading has been stored.",
@@ -1388,6 +1411,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:56:00Z",
         "ingested_at": "2026-10-03T04:26:00Z",
         "note": null,
@@ -1580,6 +1604,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-09-30T05:00:00Z",
         "ingested_at": "2026-09-30T04:30:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1593,6 +1618,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-09-30T05:00:00Z",
         "ingested_at": "2026-09-30T04:30:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1606,6 +1632,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-09-30T05:00:00Z",
         "ingested_at": "2026-09-30T04:30:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1619,6 +1646,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-09-30T05:00:00Z",
         "ingested_at": "2026-09-30T04:30:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -1681,6 +1709,241 @@
         "status": "stale",
         "unit": "knot",
         "value": 2.0
+      }
+    }
+  },
+  "payload_v2": {
+    "api_version": "v1",
+    "assessments": {
+      "algae": null,
+      "chemistry": null,
+      "evaporation": null,
+      "hypoxia": {
+        "advice": [],
+        "aeration": null,
+        "algae_high": null,
+        "dark": null,
+        "explanation": "No recent water temperature or light reading, so the night-time oxygen risk cannot be checked.",
+        "flagged": false,
+        "high_temp_c": 32.0,
+        "level": "unknown",
+        "lux": null,
+        "night_lux_threshold": 20.0,
+        "raised_by": [],
+        "watch_temp_c": 30.0,
+        "water_temp_c": null
+      },
+      "kind": "model_estimate"
+    },
+    "forecast": {
+      "kind": "projection",
+      "outlook": [
+        {
+          "code": "TL",
+          "date": "2026-10-04",
+          "humidity_high_pct": 90.0,
+          "humidity_low_pct": 60.0,
+          "ingested_at": "2026-10-02T22:30:00Z",
+          "issued_at": "2026-10-02T21:00:00Z",
+          "temperature_high_c": 33.0,
+          "temperature_low_c": 25.0,
+          "text": "Thundery Showers",
+          "weekday": "Sunday",
+          "wind_high_kmh": 20.0,
+          "wind_low_kmh": 10.0
+        },
+        {
+          "code": "TL",
+          "date": "2026-10-05",
+          "humidity_high_pct": 90.0,
+          "humidity_low_pct": 60.0,
+          "ingested_at": "2026-10-02T22:30:00Z",
+          "issued_at": "2026-10-02T21:00:00Z",
+          "temperature_high_c": 32.0,
+          "temperature_low_c": 25.0,
+          "text": "Showers",
+          "weekday": "Monday",
+          "wind_high_kmh": 20.0,
+          "wind_low_kmh": 10.0
+        },
+        {
+          "code": "TL",
+          "date": "2026-10-06",
+          "humidity_high_pct": 90.0,
+          "humidity_low_pct": 60.0,
+          "ingested_at": "2026-10-02T22:30:00Z",
+          "issued_at": "2026-10-02T21:00:00Z",
+          "temperature_high_c": 34.0,
+          "temperature_low_c": 26.0,
+          "text": "Fair",
+          "weekday": "Tuesday",
+          "wind_high_kmh": 20.0,
+          "wind_low_kmh": 10.0
+        },
+        {
+          "code": "TL",
+          "date": "2026-10-07",
+          "humidity_high_pct": 90.0,
+          "humidity_low_pct": 60.0,
+          "ingested_at": "2026-10-02T22:30:00Z",
+          "issued_at": "2026-10-02T21:00:00Z",
+          "temperature_high_c": 33.0,
+          "temperature_low_c": 25.0,
+          "text": "Thundery Showers",
+          "weekday": "Wednesday",
+          "wind_high_kmh": 20.0,
+          "wind_low_kmh": 10.0
+        }
+      ],
+      "twenty_four_hour_general": {
+        "code": "TL",
+        "humidity_high_pct": 95.0,
+        "humidity_low_pct": 60.0,
+        "ingested_at": "2026-10-03T03:30:00Z",
+        "issued_at": "2026-10-02T21:30:00Z",
+        "slot_id": "GENERAL",
+        "status": "ok",
+        "temperature_high_c": 35.0,
+        "temperature_low_c": 25.0,
+        "text": "Thundery Showers",
+        "valid_from": "2026-10-02T22:00:00Z",
+        "valid_to": "2026-10-03T22:00:00Z",
+        "wind_high_kmh": 15.0,
+        "wind_low_kmh": 5.0
+      },
+      "twenty_four_hour_regional": {
+        "code": "TL",
+        "ingested_at": "2026-10-03T03:30:00Z",
+        "issued_at": "2026-10-03T03:30:00Z",
+        "slot_id": "REG_CENTRAL",
+        "status": "ok",
+        "text": "Thundery Showers",
+        "valid_from": "2026-10-03T04:00:00Z",
+        "valid_to": "2026-10-03T10:00:00Z"
+      },
+      "two_hour": {
+        "code": null,
+        "ingested_at": "2026-10-03T04:05:00Z",
+        "issued_at": "2026-10-03T03:40:00Z",
+        "slot_id": "Serangoon",
+        "status": "ok",
+        "text": "Partly Cloudy (Day)",
+        "valid_from": "2026-10-03T04:00:00Z",
+        "valid_to": "2026-10-03T06:00:00Z"
+      }
+    },
+    "next_actions": [],
+    "pond_id": 9108,
+    "readings": {
+      "fresh_for_seconds": 1800,
+      "kind": "observed",
+      "lux": {
+        "channel": "lux",
+        "flags": null,
+        "fresh_until": null,
+        "ingested_at": null,
+        "note": "No reading has been stored.",
+        "sample_time": null,
+        "sample_time_basis": "unknown",
+        "sensor_type": null,
+        "source_row_id": null,
+        "status": "missing",
+        "unit": "lux",
+        "value": null
+      },
+      "ph": {
+        "channel": "ph",
+        "flags": 4,
+        "fresh_until": "2026-10-03T04:57:00Z",
+        "ingested_at": "2026-10-03T04:29:00Z",
+        "note": null,
+        "sample_time": "2026-10-03T04:27:00Z",
+        "sample_time_basis": "sample",
+        "sensor_type": "pH",
+        "source_row_id": 910804,
+        "status": "ok",
+        "unit": "pH",
+        "value": 7.4
+      },
+      "tds": {
+        "channel": "tds",
+        "flags": null,
+        "fresh_until": "2026-10-03T04:50:00Z",
+        "ingested_at": "2026-10-03T04:20:00Z",
+        "note": null,
+        "sample_time": null,
+        "sample_time_basis": "unknown",
+        "sensor_type": "TDS",
+        "source_row_id": 910801,
+        "status": "ok",
+        "unit": "ppm",
+        "value": 205.0
+      },
+      "water_temp": {
+        "channel": "water_temp",
+        "flags": 0,
+        "fresh_until": "2026-10-03T03:00:00Z",
+        "ingested_at": "2026-10-03T04:29:00Z",
+        "note": "No newer reading has arrived; the node may have stopped reporting.",
+        "sample_time": "2026-10-03T02:30:00Z",
+        "sample_time_basis": "sample",
+        "sensor_type": "temp",
+        "source_row_id": 910803,
+        "status": "stale",
+        "unit": "degC",
+        "value": 31.0
+      }
+    },
+    "stations": {
+      "air_temperature": "S43",
+      "rainfall": "S43",
+      "twenty_four_hour_region": "REG_CENTRAL",
+      "two_hour_area": "Serangoon",
+      "wind_speed": "S43"
+    },
+    "weather": {
+      "air_temperature": {
+        "fresh_until": "2026-10-03T05:25:00Z",
+        "ingested_at": "2026-10-03T04:26:00Z",
+        "metric": "air_temperature",
+        "note": null,
+        "observed_at": "2026-10-03T04:25:00Z",
+        "station_id": "S43",
+        "status": "ok",
+        "unit": "degC",
+        "value": 30.7
+      },
+      "kind": "observed",
+      "rainfall": {
+        "fresh_until": "2026-10-03T05:25:00Z",
+        "ingested_at": "2026-10-03T04:26:00Z",
+        "metric": "rainfall",
+        "note": null,
+        "observed_at": "2026-10-03T04:25:00Z",
+        "station_id": "S43",
+        "status": "ok",
+        "unit": "mm",
+        "value": 0.2
+      },
+      "uv_index": {
+        "daylight": true,
+        "hour_start": "2026-10-03T04:00:00Z",
+        "ingested_at": "2026-10-03T04:10:00Z",
+        "note": null,
+        "status": "ok",
+        "unit": "UV index",
+        "value": 7.0
+      },
+      "wind_speed": {
+        "fresh_until": "2026-10-03T05:25:00Z",
+        "ingested_at": "2026-10-03T04:26:00Z",
+        "metric": "wind_speed",
+        "note": null,
+        "observed_at": "2026-10-03T04:25:00Z",
+        "station_id": "S43",
+        "status": "ok",
+        "unit": "knot",
+        "value": 4.1
       }
     }
   },
@@ -1811,6 +2074,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -1824,6 +2088,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -1837,6 +2102,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -1850,6 +2116,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:58:00Z",
         "ingested_at": "2026-10-03T04:28:00Z",
         "note": null,
@@ -2042,6 +2309,7 @@
       "kind": "observed",
       "lux": {
         "channel": "lux",
+        "flags": null,
         "fresh_until": "2026-10-03T04:57:00Z",
         "ingested_at": "2026-10-03T04:27:00Z",
         "note": "The light sensor did not answer (the node stores -1).",
@@ -2055,6 +2323,7 @@
       },
       "ph": {
         "channel": "ph",
+        "flags": null,
         "fresh_until": "2026-10-03T03:00:00Z",
         "ingested_at": "2026-10-03T02:30:00Z",
         "note": "No newer reading has arrived; the node may have stopped reporting.",
@@ -2068,6 +2337,7 @@
       },
       "tds": {
         "channel": "tds",
+        "flags": null,
         "fresh_until": "2026-10-03T04:57:00Z",
         "ingested_at": "2026-10-03T04:27:00Z",
         "note": null,
@@ -2081,6 +2351,7 @@
       },
       "water_temp": {
         "channel": "water_temp",
+        "flags": null,
         "fresh_until": "2026-10-03T04:57:00Z",
         "ingested_at": "2026-10-03T04:27:00Z",
         "note": null,

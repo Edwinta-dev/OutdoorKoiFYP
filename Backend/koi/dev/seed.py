@@ -188,13 +188,18 @@ class SeedHistory:
         users = self._rows("UserData", "userID", pond)
         stations = _stations(users[0] if users else None)
 
+        # Newest by reading time (sampled_at, else created_at), then id,
+        # as migration 0027 orders raw_sensor; a row exists once created.
+        def reading_key(row: dict) -> tuple:
+            return parse_timestamp(row.get("sampled_at") or row["created_at"]), row["id"]
+
         latest: dict[str, dict] = {}
         for row in self._rows("SensorData", "userID", pond):
             sensor_type, created = row.get("sensor_type"), parse_timestamp(row["created_at"])
             if sensor_type is None or created > at:
                 continue
             current = latest.get(sensor_type)
-            if current is None or (created, row["id"]) > (parse_timestamp(current["created_at"]), current["id"]):
+            if current is None or reading_key(row) > reading_key(current):
                 latest[sensor_type] = row
 
         telemetry_rows = self.tables.get("weather_telemetry", [])

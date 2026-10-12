@@ -13,9 +13,10 @@ Two times are kept apart:
     anything from the device (the newest SensorData.created_at the
     poller ingested, or the time the camera service stored a frame).
   * A channel's last_sample_at is the time of its newest usable reading
-    (PondTwin.sensor_channels). Until the node sends sample times
-    (issue #17) that is also a receipt time, labelled time_basis
-    "ingestion". A node that reconnects with old buffered samples is
+    (PondTwin.sensor_channels). For a row without a node sample time
+    (older firmware, or an unset clock; issue #17) that is also a receipt
+    time, labelled time_basis "ingestion". A node that reconnects with
+    old buffered samples is
     recently seen, but its channels can still be old.
 
 Expected interval: the cadence configured for the device

@@ -3048,7 +3048,8 @@ components:
             - sample
             type: string
           - type: 'null'
-          description: 'ingestion: timed when the database stored it (no node sample time yet, issue #17).'
+          description: 'ingestion: timed when the database stored it (the row has no node sample time);
+            sample: the node''s sample time.'
           title: Time Basis
         age_seconds:
           anyOf:
@@ -5207,20 +5208,32 @@ components:
           - format: date-time
             type: string
           - type: 'null'
-          description: 'When the probe sampled. Always null until the node sends a sample time (issue
-            #17).'
+          description: 'SensorData.sampled_at: when the probe sampled, by the node''s SNTP-set clock.
+            Null when the row has none (older firmware, or the node''s clock was not set).'
           title: Sample Time
         sample_time_basis:
-          const: unknown
-          description: 'unknown: the node sends no sample time yet.'
+          description: 'sample: sample_time is the node''s sample time; unknown: the row has no sample
+            time, so ingested_at is the only time known.'
+          enum:
+          - sample
+          - unknown
           title: Sample Time Basis
           type: string
+        flags:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: 'SensorData.flags set by the node: 1 clock not set, 2 pH/TDS compensated at 25
+            C because the temperature read failed, 4 pH not calibrated, 8 light sensor saturated. Null
+            on older rows.'
+          title: Flags
         fresh_until:
           anyOf:
           - format: date-time
             type: string
           - type: 'null'
-          description: ingested_at plus fresh_for_seconds; status turns stale after it.
+          description: sample_time (or ingested_at when there is none) plus fresh_for_seconds; status
+            turns stale after it.
           title: Fresh Until
         note:
           anyOf:
@@ -5238,6 +5251,7 @@ components:
       - ingested_at
       - sample_time
       - sample_time_basis
+      - flags
       - fresh_until
       title: SensorReading
       type: object
