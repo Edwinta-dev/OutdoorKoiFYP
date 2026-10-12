@@ -45,6 +45,7 @@ from typing import Any, Callable, Optional
 from koi.errors import PondNotConfigured
 from koi.logs import log_event
 from koi.models import evaporation_engine as ev
+from koi.models.algae_engine import GccSignalConfig
 from koi.models.engine import PondConfig
 from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.pond_twin import PondTwin, SensorHistory
@@ -76,6 +77,9 @@ class EngineRegistry:
         # The poller's sensor ingestion settings (Settings.sensor_ingest).
         self.sensor_ingest = sensor_ingest or IngestConfig()
         self.tds_prompt_config = tds_prompt_config or PromptConfig()
+        # The algae GCC tuning (Settings.algae_signal_config), set by the
+        # Worker; None leaves each engine's own persisted config.
+        self.algae_signal_config: Optional[GccSignalConfig] = None
         self._twins: dict[int, _Loaded] = {}
         self._locks: dict[int, threading.Lock] = {}
         self._registry_lock = threading.Lock()  # protects the two dicts above

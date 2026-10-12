@@ -249,6 +249,44 @@ class EvaporationAssessment(_Assessment):
     topup_now: Optional[bool] = None
 
 
+class GccGrowth(_Open):
+    """d(GCC)/dt of the windowed daily series (algae_engine.gcc_growth)."""
+
+    rate_per_day: Optional[float] = None
+    slow_rate_per_day: Optional[float] = None
+    noise: Optional[float] = Field(default=None, description="Std of day-to-day window changes before the window.")
+    threshold: Optional[float] = None
+    flagged: bool
+    quiet_differences: int
+    window_days: int
+    slow_window_days: int
+
+
+class GccCell(_Open):
+    index: int
+    since: str
+    run_length: int
+    latest_excess: Optional[float] = None
+    excess: Optional[float] = None
+
+
+class GccZones(_Open):
+    """The cell-grid zone rule (algae_engine.gcc_zones)."""
+
+    run_unit: Literal["day", "frame"]
+    reference_cells: list[int]
+    pond_cells: list[int]
+    object_cells: list[int]
+    noise: Optional[float] = None
+    threshold: Optional[float] = None
+    flagged: list[GccCell]
+    spikes: list[GccCell]
+    pending: list[GccCell]
+    unreliable: list[int]
+    insufficient: list[int]
+    note: Optional[str] = None
+
+
 class AlgaeAssessment(_Assessment):
     green_ratio: Optional[float] = None
     watch_threshold: Optional[float] = None
@@ -264,6 +302,15 @@ class AlgaeAssessment(_Assessment):
     calibrated: Optional[bool] = None
     camera_drift: Optional[str] = None
     label_count: Optional[int] = None
+    signal: Optional[Literal["gcc", "green_ratio"]] = None
+    rate_source_detail: Optional[Literal["gcc_windowed_trend", "legacy_green_ratio"]] = None
+    gcc: Optional[float] = None
+    gcc_source: Optional[Literal["water_gap", "frame"]] = None
+    gcc_baseline: Optional[float] = None
+    growth: Optional[GccGrowth] = None
+    zones: Optional[GccZones] = None
+    baseline_reset_at: Optional[str] = None
+    baseline_reset_reason: Optional[str] = None
 
 
 class HypoxiaFlag(_Open):
@@ -414,7 +461,8 @@ class EvaporationForecast(_ForecastProvenance):
 
 class AlgaeDay(_Open):
     days_from_now: int
-    green_ratio: float
+    green_ratio: Optional[float] = Field(default=None, description="Absent on a GCC projection.")
+    gcc: Optional[float] = None
     growth_rate_per_day: Optional[float] = None
     favourability: Optional[float] = None
     lux_assumed: Optional[float] = None
@@ -432,6 +480,7 @@ class AlgaeThresholds(_Open):
 class ScrubBenefit(_Open):
     days_bought: Optional[int] = None
     post_scrub_green_ratio: Optional[float] = None
+    post_scrub_gcc: Optional[float] = None
 
 
 class CameraDriftVerdict(_Open):
@@ -443,11 +492,18 @@ class CameraDriftVerdict(_Open):
 class AlgaeForecast(_ForecastProvenance):
     trajectory: list[AlgaeDay]
     current_green_ratio: Optional[float] = None
+    current_gcc: Optional[float] = None
+    projection_method: Optional[Literal["logistic", "windowed_gcc_trend"]] = None
+    projection_note: Optional[str] = None
+    slow_rate_per_day: Optional[float] = None
+    growth: Optional[GccGrowth] = None
+    zones: Optional[GccZones] = None
     predicted_scrub_days_from_now: Optional[int] = None
     first_watch_days_from_now: Optional[int] = None
     first_action_days_from_now: Optional[int] = None
     thresholds: AlgaeThresholds
     rate_source: Literal["fitted_from_camera", "measured_declining", "literature_fallback"]
+    rate_source_detail: Optional[Literal["gcc_windowed_trend", "legacy_green_ratio"]] = None
     intrinsic_rate_per_day: Optional[float] = None
     realised_rate_per_day: Optional[float] = None
     confidence: Optional[str] = None

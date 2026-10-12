@@ -52,9 +52,11 @@ independent widgets that happen to share a screen.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
+import statistics
+from dataclasses import asdict, dataclass, fields
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 # ============================================================
 # Environmental response curves
@@ -212,6 +214,42 @@ class GreenSample:
     green_ratio: float
     smoothed_green: Optional[float] = None
     state: Optional[str] = None
+    # Issue #92. gcc is the water_gap region's GCC when the frame was
+    # measured with regions, else the frame GCC; None for legacy rows and
+    # for a water_gap marked unusable. grid is the row-major cell GCC.
+    gcc: Optional[float] = None
+    gcc_source: Optional[str] = None
+    grid: Optional[list] = None
+    baseline_reset: Optional[str] = None
+
+
+def _frame_gcc(row: dict) -> tuple:
+    """(gcc, source) of one imageTable row. A configured water_gap wins
+    over the frame mean; an unusable gap (plants over it, no pixels) gives
+    no GCC rather than falling back to the frame, which would mix two
+    measurement areas in one series."""
+    regions = row.get("regions")
+    gap = (regions.get("regions") or {}).get("water_gap") if isinstance(regions, dict) else None
+    if isinstance(gap, dict):
+        if gap.get("usable") is False or not isinstance(gap.get("gcc"), (int, float)):
+            return None, None
+        return float(gap["gcc"]), "water_gap"
+    value = row.get("gcc")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value), "frame"
+    return None, None
+
+
+def _frame_grid(row: dict) -> Optional[list]:
+    """The colour v1 cell GCC grid, or None when absent or malformed."""
+    colour = row.get("colour")
+    grid = colour.get("grid") if isinstance(colour, dict) else None
+    if not isinstance(grid, dict) or not isinstance(grid.get("gcc"), list):
+        return None
+    cells = grid["gcc"]
+    if len(cells) != (grid.get("rows") or 0) * (grid.get("cols") or 0):
+        return None
+    return [float(c) if isinstance(c, (int, float)) and not isinstance(c, bool) else None for c in cells]
 
 
 def parse_image_rows(rows: list) -> list:
@@ -231,6 +269,10 @@ def parse_image_rows(rows: list) -> list:
     version 1 or 2 with status "fail", see koi/camera/quality.py) are skipped, so
     a dark, blown-out, blurred or colour-cast frame never reaches the fit. Rows without
     a quality result (stored before the gate) are kept as before.
+
+    Issue #92: each sample also carries the frame's GCC (_frame_gcc), its
+    colour grid and its baseline_reset reason; rows without them load with
+    None and stay on the green_ratio path.
     """
     import json
 
@@ -266,12 +308,17 @@ def parse_image_rows(rows: list) -> list:
         elif isinstance(cs, str):
             state_label = cs
 
+        gcc, gcc_source = _frame_gcc(row)
         samples.append(
             GreenSample(
                 time=ts,
                 green_ratio=float(raw),
                 smoothed_green=smoothed,
                 state=state_label,
+                gcc=gcc,
+                gcc_source=gcc_source,
+                grid=_frame_grid(row),
+                baseline_reset=row.get("baseline_reset") or None,
             )
         )
 
@@ -376,6 +423,294 @@ def resolve_thresholds(
 
 
 # ============================================================
+# GCC signal (issue #92)
+# ============================================================
+#
+# green_ratio counts saturated green pixels, so on pond 455 it measures
+# floating plants and the camera's view more than the water. GCC
+# (G / (R + G + B)) is the colour of the water itself, and the PhenoCam
+# method makes it robust: one high quantile per local day of the passing
+# daytime frames, then a short moving window. Status is an offset above the
+# pond's own quiet level, growth is the windowed slope against the measured
+# day-to-day spread, and a 3x3 cell grid gives a local signal next to the
+# pond-wide one. docs/models.md documents every value below.
+
+# MAD x 1.4826 estimates a normal standard deviation (robust spread).
+MAD_TO_SD = 1.4826
+# Values (local days, or frames in frame mode) a cell needs in its
+# baseline, before the run being judged, to be assessed at all.
+ZONE_MIN_BASELINE = 3
+# Floor on the pooled cell noise, so a perfectly flat (synthetic or
+# quantised) series cannot turn every tiny excess into a flag.
+ZONE_NOISE_FLOOR = 0.001
+# Spikes reported per assessment, newest first.
+MAX_REPORTED_SPIKES = 10
+# Retained GCC frames, on top of the age limit in GccSignalConfig.
+MAX_GCC_FRAMES = 1000
+DAILY_STATISTICS = {"p90": 0.90, "median": 0.50}
+RUN_UNITS = ("day", "frame")
+
+
+@dataclass(frozen=True)
+class GccSignalConfig:
+    """The tuning of the GCC path. koi.settings.Settings.algae_signal_config
+    builds it from the environment; the defaults here equal the Settings
+    defaults, so an engine built without one behaves as the poller's."""
+    daily_statistic: str = "p90"
+    day_start_hour: int = 7
+    day_end_hour: int = 19
+    window_days: int = 3
+    growth_window_days: int = 3
+    slow_window_days: int = 7
+    growth_k: float = 3.0
+    growth_min_rate: float = 0.001
+    min_quiet_diffs: int = 7
+    watch_offset: float = 0.03
+    action_offset: float = 0.06
+    reference_cells: tuple = (6, 7, 8)
+    object_cells: tuple = ()
+    cell_k: float = 3.0
+    cell_run: int = 2
+    cell_unreliable_ratio: float = 4.0
+    run_unit: str = "day"
+    timezone: str = "Asia/Singapore"
+    history_days: int = 30
+
+    def __post_init__(self):
+        if self.daily_statistic not in DAILY_STATISTICS:
+            raise ValueError(f"daily_statistic must be one of {sorted(DAILY_STATISTICS)}")
+        if self.run_unit not in RUN_UNITS:
+            raise ValueError(f"run_unit must be one of {RUN_UNITS}")
+        object.__setattr__(self, "reference_cells", tuple(int(i) for i in self.reference_cells))
+        object.__setattr__(self, "object_cells", tuple(int(i) for i in self.object_cells))
+
+    def to_dict(self) -> dict:
+        return {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self).items()}
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> "GccSignalConfig":
+        """Unknown keys are ignored, so a snapshot written by a later
+        version with more settings still loads."""
+        names = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in (data or {}).items() if k in names})
+
+
+DEFAULT_SIGNAL_CONFIG = GccSignalConfig()
+
+
+def _local_time(stamp: str, tz: ZoneInfo) -> datetime:
+    moment = datetime.fromisoformat(stamp)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(tz)
+
+
+def _daytime_frames(frames: list, config: GccSignalConfig) -> list:
+    """(local time, frame) for the frames inside the daytime hours."""
+    tz = ZoneInfo(config.timezone)
+    out = []
+    for frame in frames:
+        local = _local_time(frame["t"], tz)
+        if config.day_start_hour <= local.hour < config.day_end_hour:
+            out.append((local, frame))
+    return out
+
+
+def gcc_daily_series(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> list:
+    """One value per local day: the configured quantile of that day's
+    daytime frames, plus "window", the mean of the daily values within the
+    trailing window_days calendar days. A missing day is not invented; the
+    window simply holds fewer values. frames are already quality-filtered."""
+    by_day: dict = {}
+    for local, frame in _daytime_frames(frames, config):
+        by_day.setdefault(local.date(), []).append(float(frame["v"]))
+    frac = DAILY_STATISTICS[config.daily_statistic]
+    days = [{"date": day.isoformat(), "gcc": _quantile(sorted(by_day[day]), frac), "frames": len(by_day[day])}
+            for day in sorted(by_day)]
+    span = config.window_days - 1
+    for row in days:
+        today = date.fromisoformat(row["date"])
+        inside = [r["gcc"] for r in days if 0 <= (today - date.fromisoformat(r["date"])).days <= span]
+        row["window"] = sum(inside) / len(inside)
+    return days
+
+
+def _slope(points: list) -> Optional[float]:
+    """Least-squares slope of (x, y) points, None for fewer than two x."""
+    if len({x for x, _ in points}) < 2:
+        return None
+    n = len(points)
+    x_mean = sum(x for x, _ in points) / n
+    y_mean = sum(y for _, y in points) / n
+    num = sum((x - x_mean) * (y - y_mean) for x, y in points)
+    den = sum((x - x_mean) ** 2 for x, _ in points)
+    return num / den
+
+
+def _robust_spread(values: list) -> float:
+    centre = _median(values)
+    return MAD_TO_SD * _median([abs(v - centre) for v in values])
+
+
+def gcc_growth(days: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> dict:
+    """d(GCC)/dt from the daily series.
+
+    rate_per_day is the least-squares slope of the daily values over the
+    last growth_window_days days, slow_rate_per_day over slow_window_days.
+    noise is the standard deviation of the day-to-day changes of the
+    windowed series BEFORE the short window, so a rise in progress stays
+    out of its own threshold. Growth is flagged when rate_per_day exceeds max(growth_k x noise,
+    growth_min_rate); with fewer than min_quiet_diffs changes the noise is
+    unknown and nothing flags."""
+    result: dict[str, Any] = {"rate_per_day": None, "slow_rate_per_day": None, "noise": None, "threshold": None,
+              "flagged": False, "quiet_differences": 0, "window_days": config.growth_window_days,
+              "slow_window_days": config.slow_window_days}
+    if not days:
+        return result
+    dates = [date.fromisoformat(r["date"]) for r in days]
+    last = dates[-1]
+
+    def over(span: int) -> Optional[float]:
+        return _slope([((d - last).days, r["gcc"]) for d, r in zip(dates, days, strict=True)
+                       if (last - d).days <= span])
+
+    quiet_end = last - timedelta(days=config.growth_window_days)
+    diffs = [days[i]["window"] - days[i - 1]["window"] for i in range(1, len(days))
+             if (dates[i] - dates[i - 1]).days == 1 and dates[i] <= quiet_end]
+    noise = statistics.stdev(diffs) if len(diffs) >= max(config.min_quiet_diffs, 2) else None
+    threshold = max(config.growth_k * noise, config.growth_min_rate) if noise is not None else None
+    short = over(config.growth_window_days)
+    result.update(rate_per_day=short, slow_rate_per_day=over(config.slow_window_days), noise=noise,
+                  threshold=threshold, quiet_differences=len(diffs),
+                  flagged=bool(short is not None and threshold is not None and short > threshold))
+    return result
+
+
+def resolve_gcc_thresholds(days: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> dict:
+    """Watch and action as offsets above the pond's quiet GCC level: the
+    median of the lower half of the windowed daily values since the last
+    baseline reset. Offsets, not multiples: GCC never sits near zero, and a
+    multiple of a near-zero baseline alarmed on noise (issue #92)."""
+    windows = sorted(r["window"] for r in days)
+    if not windows:
+        return {"watch": None, "action": None, "baseline": None, "mode": "gcc_offset"}
+    baseline = _median(windows[: max(len(windows) // 2, 1)])
+    return {"watch": baseline + config.watch_offset, "action": baseline + config.action_offset,
+            "baseline": baseline, "mode": "gcc_offset"}
+
+
+def _runs(series: list, threshold: float, by_day: bool) -> list:
+    """Maximal runs of consecutive values above threshold, as lists of
+    (key, excess). In day mode a missing local day breaks a run."""
+    runs: list[list] = []
+    current: list = []
+    previous = None
+    for key, excess in series:
+        adjacent = (previous is not None and
+                    (not by_day or (date.fromisoformat(key) - date.fromisoformat(previous)).days == 1))
+        if excess > threshold:
+            if current and not adjacent:
+                runs.append(current)
+                current = []
+            current.append((key, excess))
+        elif current:
+            runs.append(current)
+            current = []
+        previous = key
+    if current:
+        runs.append(current)
+    return runs
+
+
+def gcc_zones(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> Optional[dict]:
+    """The zone rule on the cell grid. None when no frame has a grid.
+
+    Each frame's reference-cell mean is subtracted from every pond cell,
+    cancelling a white-balance shift that moves all cells together. A
+    cell's value per local day (per frame in frame mode) is the median of
+    its adjusted values; its baseline is the median of those values before
+    the last cell_run (the run being judged stays out of its own
+    baseline). Noise is the robust spread pooled over the pond cells'
+    baseline residuals. A cell flags when its excess stays above cell_k x
+    noise for cell_run consecutive values; a shorter run that fell back is
+    a spike, and one still open is pending. A cell whose own spread is
+    above cell_unreliable_ratio x the pooled noise is reported unreliable
+    (something loose in view) and not judged."""
+    grids = [(local, frame["c"]) for local, frame in _daytime_frames(frames, config) if frame.get("c")]
+    if not grids:
+        return None
+    size = len(grids[-1][1])
+    objects = {i for i in config.object_cells if 0 <= i < size}
+    refs = [i for i in config.reference_cells if 0 <= i < size and i not in objects]
+    pond = [i for i in range(size) if i not in objects and i not in refs]
+    by_day = config.run_unit == "day"
+    result: dict[str, Any] = {"run_unit": config.run_unit, "reference_cells": refs, "pond_cells": pond,
+              "object_cells": sorted(objects), "noise": None, "threshold": None,
+              "flagged": [], "spikes": [], "pending": [], "unreliable": [], "insufficient": []}
+    if not refs or not pond:
+        result["note"] = "no_reference_cells" if not refs else "no_pond_cells"
+        return result
+
+    adjusted: dict = {i: {} for i in pond}
+    for local, cells in grids:
+        if len(cells) != size:
+            continue
+        ref = [cells[i] for i in refs if cells[i] is not None]
+        if not ref:
+            continue
+        shift = sum(ref) / len(ref)
+        key = local.isoformat() if not by_day else local.date().isoformat()
+        for i in pond:
+            if cells[i] is not None:
+                adjusted[i].setdefault(key, []).append(cells[i] - shift)
+
+    series: dict[int, list] = {}
+    baselines: dict[int, float] = {}
+    spreads: dict[int, float] = {}
+    residuals: dict[int, list] = {}
+    for i in pond:
+        values = [(key, _median(v)) for key, v in adjusted[i].items()]
+        base = [v for _, v in values[:-config.cell_run]]
+        if len(base) < ZONE_MIN_BASELINE:
+            result["insufficient"].append(i)
+            continue
+        series[i] = values
+        baselines[i] = _median(base)
+        residuals[i] = [v - baselines[i] for v in base]
+        spreads[i] = _robust_spread(base)
+    if not series:
+        return result
+
+    pooled = _robust_spread([r for i in series for r in residuals[i]])
+    unreliable = [i for i in series if spreads[i] > config.cell_unreliable_ratio * max(pooled, ZONE_NOISE_FLOOR)]
+    reliable = [i for i in series if i not in unreliable]
+    if unreliable and reliable:
+        pooled = _robust_spread([r for i in reliable for r in residuals[i]])
+    noise = max(pooled, ZONE_NOISE_FLOOR)
+    threshold = config.cell_k * noise
+    result.update(noise=noise, threshold=threshold, unreliable=unreliable)
+
+    spikes = []
+    for i in reliable:
+        excess = [(key, value - baselines[i]) for key, value in series[i]]
+        runs: list[list] = _runs(excess, threshold, by_day)
+        open_run = runs[-1] if runs and runs[-1][-1][0] == excess[-1][0] else None
+        for run in runs:
+            entry = {"index": i, "since": run[0][0], "run_length": len(run),
+                     "excess": round(max(e for _, e in run), 5)}
+            if run is not open_run:
+                if len(run) < config.cell_run:
+                    spikes.append(entry)
+            elif len(run) >= config.cell_run:
+                result["flagged"].append({"index": i, "since": run[0][0], "run_length": len(run),
+                                          "latest_excess": round(excess[-1][1], 5)})
+            else:
+                result["pending"].append(entry)
+    result["spikes"] = sorted(spikes, key=lambda s: s["since"], reverse=True)[:MAX_REPORTED_SPIKES]
+    return result
+
+
+# ============================================================
 # Config + assessment types
 # ============================================================
 
@@ -415,6 +750,18 @@ class AlgaeAssessment:
     label_count: int = 0
     calibrated: bool = False
     camera_drift: str = "insufficient_data"
+    # Issue #92: which series drove status ("gcc", or "green_ratio" for a
+    # history without GCC), and the GCC readout. growth and zones are the
+    # gcc_growth and gcc_zones results; None on the green_ratio path.
+    signal: str = "green_ratio"
+    rate_source_detail: Optional[str] = None
+    gcc: Optional[float] = None
+    gcc_source: Optional[str] = None
+    gcc_baseline: Optional[float] = None
+    growth: Optional[dict] = None
+    zones: Optional[dict] = None
+    baseline_reset_at: Optional[str] = None
+    baseline_reset_reason: Optional[str] = None
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -475,8 +822,12 @@ class AlgaeGrowthEngine:
     # undo path restores it exactly regardless.
     HUMAN_TRUST = 0.85
 
-    def __init__(self, config: Optional[AlgaeConfig] = None):
+    def __init__(self, config: Optional[AlgaeConfig] = None,
+                 signal_config: Optional[GccSignalConfig] = None):
         self.config = config or AlgaeConfig()
+        # Set by the poller each cycle from Settings and persisted, so an
+        # API request that assimilates frames uses the same tuning.
+        self.signal_config = signal_config or GccSignalConfig()
         self._green_ratio: Optional[float] = None
         self._last_advance_time: Optional[datetime] = None
         self._intrinsic_rate: float = FALLBACK_INTRINSIC_RATE
@@ -509,6 +860,13 @@ class AlgaeGrowthEngine:
         # Bounded undo stack of (rating_key, prior_state) so a mis-tap is
         # exactly reversible rather than approximately.
         self._undo_stack: list = []
+        # GCC frames since the last baseline reset, oldest first:
+        # {"t", "v" (GCC), "s" (water_gap | frame), "c" (cell grid or None)}.
+        self._gcc_frames: list = []
+        # The newest imageTable.baseline_reset assimilated: {"t", "reason"}.
+        self._baseline_reset: Optional[dict] = None
+        # Derived from _gcc_frames on every change; not persisted.
+        self._gcc: Optional[dict[str, Any]] = None
 
     # ----------------------------------------------------------
     # Camera assimilation (the grounding step)
@@ -529,6 +887,15 @@ class AlgaeGrowthEngine:
         """
         if not samples:
             return 0
+
+        # A baseline reset (new mask or regions, or a persisted
+        # obstruction) means a new view: what came before measured a
+        # different picture. Looked for in the whole batch, not only past
+        # the watermark, so a twin whose history predates the reset (a
+        # snapshot from before issue #92) still restarts from it.
+        reset = self._newest_unseen_reset(samples)
+        if reset is not None:
+            self._restart_view(reset)
 
         fresh = [
             s for s in samples
@@ -553,6 +920,7 @@ class AlgaeGrowthEngine:
             self._camera_history.append({"t": s.time.isoformat(), "v": float(value)})
         if len(self._camera_history) > 300:
             self._camera_history = self._camera_history[-300:]
+        self._add_gcc_frames(clean)
 
         self._sample_count += len(clean)
 
@@ -584,6 +952,113 @@ class AlgaeGrowthEngine:
 
         self._last_advance_time = self._last_camera_time
         return len(clean)
+
+    # ----------------------------------------------------------
+    # GCC path (issue #92)
+    # ----------------------------------------------------------
+    @property
+    def signal_config(self) -> GccSignalConfig:
+        return self._signal_config
+
+    @signal_config.setter
+    def signal_config(self, value: GccSignalConfig) -> None:
+        changed = getattr(self, "_signal_config", None) != value
+        self._signal_config = value
+        if changed and getattr(self, "_gcc_frames", None):
+            self._refresh_gcc()
+
+    def _newest_unseen_reset(self, samples: list) -> Optional[GreenSample]:
+        seen = datetime.fromisoformat(self._baseline_reset["t"]) if self._baseline_reset else None
+        resets = [s for s in samples if s.baseline_reset and (seen is None or s.time > seen)]
+        return max(resets, key=lambda s: s.time) if resets else None
+
+    def _restart_view(self, reset: GreenSample) -> None:
+        """Forgets everything measured before reset and lets the batch be
+        assimilated again from the reset frame on. Ratings are kept: they
+        are owner records, and the label calibration is recomputed from
+        them on the next rating."""
+        self._camera_history = []
+        self._last_history_samples = []
+        self._gcc_frames = []
+        self._gcc = None
+        self._green_ratio = None
+        self._thresholds = {"watch": ABSOLUTE_WATCH_RATIO, "action": ABSOLUTE_ACTION_RATIO,
+                            "baseline": None, "mode": "absolute"}
+        self._intrinsic_rate = FALLBACK_INTRINSIC_RATE
+        self._rate_source = "literature_fallback"
+        self._confidence = "low"
+        self._last_growth_rate = 0.0
+        self._sample_count = 0
+        self._baseline_reset = {"t": reset.time.isoformat(), "reason": reset.baseline_reset}
+        # Just before the reset frame, so it and everything after it in
+        # this batch counts as fresh, even if assimilated before.
+        self._last_camera_time = reset.time - timedelta(microseconds=1)
+
+    def _add_gcc_frames(self, clean: list) -> None:
+        added = False
+        for s in clean:
+            if s.gcc is None:
+                continue
+            grid = [round(c, 6) if c is not None else None for c in s.grid] if s.grid else None
+            self._gcc_frames.append({"t": s.time.isoformat(), "v": round(float(s.gcc), 6),
+                                     "s": s.gcc_source, "c": grid})
+            added = True
+        if not added:
+            return
+        oldest = clean[-1].time - timedelta(days=self.signal_config.history_days)
+        self._gcc_frames = [f for f in self._gcc_frames
+                            if datetime.fromisoformat(f["t"]) >= oldest][-MAX_GCC_FRAMES:]
+        self._refresh_gcc()
+
+    def _refresh_gcc(self) -> None:
+        """Recomputes the GCC readout from the retained frames; None until
+        there is at least one daytime frame since the last reset."""
+        config = self.signal_config
+        days = gcc_daily_series(self._gcc_frames, config)
+        if not days:
+            self._gcc = None
+            return
+        growth = gcc_growth(days, config)
+        enough = len(days) > config.slow_window_days and growth["noise"] is not None
+        self._gcc = {
+            "days": days,
+            "level": days[-1]["window"],
+            "source": self._gcc_frames[-1]["s"],
+            "thresholds": resolve_gcc_thresholds(days, config),
+            "growth": growth,
+            "zones": gcc_zones(self._gcc_frames, config),
+            "confidence": "high" if enough else "medium" if len(days) >= config.window_days else "low",
+        }
+
+    def _gcc_state(self) -> dict[str, Any]:
+        if self._gcc is None:
+            raise RuntimeError("no GCC readout: check uses_gcc first")
+        return self._gcc
+
+    @property
+    def uses_gcc(self) -> bool:
+        """True when GCC drives status: some daytime frame since the last
+        reset carried GCC. Otherwise the green_ratio path (legacy rows)."""
+        return self._gcc is not None
+
+    def _reported_rate_source(self) -> str:
+        """rate_source keeps the three values the app branches on; a GCC
+        trend is camera-measured. rate_source_detail says which series."""
+        if not self.uses_gcc:
+            return self._rate_source
+        rate = self._gcc_state()["growth"]["rate_per_day"]
+        return "measured_declining" if rate is not None and rate < 0 else "fitted_from_camera"
+
+    def _rate_source_detail(self) -> Optional[str]:
+        if self.uses_gcc:
+            return "gcc_windowed_trend"
+        return "legacy_green_ratio" if self._camera_history else None
+
+    def _gcc_status_applies(self) -> bool:
+        # Label-calibrated thresholds are in green_ratio units (ratings
+        # pair a class with the frame's green_ratio); once calibrated they
+        # take over from the GCC offsets, as they took over before.
+        return self.uses_gcc and self._thresholds.get("mode") != "label_calibrated"
 
     def refit_growth_rate(
         self,
@@ -1172,6 +1647,8 @@ class AlgaeGrowthEngine:
         answer is "unknown", not a fabricated Green."""
         if self._green_ratio is None:
             return None
+        if self._gcc_status_applies():
+            return self._assess_gcc(self._green_ratio, days_to_scrub)
 
         g = self._green_ratio
         watch = self._thresholds["watch"]
@@ -1217,7 +1694,8 @@ class AlgaeGrowthEngine:
             threshold_mode=self._thresholds.get("mode", "absolute"),
             growth_rate_per_day=round(self._last_growth_rate, 5),
             intrinsic_rate_per_day=round(self._intrinsic_rate, 5),
-            rate_source=self._rate_source,
+            rate_source=self._reported_rate_source(),
+            rate_source_detail=self._rate_source_detail(),
             confidence=self._confidence,
             sample_count=self._sample_count,
             days_to_scrub=days_to_scrub,
@@ -1226,6 +1704,74 @@ class AlgaeGrowthEngine:
             label_count=labelled,
             calibrated=self._thresholds.get("mode") == "label_calibrated",
             camera_drift=self.detect_camera_drift()["verdict"],
+            **self._gcc_fields(),
+        )
+
+    def _gcc_fields(self) -> dict:
+        """The GCC readout carried by every assessment, also when label
+        calibration (green_ratio) drives status."""
+        reset = self._baseline_reset or {}
+        fields_ = {"baseline_reset_at": reset.get("t"), "baseline_reset_reason": reset.get("reason")}
+        if self._gcc is None:
+            return fields_
+        thresholds = self._gcc_state()["thresholds"]
+        return {**fields_, "signal": "gcc" if self._gcc_status_applies() else "green_ratio",
+                "gcc": round(self._gcc_state()["level"], 5), "gcc_source": self._gcc_state()["source"],
+                "gcc_baseline": round(thresholds["baseline"], 5),
+                "growth": self._gcc_state()["growth"], "zones": self._gcc_state()["zones"]}
+
+    def _assess_gcc(self, green_ratio: float, days_to_scrub: Optional[int]) -> AlgaeAssessment:
+        level = self._gcc_state()["level"]
+        thresholds = self._gcc_state()["thresholds"]
+        watch, action = thresholds["watch"], thresholds["action"]
+        growth = self._gcc_state()["growth"]
+        rate = growth["rate_per_day"] or 0.0
+        zones = self._gcc_state()["zones"] or {}
+        flagged = [cell["index"] for cell in zones.get("flagged", [])]
+
+        if level >= action:
+            status, category, scrub_now = "Red", "Scrub Due", True
+            advisory = (
+                f"Water colour (GCC) is {level:.3f}, past this pond's alert level of {action:.3f} "
+                f"({thresholds['baseline']:.3f} quiet level + {action - thresholds['baseline']:.3f}). "
+                f"Scrub now - heavy algae swings dissolved oxygen hard between day and night."
+            )
+        elif level >= watch:
+            status, category, scrub_now = "Amber", "Watch", False
+            advisory = (
+                f"Water colour (GCC) is {level:.3f}, above the {watch:.3f} watch level. "
+                f"It is changing by {rate:+.4f} a day - worth scheduling a scrub."
+            )
+        else:
+            status, category, scrub_now = "Green", "Clear", False
+            advisory = f"Algae under control: water colour (GCC) {level:.3f}, watch level {watch:.3f}."
+        if growth["flagged"]:
+            advisory += (f" Greening is faster than this pond's normal day-to-day change "
+                         f"({rate:+.4f} a day against {growth['threshold']:.4f}).")
+        if flagged:
+            advisory += f" A local green patch persists in camera cell(s) {', '.join(map(str, flagged))}."
+
+        counts = self.label_counts()
+        return AlgaeAssessment(
+            status=status,
+            category=category,
+            green_ratio=round(green_ratio, 5),
+            watch_threshold=round(watch, 5),
+            action_threshold=round(action, 5),
+            threshold_mode=thresholds["mode"],
+            growth_rate_per_day=round(rate, 5),
+            intrinsic_rate_per_day=round(self._intrinsic_rate, 5),
+            rate_source=self._reported_rate_source(),
+            rate_source_detail=self._rate_source_detail(),
+            confidence=self._gcc_state()["confidence"],
+            sample_count=self._sample_count,
+            days_to_scrub=days_to_scrub,
+            advisory=advisory,
+            scrub_now=scrub_now,
+            label_count=sum(counts.get(c, 0) for c in SEVERITY_LEVELS),
+            calibrated=False,
+            camera_drift=self.detect_camera_drift()["verdict"],
+            **self._gcc_fields(),
         )
 
     # ----------------------------------------------------------
@@ -1253,6 +1799,8 @@ class AlgaeGrowthEngine:
             raise ValueError("steps_per_day must be >= 1")
         if not daily_environment:
             raise ValueError("daily_environment must contain at least one day")
+        if start_green is None and self._green_ratio is not None and self._gcc_status_applies():
+            return self._project_gcc(self._green_ratio, horizon_days, include_scrub_benefit)
 
         green = start_green if start_green is not None else self._green_ratio
         if green is None:
@@ -1322,7 +1870,9 @@ class AlgaeGrowthEngine:
             "thresholds": self.thresholds,
             "intrinsic_rate_per_day": round(self._intrinsic_rate, 5),
             "realised_rate_per_day": round(self._last_growth_rate, 5),
-            "rate_source": self._rate_source,
+            "rate_source": self._reported_rate_source(),
+            "rate_source_detail": self._rate_source_detail(),
+            "projection_method": "logistic",
             "confidence": self._confidence,
             "sample_count": self._sample_count,
             "obstructed_sample_count": self._obstructed_count,
@@ -1349,6 +1899,85 @@ class AlgaeGrowthEngine:
             }
         return result
 
+    def _gcc_scrub_benefit(self) -> dict:
+        """A scrub removes SCRUB_REMOVAL_EFFICIENCY of the GCC excess over
+        the quiet level; days_bought is when the trend brings it back to
+        the watch level."""
+        level, thresholds = self._gcc_state()["level"], self._gcc_state()["thresholds"]
+        baseline, watch = thresholds["baseline"], thresholds["watch"]
+        post = baseline + max(level - baseline, 0.0) * (1.0 - SCRUB_REMOVAL_EFFICIENCY)
+        rate = max(self._gcc_state()["growth"]["rate_per_day"] or 0.0, 0.0)
+        days: Optional[int]
+        if post >= watch:
+            days = 0
+        else:
+            days = math.ceil((watch - post) / rate) if rate > 0 else None
+        return {"post_scrub_gcc": round(post, 5), "removal_efficiency": SCRUB_REMOVAL_EFFICIENCY,
+                "days_bought": days}
+
+    def _project_gcc(self, green_ratio: float, horizon_days: int, include_scrub_benefit: bool) -> dict:
+        """The windowed GCC trend carried forward. The logistic model is
+        not used on GCC: GCC sits near 1/3 for clear water rather than
+        near zero, so ln(GCC) has no growth to fit (decision record 0092).
+        A falling trend is held level, as the green_ratio path does."""
+        level = self._gcc_state()["level"]
+        growth = self._gcc_state()["growth"]
+        rate = max(growth["rate_per_day"] or 0.0, 0.0)
+        thresholds = self._gcc_state()["thresholds"]
+        watch, action = thresholds["watch"], thresholds["action"]
+        first_watch = 0 if level >= watch else None
+        first_action = 0 if level >= action else None
+        trajectory = []
+        for day in range(1, horizon_days + 1):
+            value = min(level + rate * day, 1.0)
+            if first_watch is None and value >= watch:
+                first_watch = day
+            if first_action is None and value >= action:
+                first_action = day
+            trajectory.append({"days_from_now": day, "gcc": round(value, 5),
+                               "growth_rate_per_day": round(rate, 5)})
+        crossings = [d for d in (first_watch, first_action) if d is not None]
+        result = {
+            "current_green_ratio": round(green_ratio, 5),
+            "current_gcc": round(level, 5),
+            "predicted_scrub_days_from_now": min(crossings) if crossings else None,
+            "first_watch_days_from_now": first_watch,
+            "first_action_days_from_now": first_action,
+            "thresholds": {k: round(v, 5) if isinstance(v, float) else v for k, v in thresholds.items()},
+            "intrinsic_rate_per_day": round(self._intrinsic_rate, 5),
+            "realised_rate_per_day": round(growth["rate_per_day"] or 0.0, 5),
+            "slow_rate_per_day": (round(growth["slow_rate_per_day"], 5)
+                                  if growth["slow_rate_per_day"] is not None else None),
+            "rate_source": self._reported_rate_source(),
+            "rate_source_detail": self._rate_source_detail(),
+            "projection_method": "windowed_gcc_trend",
+            "projection_note": (
+                "Projected from the windowed GCC trend over the last "
+                f"{growth['window_days']} days; the logistic growth model does not fit a GCC "
+                "series, so weather and nitrate do not change this projection."
+            ),
+            "confidence": self._gcc_state()["confidence"],
+            "sample_count": self._sample_count,
+            "obstructed_sample_count": self._obstructed_count,
+            "carrying_capacity": self.config.carrying_capacity,
+            "days_using_real_forecast": 0,
+            "last_scrub_at": self._last_scrub_time.isoformat() if self._last_scrub_time else None,
+            "label_counts": self.label_counts(),
+            "labels_needed": self.labels_needed(),
+            "camera_drift": self.detect_camera_drift(),
+            "class_targets": {k: round(v, 5) for k, v in self._class_targets().items()},
+            "growth": growth,
+            "zones": self._gcc_state()["zones"],
+            "trajectory": trajectory,
+            "caveat": (
+                "GCC is the water's green share of colour, measured from the camera. Thresholds are "
+                "offsets above this pond's own quiet level since the camera's view last changed."
+            ),
+        }
+        if include_scrub_benefit:
+            result["scrub_benefit"] = self._gcc_scrub_benefit()
+        return result
+
     def project_scrub_benefit(
         self, *, daily_environment: list, horizon_days: int = 21
     ) -> dict:
@@ -1357,6 +1986,8 @@ class AlgaeGrowthEngine:
         actually helps someone decide whether to do it this weekend."""
         if self._green_ratio is None:
             return {"error": "no_camera_measurement"}
+        if self._gcc_status_applies():
+            return self._gcc_scrub_benefit()
 
         post_scrub = max(self._green_ratio * (1.0 - SCRUB_REMOVAL_EFFICIENCY), 1e-6)
         projected = self.project_forward(
@@ -1389,6 +2020,10 @@ class AlgaeGrowthEngine:
             "camera_history": self._camera_history[-300:],
             "thresholds": self._thresholds,
             "ratings": self._ratings[-MAX_RETAINED_RATINGS:],
+            # Issue #92 (twin snapshot v6).
+            "gcc_frames": self._gcc_frames[-MAX_GCC_FRAMES:],
+            "baseline_reset": self._baseline_reset,
+            "signal_config": self.signal_config.to_dict(),
             # _undo_stack is deliberately NOT persisted. Undo is a
             # within-session affordance for a mis-tap; restoring a stale
             # pre-rating level after a restart (and after several poll
@@ -1398,7 +2033,11 @@ class AlgaeGrowthEngine:
 
     @classmethod
     def from_snapshot(cls, snapshot: dict) -> "AlgaeGrowthEngine":
-        engine = cls(AlgaeConfig(**snapshot.get("config", {})))
+        """Also loads a snapshot from before issue #92 (twin v5 and older):
+        no GCC frames, so the green_ratio path until GCC frames arrive, and
+        no recorded reset, so the next batch's newest reset restarts it."""
+        engine = cls(AlgaeConfig(**snapshot.get("config", {})),
+                     GccSignalConfig.from_dict(snapshot.get("signal_config")))
         engine._green_ratio = snapshot.get("green_ratio")
         lat = snapshot.get("last_advance_time")
         engine._last_advance_time = datetime.fromisoformat(lat) if lat else None
@@ -1420,4 +2059,7 @@ class AlgaeGrowthEngine:
             "baseline": None,
             "mode": "absolute",
         }
+        engine._gcc_frames = list(snapshot.get("gcc_frames") or [])
+        engine._baseline_reset = snapshot.get("baseline_reset")
+        engine._refresh_gcc()
         return engine

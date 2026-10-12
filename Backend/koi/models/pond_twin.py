@@ -78,7 +78,7 @@ from koi.models.tds_prompts import TdsPrompts
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 5
+SNAPSHOT_VERSION = 6
 
 # Ledgered sensor inputs with a time in (after, until], oldest first
 # (EngineRegistry.sensor_history): what a replay reads back.
@@ -690,6 +690,9 @@ class PondTwin:
     ) -> "PondTwin":
         """Rehydrates a twin, tolerating these shapes:
 
+          v6  - the algae engine keeps GCC frames, its last baseline reset
+                and its GCC tuning (issue #92); AlgaeGrowthEngine.from_snapshot
+                loads an algae block without them
           v5  - adds per-pond TDS baseline, prompts and rejected explanations
           v4  - the same without "tds_prompts": empty prompt state
           v3  - the same without "event_ledger": a new ledger (_load_ledger)
