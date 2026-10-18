@@ -133,6 +133,13 @@ everything of ponds 1 and 2, the seeded sensor row ids, and the weather
 cache and station rows the seed carries. The local stack is disposable;
 `supabase db reset` rebuilds it.
 
+The Supabase profile also uploads synthetic camera frames to
+`imageAnalysisBucket`. If the app runs on a physical device, set
+`KOI_DEV_SUPABASE_PUBLIC_URL` to the local stack's host-reachable base URL
+(for example `http://192.168.1.20:54321`) so seeded image links use that
+address instead of the backend's loopback URL. Uploads still go to the
+local stack URL above.
+
 `--check` here also checks every migration in `supabase/migrations` is
 applied, and that each pond's dashboard built from the local database is
 identical to the memory profile's on the same seed (apart from the

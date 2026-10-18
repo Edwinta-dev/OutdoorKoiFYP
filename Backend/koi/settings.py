@@ -282,6 +282,8 @@ class Settings(BaseSettings):
     # -o env`. Anything not on this machine is refused.
     dev_supabase_url: str = Field(
         default="", validation_alias=AliasChoices("KOI_DEV_SUPABASE_URL", "dev_supabase_url"))
+    dev_supabase_public_url: str = Field(
+        default="", validation_alias=AliasChoices("KOI_DEV_SUPABASE_PUBLIC_URL", "dev_supabase_public_url"))
     dev_supabase_service_role_key: SecretStr = Field(
         default=SecretStr(""),
         validation_alias=AliasChoices("KOI_DEV_SUPABASE_SERVICE_ROLE_KEY", "dev_supabase_service_role_key"))
