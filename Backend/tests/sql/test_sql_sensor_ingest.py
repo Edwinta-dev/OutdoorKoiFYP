@@ -52,12 +52,17 @@ def _connect(autocommit: bool = False) -> Any:
 def conn() -> Iterator[Any]:
     c = _connect()
     with c.cursor() as cur:
-        cur.execute("select to_regclass('public.sensor_ingest_ledger') is not null as ok")
+        cur.execute("""
+            select to_regclass('public.sensor_ingest_ledger') is not null
+               and position('device_id' in pg_get_functiondef(
+                   'public.sensor_ingest_pending(bigint,text[],timestamptz,timestamptz,integer,integer)'::regprocedure
+               )) > 0 as ok
+        """)
         row = cur.fetchone()
     c.rollback()
     if not row["ok"]:
         c.close()
-        pytest.skip("local database is not at the current migrations; run `supabase db reset`")
+        pytest.skip("local database is not at migration 0029; run `supabase db reset`")
     yield c
     c.close()
 
@@ -119,6 +124,25 @@ def _upload(db: Any, pond: int, at: datetime, reading: dict) -> list[int]:
                    "values (%s, %s, %s, %s) returning id", (at, sensor_type, value, pond))
         ids.append(db.fetchone()["id"])
     return ids
+
+
+def _upload_v2(db: Any, pond: int, created: datetime, sampled: datetime, device: str,
+               boot: str, cycle: int, reading: dict) -> list[int]:
+    ids = []
+    for sensor_type, value in reading.items():
+        db.execute('insert into public."SensorData" '
+                   '(created_at, sampled_at, device_id, boot_id, cycle_seq, sensor_type, data1, "userID") '
+                   'values (%s, %s, %s, %s, %s, %s, %s, %s) returning id',
+                   (created, sampled, device, boot, cycle, sensor_type, value, pond))
+        ids.append(db.fetchone()["id"])
+    return ids
+
+
+def _device_id(db: Any, pond: int) -> str:
+    db.execute("insert into public.devices (pond_id, kind) values (%s, 'sensor') "
+               "on conflict (pond_id, kind) do nothing", (pond,))
+    db.execute("select device_id from public.devices where pond_id = %s and kind = 'sensor'", (pond,))
+    return str(db.fetchone()["device_id"])
 
 
 def _pending(storage: SupabaseStorage, pond: int, until: datetime | None = None, start: datetime | None = None,
@@ -226,14 +250,35 @@ def test_partial_uploads_unknown_types_and_two_ponds(db):
     assert group_rows(found_b["rows"]).inputs[0].missing == ["tds", "lux"]
 
 
-def test_until_and_start_bound_the_scan(db):
+def test_until_bounds_scan_and_start_is_only_a_reported_reconciliation_hint(db):
     _pond(db, POND_A)
     early = _upload(db, POND_A, T0, {"pH": 7.6})
     late = _upload(db, POND_A, T0 + timedelta(minutes=30), {"pH": 7.7})
     storage = _storage(db)
     assert [r["id"] for r in _pending(storage, POND_A, until=T0 + timedelta(minutes=10))["rows"]] == early
-    assert [r["id"] for r in _pending(storage, POND_A, start=T0 + timedelta(minutes=10))["rows"]] == late
+    assert [r["id"] for r in _pending(storage, POND_A, start=T0 + timedelta(minutes=10))["rows"]] == early + late
     assert [r["id"] for r in _pending(storage, POND_A, limit=1)["rows"]] == early
+
+
+def test_v2_rpc_returns_sample_order_fields_and_grouping_keeps_devices_separate(db):
+    _pond(db, POND_A)
+    _pond(db, POND_B)
+    device_a, device_b = _device_id(db, POND_A), _device_id(db, POND_B)
+    late_sample = _upload_v2(db, POND_A, T0 + timedelta(hours=4), T0 + timedelta(hours=4),
+                             device_a, "000000000000000a", 7, {"pH": 7.8})
+    early_sample = _upload_v2(db, POND_A, T0 + timedelta(hours=4), T0,
+                              device_a, "000000000000000a", 6,
+                              {"temp": 28.0})
+    other_device = _upload_v2(db, POND_A, T0 + timedelta(hours=4), T0,
+                              device_b, "000000000000000b", 6,
+                              {"pH": 7.1})
+    rows = _pending(_storage(db), POND_A)["rows"]
+    assert {r["id"] for r in rows} == set(late_sample + early_sample + other_device)
+    assert all(r["device_id"] and r["boot_id"] and r["cycle_seq"] is not None for r in rows)
+    inputs = group_rows(rows).inputs
+    assert [item.time for item in inputs] == [T0, T0, T0 + timedelta(hours=4)]
+    assert [(item.device_id, item.cycle_seq) for item in inputs] == [
+        (device_a, 6), (device_b, 6), (device_a, 7)]
 
 
 # ---------------------------------------------------------------------

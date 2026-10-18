@@ -26,9 +26,9 @@ sensor type, so readings stored between two polls were never seen, and
 with no new rows the same reading went into the model again. Instead,
 inside the pond's lock, each cycle asks storage for the pond's SensorData
 rows not yet in the ingest ledger (Storage.fetch_pending_sensor_rows,
-migration 0014), scanning from Settings.sensor_ingest_overlap_minutes
-before the newest insert time already ingested, so a row committed after
-a newer one is still found. koi/models/sensor_inputs.py groups them into
+migration 0014). The configured overlap is reported as a reconciliation
+hint; unledgered rows are scanned regardless of age so arrivals outside
+that hint are surfaced for replay or rebuild. koi/models/sensor_inputs.py groups them into
 inputs (one per upload, a channel the node did not send passed as
 missing) in (effective_sample_time, id) order, and
 PondTwin.ingest_sensor_inputs applies each at its own time. The rows
@@ -422,6 +422,11 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         events = (_events_report(twin.reconcile_events(intervention_rows, now=now, history=history))
                   if intervention_rows is not None else {"reconciled": False})
         provenance, sensor_warnings = twin.ingest_sensor_inputs(discovery.inputs, history=history, now=now)
+        rebuild_rows = {row_id for item in provenance if item.get("rebuild_required")
+                        for row_id in item.get("row_ids", {}).values()}
+        for entry in discovery.ledger:
+            if entry["sensor_row_id"] in rebuild_rows:
+                entry["disposition"] = "rebuild_required"
         twin.tds_prompts.observe(discovery.inputs, twin.ledger, registry.tds_prompt_config)
 
         # The newest reading of each channel, used while it is fresh. A

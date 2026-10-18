@@ -397,7 +397,6 @@ class MemoryStorage:
                         if _same_user(r, "pond_id", user_id)}
             rows = [r for r in self._select("SensorData", user_id)
                     if r.get("sensor_type") in sensor_types and int(r["id"]) not in ingested
-                    and (scan_from is None or parse_timestamp(r["created_at"]) >= scan_from)
                     and (until is None or parse_timestamp(r["created_at"]) <= until)]
         rows.sort(key=self._reading_key)
         return {"cursor": cursor["watermark"] if cursor is not None else None,
@@ -423,7 +422,9 @@ class MemoryStorage:
         sensor_ingest_history return it (migration 0027 added sampled_at
         and flags)."""
         return {"id": row["id"], "sensor_type": row["sensor_type"], "value": row.get("data1"),
-                "created_at": row["created_at"], "sampled_at": row.get("sampled_at"), "flags": row.get("flags")}
+                "created_at": row["created_at"], "sampled_at": row.get("sampled_at"), "flags": row.get("flags"),
+                "device_id": row.get("device_id"), "boot_id": row.get("boot_id"),
+                "cycle_seq": row.get("cycle_seq")}
 
     # --- interventions ------------------------------------------------
     def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:

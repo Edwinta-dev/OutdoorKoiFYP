@@ -228,25 +228,34 @@ class PondTwin:
         for item in inputs:
             self._record_channels(item)
         newest_event = self.ledger.newest_event_time()
-        if (history is not None and inputs and newest_event is not None
-                and inputs[0].time <= newest_event):
+        replay_boundary = max((t for t in (self.last_input_at, self.chemistry._last_ingest_time,
+                                           newest_event) if t is not None), default=None)
+        late_sensor = {id(item): (self.last_input_at is not None and item.time < self.last_input_at)
+                       for item in inputs}
+        within_replay_window = (replay_boundary is not None and inputs
+                                and inputs[0].time >= replay_boundary - el.WINDOW)
+        if (history is not None and inputs and replay_boundary is not None
+                and inputs[0].time <= replay_boundary and within_replay_window):
             replay = self._replay(inputs[0].time, history, now, extra_inputs=inputs)
             if replay is not None:
                 replayed = [{
                     "time": item.time.isoformat(), "time_basis": item.time_basis,
-                    "model_time": item.time.isoformat(), "late": False, "replayed": True,
+                    "model_time": item.time.isoformat(), "late": late_sensor[id(item)], "replayed": True,
                     "row_ids": dict(item.row_ids), "missing": item.missing} for item in inputs]
                 return replayed, replay["warnings"]
 
         provenance: list[dict] = []
         warnings: list[str] = []
         for item in inputs:
-            late = self.last_input_at is not None and item.time < self.last_input_at
-            model_time = self.last_input_at if late and self.last_input_at is not None else item.time
+            current_input_time = max((t for t in (self.last_input_at, self.chemistry._last_ingest_time)
+                                      if t is not None), default=None)
+            late = current_input_time is not None and item.time < current_input_time
+            model_time = current_input_time if late and current_input_time is not None else item.time
             warnings = self._chemistry_sensor(item, model_time)
             provenance.append({
                 "time": item.time.isoformat(), "time_basis": item.time_basis,
                 "model_time": model_time.isoformat(), "late": late,
+                "rebuild_required": late,
                 "row_ids": dict(item.row_ids), "missing": item.missing})
         return provenance, warnings
 
