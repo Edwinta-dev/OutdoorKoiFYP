@@ -120,24 +120,30 @@ owner's.
 
 ## Applying 0006-0011 (owner, 2026-10-03)
 
-The same steps, without `migration repair`, for the next batch:
+These migrations are applied to the live project as of 2026-10-03. Evidence
+recorded by the owner:
 
-1. Rehearsed locally first: `supabase db reset`, `tools/db_rehearsal.py`
+1. A full live backup was taken first (roles, schema and data; storage files
+   excluded) and retained off-repository. The read-only backup used
+   `supabase db dump --linked` (`--role-only`, default schema dump, and
+   `--data-only --use-copy`).
+2. The owner restored the backup locally and rehearsed the upgrade with
+   `supabase db reset`, `tools/db_rehearsal.py`
    (all legacy rows kept, `pond_profile` seeded, fresh and upgrade paths
    converge) and `tests/sql` (126 passed).
-2. Read-only backup of roles, schema and data with `supabase db dump
-   --linked` (`--role-only`; default; `--data-only --use-copy`), kept
-   off-repo by the owner. It does not include storage object files.
-3. `supabase migration list --linked` showed `0001`-`0005` applied and
-   `0006`-`0011` pending; the owner ran `supabase db push --dry-run`, then
-   `supabase db push`.
-4. Checked afterwards: history shows `0001`-`0011`; every new object exists;
+   The backup was kept off-repository; it does not include storage object
+   files.
+3. Before applying, `supabase migration list --linked` showed `0001`-`0005`
+   applied and `0006`-`0011` pending; the owner ran `supabase db push
+   --dry-run`, then `supabase db push`.
+4. Post-apply checks: history shows `0001`-`0011`; every new object exists;
    `pond_profile` has one row per `UserData` pond (8); the `SensorData`
    definition, grants, policies and triggers are identical before and
    after, so the sensor sketch's anonymous insert is unaffected.
 
 The repository was unlinked again afterwards (`supabase unlink`), so local
-commands cannot reach live by accident. The next migration is `0012`.
+commands cannot reach live by accident. The next migration in the original
+sequence was `0012`.
 
 ## Applying 0025 and 0026 (owner, issue #12)
 
