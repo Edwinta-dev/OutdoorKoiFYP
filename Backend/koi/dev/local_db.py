@@ -55,7 +55,8 @@ POND_TABLES = (
 )
 # Insert order (parents first), and columns left to the database default.
 INSERT_ORDER = ("WeatherStationLookup", "weather_telemetry", "weather_forecasts", "UserData", "pond_profile",
-                "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state")
+                "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state",
+                "Fish_Database")
 DATABASE_IDS = {"pond_profile": "id", "daily_sensor_averages": "id"}
 
 
@@ -152,12 +153,18 @@ def _delete(cur: Any, tables: dict[str, list[dict]], ponds: list[int]) -> None:
     for row in tables.get("weather_forecasts", []):
         cur.execute("delete from public.weather_forecasts where forecast_type = %s and slot_id = %s",
                     (row["forecast_type"], row["slot_id"]))
+    cur.execute('delete from public."Fish_Database" where "Title" = any(%s)',
+                ([r["Title"] for r in tables.get("Fish_Database", [])],))
 
 
 def seed(conn: Any, tables: dict[str, list[dict]], ponds: list[int]) -> dict[str, int]:
     """Replaces the seed's rows in the local database (one transaction).
     Returns the rows inserted per table."""
     counts: dict[str, int] = {}
+    # Reference data is shipped with the repository, not with a migration.
+    from koi.dev.seed import load_fish_catalog
+
+    tables = {**tables, "Fish_Database": load_fish_catalog()}
     with conn.cursor() as cur:
         _delete(cur, tables, ponds)
         for table in INSERT_ORDER:

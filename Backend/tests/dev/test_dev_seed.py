@@ -54,6 +54,14 @@ def test_committed_seed_is_what_the_builder_writes(builder):
         "run python Backend/fixtures/demo_pond/build_seed.py"
 
 
+def test_local_fish_catalog_loads_csv_rows_with_database_column_names():
+    catalog = seed_data.load_fish_catalog()
+    assert len(catalog) == 62
+    assert set(catalog[0]) == {"Title", "Image URL", "Common Name", "Care Level", "Maximum Size", "pH",
+                               "Temperature", "Life Span", "Behaviour", "Tank Region", "Gender"}
+    assert catalog[0]["Title"] == "Amano Shrimp"
+
+
 def test_seed_loads_into_memory_storage_as_is(seed):
     storage = MemoryStorage(seed={"tables": seed["tables"]})
     assert {c["user_id"] for c in storage.fetch_active_pond_configs()} == {1, 2}
