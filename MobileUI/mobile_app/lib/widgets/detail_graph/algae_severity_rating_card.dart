@@ -454,10 +454,10 @@ class _AlgaeSeverityRatingCardState
                         ),
                       ),
                     ),
-                    if (frame?.greenRatio != null)
+                    if (frame?.gcc != null || frame?.greenRatio != null)
                       Text(
-                        'camera reads '
-                        '${(frame!.greenRatio! * 100).toStringAsFixed(2)}%',
+                        'camera reads ${frame!.gcc != null ? 'GCC' : 'green ratio'} '
+                        '${((frame.gcc ?? frame.greenRatio!) * 100).toStringAsFixed(2)}%',
                         style: AppType.style(
                           color: AppColors.of(context).onImage,
                           fontSize: AppType.micro,

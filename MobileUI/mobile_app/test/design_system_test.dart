@@ -308,7 +308,9 @@ void main() {
         ),
       );
       await settle(tester);
-      final cameraLabel = tester.widget<Text>(find.text('camera reads 12.00%'));
+      final cameraLabel = tester.widget<Text>(
+        find.text('camera reads green ratio 12.00%'),
+      );
       expect(cameraLabel.style!.color, AppColors(brightness).onImage);
       final blocked = tester.widget<Text>(find.text('view may be blocked'));
       expect(blocked.style!.color, AppColors(brightness).warningOnImage);

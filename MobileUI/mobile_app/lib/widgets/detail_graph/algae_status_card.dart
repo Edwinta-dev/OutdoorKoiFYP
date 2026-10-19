@@ -130,7 +130,9 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
               Expanded(
                 child: _metricBox(
                   'Coverage',
-                  '${(f.currentGreenRatio * 100).toStringAsFixed(2)}%',
+                  f.currentSignal == null
+                      ? 'unknown'
+                      : '${(f.currentSignal! * 100).toStringAsFixed(2)}%',
                   AppColors.of(context).water,
                 ),
               ),
@@ -270,14 +272,14 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Green coverage vs alert level',
+              '${f.signalLabel} vs alert level',
               style: AppType.style(
                 color: AppColors.of(context).textMuted,
                 fontSize: AppType.micro,
               ),
             ),
             Text(
-              '${(f.currentGreenRatio * 100).toStringAsFixed(2)}% '
+              '${f.currentSignal == null ? 'unknown' : '${(f.currentSignal! * 100).toStringAsFixed(2)}%'} '
               'of ${(f.thresholds.action * 100).toStringAsFixed(1)}%',
               style: AppType.style(
                 color: accent,

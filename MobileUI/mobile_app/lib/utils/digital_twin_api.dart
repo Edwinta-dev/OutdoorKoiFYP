@@ -338,7 +338,8 @@ class EvaporationForecast {
 
 class AlgaeDay {
   final int daysFromNow;
-  final double greenRatio;
+  final double? greenRatio;
+  final double? gcc;
   final double growthRatePerDay;
   final double favourability;
   final double luxAssumed;
@@ -348,6 +349,7 @@ class AlgaeDay {
   const AlgaeDay({
     required this.daysFromNow,
     required this.greenRatio,
+    required this.gcc,
     required this.growthRatePerDay,
     required this.favourability,
     required this.luxAssumed,
@@ -363,7 +365,8 @@ class AlgaeDay {
         v == null ? null : (v is num ? v.toDouble() : double.tryParse('$v'));
     return AlgaeDay(
       daysFromNow: (j['days_from_now'] as num?)?.toInt() ?? 0,
-      greenRatio: d(j['green_ratio']),
+      greenRatio: dn(j['green_ratio']),
+      gcc: dn(j['gcc']),
       growthRatePerDay: d(j['growth_rate_per_day']),
       favourability: d(j['favourability']),
       luxAssumed: d(j['lux_assumed']),
@@ -404,7 +407,10 @@ class AlgaeThresholds {
 }
 
 class AlgaeForecast {
-  final double currentGreenRatio;
+  final double? currentGreenRatio;
+  final double? currentGcc;
+  final String? rateSourceDetail;
+  final String? projectionMethod;
   final int? predictedScrubDaysFromNow;
   final int? firstWatchDaysFromNow;
   final int? firstActionDaysFromNow;
@@ -425,6 +431,9 @@ class AlgaeForecast {
 
   const AlgaeForecast({
     required this.currentGreenRatio,
+    required this.currentGcc,
+    required this.rateSourceDetail,
+    required this.projectionMethod,
     required this.predictedScrubDaysFromNow,
     required this.firstWatchDaysFromNow,
     required this.firstActionDaysFromNow,
@@ -454,7 +463,10 @@ class AlgaeForecast {
     final scrub = Map<String, dynamic>.from(j['scrub_benefit'] as Map? ?? {});
 
     return AlgaeForecast(
-      currentGreenRatio: d(j['current_green_ratio']),
+      currentGreenRatio: dn(j['current_green_ratio']),
+      currentGcc: dn(j['current_gcc']),
+      rateSourceDetail: j['rate_source_detail']?.toString(),
+      projectionMethod: j['projection_method']?.toString(),
       predictedScrubDaysFromNow: i(j['predicted_scrub_days_from_now']),
       firstWatchDaysFromNow: i(j['first_watch_days_from_now']),
       firstActionDaysFromNow: i(j['first_action_days_from_now']),
@@ -486,12 +498,21 @@ class AlgaeForecast {
   /// rather than a literature default - drives the "grounded" badge.
   bool get isCameraGrounded => rateSource == 'fitted_from_camera';
 
+  bool get isGccMode =>
+      rateSourceDetail == 'gcc_windowed_trend' ||
+      projectionMethod == 'windowed_gcc_trend';
+
+  double? get currentSignal =>
+      isGccMode ? currentGcc : currentGreenRatio;
+
+  String get signalLabel => isGccMode ? 'GCC' : 'Green ratio';
+
   /// green_ratio expressed as a fraction of the action threshold, for a
   /// 0..1 progress meter. Clamped so a pond already past the threshold
   /// pins at full rather than overflowing the bar.
   double get thresholdProgress {
-    if (thresholds.action <= 0) return 0.0;
-    final p = currentGreenRatio / thresholds.action;
+    if (thresholds.action <= 0 || currentSignal == null) return 0.0;
+    final p = currentSignal! / thresholds.action;
     return p.clamp(0.0, 1.0);
   }
 }
