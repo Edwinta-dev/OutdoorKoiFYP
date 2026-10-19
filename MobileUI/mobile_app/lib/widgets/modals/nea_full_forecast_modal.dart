@@ -1,10 +1,22 @@
 import 'package:mobile_app/widgets/shared/pond_widgets.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile_app/utils/pond_dashboard.dart';
+
+String _value(double? value, String fallback) =>
+    value?.toString().replaceAll(RegExp(r'\.0$'), '') ?? fallback;
+
+String _validPeriod(ForecastPeriod period) {
+  final from = period.validFrom;
+  final to = period.validTo;
+  if (from == null || to == null) return 'Next 24 Hours';
+  return '${from.day}/${from.month} ${from.hour.toString().padLeft(2, '0')}:00'
+      ' – ${to.day}/${to.month} ${to.hour.toString().padLeft(2, '0')}:00';
+}
 
 void showNeaFullForecastModal(
   BuildContext context,
-  Map<String, dynamic> forecastData,
+  DashboardForecast forecast,
 ) {
   showModalBottomSheet(
     context: context,
@@ -15,44 +27,26 @@ void showNeaFullForecastModal(
         top: Radius.circular(AppRadius.sheet),
       ),
     ),
-    builder: (ctx) => _NeaForecastSheetContent(forecastData: forecastData),
+    builder: (ctx) => _NeaForecastSheetContent(forecast: forecast),
   );
 }
 
 class _NeaForecastSheetContent extends StatelessWidget {
-  final Map<String, dynamic> forecastData;
+  final DashboardForecast forecast;
 
-  const _NeaForecastSheetContent({required this.forecastData});
+  const _NeaForecastSheetContent({required this.forecast});
 
   @override
   Widget build(BuildContext context) {
-    // 1. Extract 24-Hour General Forecast
-    final Map general24 = forecastData['forecast_24hr']?['general'] is Map
-        ? forecastData['forecast_24hr']['general']
-        : {};
-    final String summary24 =
-        general24['forecast']?['text']?.toString() ?? 'Fair (Day)';
-    final String tempLow24 =
-        general24['temperature']?['low']?.toString() ?? '26';
-    final String tempHigh24 =
-        general24['temperature']?['high']?.toString() ?? '34';
-    final String rhLow24 =
-        general24['relativeHumidity']?['low']?.toString() ?? '50';
-    final String rhHigh24 =
-        general24['relativeHumidity']?['high']?.toString() ?? '85';
-    final String windDir24 =
-        general24['wind']?['direction']?.toString() ?? 'SSE';
-    final String windLow24 =
-        general24['wind']?['speed']?['low']?.toString() ?? '10';
-    final String windHigh24 =
-        general24['wind']?['speed']?['high']?.toString() ?? '20';
-    final String validPeriodText =
-        general24['validPeriod']?['text']?.toString() ?? 'Next 24 Hours';
-
-    // 2. Extract 4-Day Outlook List
-    final List outlook4Day = forecastData['outlook_4day'] is List
-        ? forecastData['outlook_4day']
-        : [];
+    final general24 = forecast.twentyFourHourGeneral;
+    final summary24 = forecast.twentyFourHourRegional.text ?? 'Fair (Day)';
+    final tempLow24 = _value(general24.temperatureLowC, '26');
+    final tempHigh24 = _value(general24.temperatureHighC, '34');
+    final rhLow24 = _value(general24.humidityLowPct, '50');
+    final rhHigh24 = _value(general24.humidityHighPct, '85');
+    final windLow24 = _value(general24.windLowKmh, '10');
+    final windHigh24 = _value(general24.windHighKmh, '20');
+    final validPeriodText = _validPeriod(general24.period);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -139,7 +133,7 @@ class _NeaForecastSheetContent extends StatelessWidget {
                   _buildParamTag(
                     context,
                     Icons.air,
-                    'Wind: $windDir24 ($windLow24–$windHigh24 km/h)',
+                    'Wind: $windLow24–$windHigh24 km/h',
                   ),
                 ],
               ),
@@ -159,7 +153,7 @@ class _NeaForecastSheetContent extends StatelessWidget {
               ),
               const SizedBox(height: AppSpace.md),
 
-              if (outlook4Day.isEmpty)
+              if (forecast.outlook.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
                   child: Text(
@@ -171,28 +165,15 @@ class _NeaForecastSheetContent extends StatelessWidget {
                   ),
                 )
               else
-                ...outlook4Day.map((item) {
-                  final itemData = item['data'] is Map ? item['data'] : {};
-                  final String dayName =
-                      itemData['day']?.toString() ??
-                      item['slot_id']?.toString() ??
-                      '--';
-                  final String text =
-                      itemData['forecast']?['text']?.toString() ?? 'Fair';
-                  final String tLow =
-                      itemData['temperature']?['low']?.toString() ?? '--';
-                  final String tHigh =
-                      itemData['temperature']?['high']?.toString() ?? '--';
-                  final String hLow =
-                      itemData['relativeHumidity']?['low']?.toString() ?? '60';
-                  final String hHigh =
-                      itemData['relativeHumidity']?['high']?.toString() ?? '95';
-                  final String wDir =
-                      itemData['wind']?['direction']?.toString() ?? '';
-                  final String wLow =
-                      itemData['wind']?['speed']?['low']?.toString() ?? '10';
-                  final String wHigh =
-                      itemData['wind']?['speed']?['high']?.toString() ?? '20';
+                ...forecast.outlook.map((day) {
+                  final dayName = day.weekday ?? '--';
+                  final text = day.text ?? 'Fair';
+                  final tLow = _value(day.temperatureLowC, '--');
+                  final tHigh = _value(day.temperatureHighC, '--');
+                  final hLow = _value(day.humidityLowPct, '60');
+                  final hHigh = _value(day.humidityHighPct, '95');
+                  final wLow = _value(day.windLowKmh, '10');
+                  final wHigh = _value(day.windHighKmh, '20');
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
@@ -215,9 +196,7 @@ class _NeaForecastSheetContent extends StatelessWidget {
                               ),
                               const SizedBox(height: AppSpace.xxs),
                               Text(
-                                wDir.isNotEmpty
-                                    ? '$wDir • $wLow-$wHigh km/h'
-                                    : '$wLow-$wHigh km/h',
+                                '$wLow-$wHigh km/h',
                                 style: AppType.style(
                                   color: AppColors.of(context).textMuted,
                                   fontSize: AppType.micro,

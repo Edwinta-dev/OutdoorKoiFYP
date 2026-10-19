@@ -1,5 +1,8 @@
 // DashboardView in each state: loading, empty, data, error, in the
 // detailed view; and the simple view that new accounts get.
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/data/providers.dart';
@@ -27,6 +30,37 @@ const detailedPrefs = <String, Object>{
 };
 
 void main() {
+  testWidgets('NEA sheet renders typed forecast from the /v1 fixture', (
+    tester,
+  ) async {
+    final fixture =
+        jsonDecode(File('test/fixtures/v1_dashboard.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final source = FakePondDataSource(
+      dashboardPayload: fixture['complete'] as Map<String, dynamic>,
+    );
+    await pumpScreen(
+      tester,
+      const DashboardView(),
+      prefs: detailedPrefs,
+      source: source,
+    );
+    await settle(tester);
+
+    await tester.tap(find.byType(NeaWeatherRibbon));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Singapore Environmental Outlook'), findsOneWidget);
+    expect(find.text('Thundery Showers'), findsWidgets);
+    expect(find.text('2/10 22:00 – 3/10 22:00'), findsOneWidget);
+    expect(find.text('SUNDAY'), findsOneWidget);
+    expect(find.text('Humidity: 60–95%'), findsOneWidget);
+    expect(find.text('Wind: 5–15 km/h'), findsOneWidget);
+    expect(find.text('No 4-day outlook available.'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await unmount(tester);
+  });
+
   testWidgets('loading: spinner and no cards while the payload is pending', (
     tester,
   ) async {

@@ -98,8 +98,14 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                         NeaWeatherRibbon(
                           forecastData: forecastData,
                           telemetryData: telemetryData,
-                          onOpenFullForecast: () =>
-                              showNeaFullForecastModal(context, forecastData),
+                          onOpenFullForecast: () {
+                            if (pondDashboard != null) {
+                              showNeaFullForecastModal(
+                                context,
+                                pondDashboard.forecast,
+                              );
+                            }
+                          },
                         ),
 
                         const SizedBox(
