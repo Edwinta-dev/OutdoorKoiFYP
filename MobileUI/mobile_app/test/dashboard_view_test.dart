@@ -250,6 +250,14 @@ void main() {
         'Koi eat less in cool water.',
       );
       expect(
+        SimplePondStatus.temperatureLine(
+          reading('ok', 23.0),
+          min: 22,
+          max: 26,
+        ),
+        contains('inside the 22-26 °C koi comfort range'),
+      );
+      expect(
         SimplePondStatus.temperatureLine(reading('ok', 30.0)),
         'Water is 30.0 °C (measured), above the 24-28 °C koi comfort range. '
         'Warm water holds less oxygen.',

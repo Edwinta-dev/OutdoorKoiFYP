@@ -99,6 +99,53 @@ final fishProfilesProvider = FutureProvider((ref) async {
       .watch(pondProfileRepositoryProvider)
       .fetchFishProfiles(profile.pondId ?? 0, profile.species);
 });
+
+/// The intersection of the stocked species' pH and temperature tolerances.
+final unifiedSafeRangeProvider = Provider<UnifiedSafeRange>((ref) {
+  final profiles = ref.watch(fishProfilesProvider).asData?.value ?? const [];
+  return UnifiedSafeRange.fromProfiles(profiles);
+});
+
+class SafeNumericRange {
+  const SafeNumericRange(this.minimum, this.maximum);
+  final double minimum;
+  final double maximum;
+  bool get isEmpty => minimum > maximum;
+}
+
+class UnifiedSafeRange {
+  const UnifiedSafeRange({this.ph, this.temperatureC});
+  final SafeNumericRange? ph;
+  final SafeNumericRange? temperatureC;
+
+  factory UnifiedSafeRange.fromProfiles(List<Map<String, dynamic>> profiles) {
+    SafeNumericRange? intersection(String key) {
+      final bounds = <SafeNumericRange>[];
+      for (final profile in profiles) {
+        final text = profile[key]?.toString() ?? '';
+        final values = RegExp(r'\d+(?:\.\d+)?')
+            .allMatches(text)
+            .map((m) => double.tryParse(m.group(0)!))
+            .whereType<double>()
+            .toList();
+        if (values.length >= 2) {
+          bounds.add(SafeNumericRange(values[0], values[1]));
+        }
+      }
+      if (bounds.isEmpty) return null;
+      return SafeNumericRange(
+        bounds.map((r) => r.minimum).reduce((a, b) => a > b ? a : b),
+        bounds.map((r) => r.maximum).reduce((a, b) => a < b ? a : b),
+      );
+    }
+
+    return UnifiedSafeRange(
+      ph: intersection('pH'),
+      temperatureC: intersection('Temperature'),
+    );
+  }
+}
+
 final historyProvider =
     FutureProvider.family<TelemetryHistory?, ({int pond, int days})>((
       ref,
