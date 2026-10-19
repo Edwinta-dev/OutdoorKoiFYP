@@ -14,6 +14,7 @@
 // lib/config/app_config.dart.
 
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -833,6 +834,22 @@ class PondAction {
     'PREEMPT' => 'Hot stretch ahead',
     'WINDOW' => 'Dry weather window',
     _ => rule.isEmpty ? 'Weather rule' : rule,
+  };
+
+  /// Short brief used on the collapsed Today card.
+  String get headline => switch (rule) {
+    'NOWCAST' => 'Rain soon - secure feed and pause work',
+    'REACT' => 'Heavy rain yesterday - check the pond',
+    'PREEMPT' => 'Hot stretch ahead - reduce feed',
+    'WINDOW' => 'Dry weather window - plan pond work',
+    _ => action.isEmpty ? ruleLabel : action,
+  };
+
+  IconData get ruleIcon => switch (rule) {
+    'NOWCAST' || 'REACT' => Icons.cloud,
+    'PREEMPT' => Icons.thermostat,
+    'WINDOW' => Icons.wb_sunny_outlined,
+    _ => Icons.rule_outlined,
   };
 
   /// When the action applies, in plain words, as seen at [now].

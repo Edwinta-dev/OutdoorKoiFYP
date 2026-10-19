@@ -209,23 +209,22 @@ class _ActionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      action.whenText(now),
-                      style: AppType.style(
-                        color: accent,
-                        fontSize: AppType.label,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpace.xs),
-                    Text(
-                      action.action,
-                      style: AppType.style(
-                        color: c.text,
-                        fontSize: AppType.body,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
+                    Row(
+                      children: [
+                        Icon(action.ruleIcon, color: accent, size: 20),
+                        const SizedBox(width: AppSpace.sm),
+                        Expanded(
+                          child: Text(
+                            action.headline,
+                            style: AppType.style(
+                              color: c.text,
+                              fontSize: AppType.body,
+                              fontWeight: FontWeight.w600,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -236,6 +235,18 @@ class _ActionCard extends StatelessWidget {
                 onPressed: onDismiss,
               ),
             ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpace.md),
+            child: Wrap(
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
+              children: [
+                _evidenceChip(context, action.whenText(now)),
+                if (action.evidence.isNotEmpty)
+                  _evidenceChip(context, action.evidence),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpace.xs),
           Padding(
@@ -249,7 +260,7 @@ class _ActionCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Why: $why',
+                      expanded ? 'Why: $why' : 'Why',
                       maxLines: expanded ? null : 1,
                       overflow: expanded
                           ? TextOverflow.visible
@@ -270,7 +281,36 @@ class _ActionCard extends StatelessWidget {
               ),
             ),
           ),
-          if (expanded)
+          if (expanded) ...[
+            if (action.action.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: AppSpace.xs,
+                  right: AppSpace.md,
+                ),
+                child: Text(
+                  action.action,
+                  style: AppType.style(
+                    color: c.text,
+                    fontSize: AppType.body,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(
+                top: AppSpace.xs,
+                right: AppSpace.md,
+              ),
+              child: Text(
+                why,
+                style: AppType.style(
+                  color: c.textSecondary,
+                  fontSize: AppType.label,
+                  height: 1.4,
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(
                 top: AppSpace.xs,
@@ -287,6 +327,7 @@ class _ActionCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
           if (log != null)
             Padding(
               padding: const EdgeInsets.only(top: AppSpace.sm),
@@ -305,6 +346,20 @@ class _ActionCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _evidenceChip(BuildContext context, String label) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 210),
+    child: Chip(
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelStyle: AppType.style(
+        color: AppColors.of(context).textSecondary,
+        fontSize: AppType.caption,
+      ),
+      padding: EdgeInsets.zero,
+    ),
+  );
 
   /// The log sheet each loggable event opens; titles and colours match the
   /// quick-log selector.

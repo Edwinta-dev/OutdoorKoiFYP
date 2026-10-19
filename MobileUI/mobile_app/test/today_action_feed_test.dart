@@ -99,6 +99,8 @@ void main() {
       expect(a.leadTime, 'today');
       expect(a.action, startsWith('Schedule a water change'));
       expect(a.evidence, contains('0.050'));
+      expect(a.headline, 'Dry weather window - plan pond work');
+      expect(a.ruleIcon, Icons.wb_sunny_outlined);
     });
 
     test('missing fields parse to empty text, not a crash', () {
@@ -174,33 +176,39 @@ void main() {
   });
 
   group('TodayActionFeed', () {
-    testWidgets('lists every action, most urgent first, with when and why', (
-      tester,
-    ) async {
-      await pumpFeed(tester, parsed());
+    testWidgets(
+      'lists brief cards most urgent first with timing and evidence',
+      (tester) async {
+        await pumpFeed(tester, parsed());
 
-      expect(find.text('TODAY'), findsOneWidget);
-      final tops = [
-        for (final raw in [
-          ladderActions[3],
-          ladderActions[0],
-          ladderActions[1],
-          ladderActions[2],
-        ])
-          topOf(tester, raw['action'] as String),
-      ];
-      expect(tops, orderedEquals([...tops]..sort()));
-      expect(find.text('Now, until about 11:30'), findsOneWidget);
-      expect(find.text("This morning, after yesterday's rain"), findsOneWidget);
-      expect(
-        find.text(
-          'Why: Heavy rain yesterday: 62.4 mm at station S24 on '
-          '2026-08-11.',
-        ),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('TODAY'), findsOneWidget);
+        final tops = [
+          for (final raw in [
+            ladderActions[3],
+            ladderActions[0],
+            ladderActions[1],
+            ladderActions[2],
+          ])
+            topOf(tester, parsed([raw]).single.headline),
+        ];
+        expect(tops, orderedEquals([...tops]..sort()));
+        expect(find.text('Now, until about 11:30'), findsOneWidget);
+        expect(
+          find.text("This morning, after yesterday's rain"),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Heavy rain yesterday - check the pond'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('62.4 mm at station S24'), findsOneWidget);
+        expect(
+          find.textContaining('Check the pond after yesterday'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('empty: names rules that cannot be assessed', (tester) async {
       await pumpFeed(tester, const []);
@@ -230,11 +238,12 @@ void main() {
         },
       );
       final window = ladderActions[2]['action'] as String;
+      final windowHeadline = parsed([ladderActions[2]]).single.headline;
 
       await tester.tap(
         find.descendant(
           of: find.ancestor(
-            of: find.text(window),
+            of: find.text(windowHeadline),
             matching: find.byType(OutcomeCardShell),
           ),
           matching: find.byTooltip('Dismiss for today'),
@@ -243,7 +252,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(window), findsNothing);
-      expect(find.text(ladderActions[3]['action'] as String), findsOneWidget);
+      expect(
+        find.text(parsed([ladderActions[3]]).single.headline),
+        findsOneWidget,
+      );
       // Yesterday's entry has expired and is dropped on write.
       expect(repo.values[dismissedActionsKey], ['2026-08-12|WINDOW|$window']);
     });
@@ -262,7 +274,10 @@ void main() {
       );
 
       expect(find.text(react), findsNothing);
-      expect(find.text(ladderActions[2]['action'] as String), findsOneWidget);
+      expect(
+        find.text(parsed([ladderActions[2]]).single.headline),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a dismissal from yesterday no longer hides the action', (
@@ -278,7 +293,10 @@ void main() {
         },
       );
 
-      expect(find.text(react), findsOneWidget);
+      expect(
+        find.text(parsed([ladderActions[0]]).single.headline),
+        findsOneWidget,
+      );
     });
 
     testWidgets('all dismissed: empty state counts the hidden actions', (
@@ -299,15 +317,18 @@ void main() {
 
     testWidgets('why expands to the full evidence and rule', (tester) async {
       await pumpFeed(tester, parsed([ladderActions[1]]));
-      Text why() => tester.widget<Text>(find.textContaining('Why: '));
+      Text why() => tester.widget<Text>(find.textContaining('Why'));
 
       expect(why().maxLines, 1);
       expect(find.textContaining('Rule PREEMPT'), findsNothing);
+      expect(find.textContaining('Reduce the feed ration'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('why-PREEMPT')));
       await tester.pumpAndSettle();
       expect(why().maxLines, isNull);
       expect(find.textContaining('Rule PREEMPT'), findsOneWidget);
+      expect(find.textContaining('Reduce the feed ration'), findsOneWidget);
+      expect(find.textContaining('Measured Tmax'), findsNWidgets(3));
 
       await tester.tap(find.byKey(const ValueKey('why-PREEMPT')));
       await tester.pumpAndSettle();
@@ -389,9 +410,11 @@ void main() {
       );
       await settle(tester);
 
-      final action = ladderActions[2]['action'] as String;
       expect(find.byType(TodayActionFeed), findsOneWidget);
-      expect(find.text(action), findsOneWidget);
+      expect(
+        find.text(parsed([ladderActions[2]]).single.headline),
+        findsOneWidget,
+      );
       expect(
         topOf(tester, 'TODAY'),
         lessThan(topOf(tester, 'TEMPERATURE & FEED MONITOR')),
@@ -415,7 +438,10 @@ void main() {
       );
       await settle(tester);
 
-      expect(find.text(ladderActions[2]['action'] as String), findsOneWidget);
+      expect(
+        find.text(parsed([ladderActions[2]]).single.headline),
+        findsOneWidget,
+      );
       expect(topOf(tester, 'TODAY'), lessThan(topOf(tester, 'POND STATUS')));
       expect(find.text('Log water change'), findsOneWidget);
       await unmount(tester);
