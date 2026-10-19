@@ -147,6 +147,34 @@ def test_json_values_are_sent_as_text():
     assert local_db._value("base") == "base" and local_db._value(None) is None
 
 
+def test_supabase_seed_clears_stale_poller_lease_before_replacing_seed(monkeypatch):
+    statements = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, sql, params=None):
+            statements.append((sql, params))
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [])
+    local_db.seed(Connection(), {}, [1])
+
+    assert statements[0] == (
+        "delete from public.worker_lease where name = %s", (local_db.POLLER_LEASE,)
+    )
+
+
 def test_seed_order_inserts_parents_first():
     order = local_db.INSERT_ORDER
     assert order.index("UserData") < order.index("pond_profile")

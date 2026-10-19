@@ -61,6 +61,7 @@ INSERT_ORDER = ("WeatherStationLookup", "weather_telemetry", "weather_forecasts"
                 "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state",
                 "Fish_Database")
 DATABASE_IDS = {"pond_profile": "id", "daily_sensor_averages": "id"}
+POLLER_LEASE = "poller"
 
 
 class LocalStackUnavailable(RuntimeError):
@@ -169,6 +170,9 @@ def seed(conn: Any, tables: dict[str, list[dict]], ponds: list[int]) -> dict[str
 
     tables = {**tables, "Fish_Database": load_fish_catalog()}
     with conn.cursor() as cur:
+        # The local seed owns this database. A previous hard-stopped dev
+        # process may have left its poller lease active until its TTL expires.
+        cur.execute("delete from public.worker_lease where name = %s", (POLLER_LEASE,))
         _delete(cur, tables, ponds)
         for table in INSERT_ORDER:
             rows = tables.get(table, [])
