@@ -6,6 +6,7 @@ Supabase stack is in tests/sql/test_sql_dev_profile.py.
 Run from Backend/: python -m pytest tests/dev
 """
 import functools
+import re
 import subprocess
 import types
 
@@ -152,6 +153,32 @@ def test_seed_order_inserts_parents_first():
     deletes = [t for t, _ in local_db.POND_TABLES]
     assert deletes.index("pond_profile") < deletes.index("UserData")
     assert deletes.index("algae_severity_ratings") < deletes.index("imageTable")
+
+
+def test_every_userdata_foreign_key_is_deleted_before_userdata():
+    migrations = sorted(local_db.MIGRATIONS.glob("*.sql"))
+    declared = set()
+    for migration in migrations:
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", migration.read_text(encoding="utf-8"),
+                     flags=re.DOTALL)
+        for statement in sql.split(";"):
+            create = re.search(
+                r'create\s+table\s+(?:if\s+not\s+exists\s+)?'
+                r'(?:"?public"?\s*\.\s*)?"?([\w]+)"?', statement, re.IGNORECASE)
+            alter = re.search(
+                r'alter\s+table\s+(?:if\s+exists\s+)?'
+                r'(?:"?public"?\s*\.\s*)?"?([\w]+)"?', statement, re.IGNORECASE)
+            if re.search(r'references\s+(?:"?public"?\s*\.\s*)?"?UserData"?',
+                         statement, re.IGNORECASE):
+                target = create or alter
+                assert target, f"Could not identify table for UserData foreign key in {migration.name}: {statement}"
+                declared.add(target.group(1))
+
+    delete_order = [table for table, _ in local_db.POND_TABLES]
+    missing = declared - set(delete_order)
+    assert not missing, f"UserData foreign-key tables missing from POND_TABLES: {sorted(missing)}"
+    assert all(delete_order.index(table) < delete_order.index("UserData") for table in declared)
+    assert {"kit_readings", "pond_calibration", "notification_outbox"} <= declared
 
 
 # ---------------------------------------------------------------------
