@@ -397,6 +397,7 @@ class MemoryStorage:
                         if _same_user(r, "pond_id", user_id)}
             rows = [r for r in self._select("SensorData", user_id)
                     if r.get("sensor_type") in sensor_types and int(r["id"]) not in ingested
+                    and (scan_from is None or parse_timestamp(r["created_at"]) >= scan_from)
                     and (until is None or parse_timestamp(r["created_at"]) <= until)]
         rows.sort(key=self._reading_key)
         return {"cursor": cursor["watermark"] if cursor is not None else None,

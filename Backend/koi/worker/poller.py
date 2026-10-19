@@ -26,9 +26,10 @@ sensor type, so readings stored between two polls were never seen, and
 with no new rows the same reading went into the model again. Instead,
 inside the pond's lock, each cycle asks storage for the pond's SensorData
 rows not yet in the ingest ledger (Storage.fetch_pending_sensor_rows,
-migration 0014). The configured overlap is reported as a reconciliation
-hint; unledgered rows are scanned regardless of age so arrivals outside
-that hint are surfaced for replay or rebuild. koi/models/sensor_inputs.py groups them into
+migration 0014), scanning from Settings.sensor_ingest_overlap_minutes
+before the newest insert time already ingested, so a row committed after
+a newer one is still found (bound restored in migration 0030, #120).
+koi/models/sensor_inputs.py groups them into
 inputs (one per upload, a channel the node did not send passed as
 missing) in (effective_sample_time, id) order, and
 PondTwin.ingest_sensor_inputs applies each at its own time. The rows
@@ -315,7 +316,7 @@ def _discover(registry: EngineRegistry, user_id: int, twin: PondTwin, now: datet
     twin's last chemistry ingest (a snapshot from before the ledger) or,
     for a new twin, at its first row."""
     config: IngestConfig = registry.sensor_ingest
-    start = twin.chemistry._last_ingest_time if twin.last_input_at is None else twin.last_input_at
+    start = twin.chemistry.last_ingest_time if twin.last_input_at is None else twin.last_input_at
     found = registry.storage.fetch_pending_sensor_rows(
         user_id, SENSOR_TYPES, start=start, until=now,
         overlap_seconds=config.overlap_minutes * 60, limit=config.batch_rows)
@@ -415,7 +416,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         commit["received"] = discovery.received
         # A twin from before the ledger has read sensors (its chemistry
         # has an ingest time) even with no channel readings recorded.
-        if not discovery.inputs and not twin.sensor_channels and twin.chemistry._last_ingest_time is None:
+        if not discovery.inputs and not twin.sensor_channels and twin.chemistry.last_ingest_time is None:
             raise PondSkipped("no sensor reading for this pond yet")
         # Events first: one logged since the last cycle usually falls
         # before this cycle's readings, so both go in in order.

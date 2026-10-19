@@ -144,16 +144,16 @@ def test_a_lower_id_committed_after_a_higher_one_is_found():
     assert cursor["watermark"] == minutes(15).isoformat(), "the watermark never moves back"
 
 
-def test_rows_older_than_the_overlap_are_still_discovered_and_marked_for_rebuild():
+def test_the_overlap_bounds_how_late_a_commit_can_be():
     storage = make_storage()
     registry = EngineRegistry(storage, sensor_ingest=IngestConfig(overlap_minutes=60))
     upload(storage, minutes(120))
     poll(registry, minutes(121))
     upload(storage, minutes(59), first_id=500)   # 61 minutes before the watermark
     upload(storage, minutes(61), first_id=600)   # 59 minutes before it
-    assert poll(registry, minutes(122)).sensor["inputs"] == 2
-    assert {i for i, _ in ledger(storage)} >= {500, 501, 502, 503, 600, 601, 602, 603}
-    assert poll(registry, minutes(123)).sensor["inputs"] == 0, "the late rows were replayed once"
+    assert poll(registry, minutes(122)).sensor["inputs"] == 1
+    assert {i for i, _ in ledger(storage)} >= {600, 601, 602, 603}
+    assert not {i for i, _ in ledger(storage)} & {500, 501, 502, 503}
 
 
 def _run(crash):
@@ -246,14 +246,12 @@ def test_a_snapshot_from_before_the_ledger_starts_at_its_last_ingest():
     def old_poller_state(twin):
         twin.chemistry._last_ingest_time = minutes(10)
     registry.with_twin(POND, old_poller_state, profiles=registry.profile_history(POND))
-    # The unledgered row is surfaced and replayed against the legacy
-    # snapshot checkpoint instead of being hidden by the old start bound.
+    # Nothing newer yet: the pond is advanced on the weather, not skipped.
     quiet = poll(registry, minutes(11))
-    assert quiet.sensor["inputs"] == 1
-    assert any(r["disposition"] == "applied" for r in storage.rows("sensor_ingest_ledger"))
+    assert quiet.sensor["inputs"] == 0 and quiet == ""
     upload(storage, minutes(20), {**FULL, "pH": 7.9})
     assert poll(registry, minutes(21)).sensor["inputs"] == 1
-    assert [i for i, _ in ledger(storage)] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert [i for i, _ in ledger(storage)] == [5, 6, 7, 8]
 
 
 def test_a_pond_with_no_rows_is_skipped_and_saves_nothing():

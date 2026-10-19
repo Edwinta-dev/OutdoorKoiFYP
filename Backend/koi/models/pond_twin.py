@@ -228,7 +228,7 @@ class PondTwin:
         for item in inputs:
             self._record_channels(item)
         newest_event = self.ledger.newest_event_time()
-        replay_boundary = max((t for t in (self.last_input_at, self.chemistry._last_ingest_time,
+        replay_boundary = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time,
                                            newest_event) if t is not None), default=None)
         late_sensor = {id(item): (self.last_input_at is not None and item.time < self.last_input_at)
                        for item in inputs}
@@ -247,7 +247,7 @@ class PondTwin:
         provenance: list[dict] = []
         warnings: list[str] = []
         for item in inputs:
-            current_input_time = max((t for t in (self.last_input_at, self.chemistry._last_ingest_time)
+            current_input_time = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time)
                                       if t is not None), default=None)
             late = current_input_time is not None and item.time < current_input_time
             model_time = current_input_time if late and current_input_time is not None else item.time
@@ -669,7 +669,7 @@ class PondTwin:
         sensor sample times, logged event times (both in model time, the
         ledger's newest_input_at) and camera frame times. None before any
         input. Recorded on evaluation rows (koi/provenance.py)."""
-        times = (self.ledger.newest_input_at, self.last_input_at, self.chemistry._last_ingest_time,
+        times = (self.ledger.newest_input_at, self.last_input_at, self.chemistry.last_ingest_time,
                  self.algae._last_camera_time)
         return max((as_aware(t) for t in times if t is not None), default=None)
 
@@ -777,7 +777,7 @@ class PondTwin:
             self.ledger = el.EventLedger.from_dict(stored)
             return
         saved_at = snapshot.get("saved_at")
-        newest = max((as_aware(t) for t in (self.last_input_at, self.chemistry._last_ingest_time,
+        newest = max((as_aware(t) for t in (self.last_input_at, self.chemistry.last_ingest_time,
                                             *(e.time for e in self.chemistry._events)) if t is not None),
                      default=None)
         self.ledger = el.EventLedger(

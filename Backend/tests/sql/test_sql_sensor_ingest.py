@@ -250,13 +250,13 @@ def test_partial_uploads_unknown_types_and_two_ponds(db):
     assert group_rows(found_b["rows"]).inputs[0].missing == ["tds", "lux"]
 
 
-def test_until_bounds_scan_and_start_is_only_a_reported_reconciliation_hint(db):
+def test_until_and_start_bound_the_scan(db):
     _pond(db, POND_A)
     early = _upload(db, POND_A, T0, {"pH": 7.6})
     late = _upload(db, POND_A, T0 + timedelta(minutes=30), {"pH": 7.7})
     storage = _storage(db)
     assert [r["id"] for r in _pending(storage, POND_A, until=T0 + timedelta(minutes=10))["rows"]] == early
-    assert [r["id"] for r in _pending(storage, POND_A, start=T0 + timedelta(minutes=10))["rows"]] == early + late
+    assert [r["id"] for r in _pending(storage, POND_A, start=T0 + timedelta(minutes=10))["rows"]] == late
     assert [r["id"] for r in _pending(storage, POND_A, limit=1)["rows"]] == early
 
 

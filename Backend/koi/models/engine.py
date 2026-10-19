@@ -522,6 +522,11 @@ class WaterChemistryEngine:
 
         self._gate = SensorGate(self._has_volume_event_within_6h)
 
+    @property
+    def last_ingest_time(self) -> Optional[datetime]:
+        """Time of the last sensor sample applied, or None before the first."""
+        return self._last_ingest_time
+
     def _has_volume_event_within_6h(self, t: datetime) -> bool:
         return any(
             e.kind in (EventKind.WATER_CHANGE, EventKind.TOP_UP, EventKind.SALT)
