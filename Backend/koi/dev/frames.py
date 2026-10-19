@@ -19,31 +19,26 @@ def synthetic_frame(green_ratio: float) -> bytes:
     return encoded.tobytes()
 
 
-def upload_seed_frames(tables: dict[str, list[dict[str, Any]]], settings: Any) -> int:
-    """Upload seed frames and replace placeholder image URLs with local public URLs."""
-    from supabase import create_client
+def _path(row: dict[str, Any]) -> str:
+    return f"local-dev/{row['user_ID']}/{row['id']}.jpg"
 
-    client = create_client(settings.supabase_url, settings.supabase_servicerole_key.get_secret_value())
+
+def upload_seed_frames(tables: dict[str, list[dict[str, Any]]], storage: Any, settings: Any) -> int:
+    """Upload seed frames through Storage.upload_image and replace placeholder
+    image URLs with local public URLs."""
     bucket = settings.pond_image_bucket
-    storage = client.storage.from_(bucket)
+    public_base = settings.dev_supabase_public_url.rstrip("/")
     uploaded = 0
     for row in tables.get("imageTable", []):
-        pond_id, image_id = row["user_ID"], row["id"]
-        path = f"local-dev/{pond_id}/{image_id}.jpg"
-        storage.upload(path, synthetic_frame(row["green_ratio"]),
-                       file_options={"content-type": "image/jpeg", "upsert": "true"})
-        public_base = settings.dev_supabase_public_url.rstrip("/")
-        row["imageURL"] = (f"{public_base}/storage/v1/object/public/{bucket}/{path}" if public_base
-                            else storage.get_public_url(path))
+        path = _path(row)
+        url = storage.upload_image(bucket, path, synthetic_frame(row["green_ratio"]))
+        row["imageURL"] = f"{public_base}/storage/v1/object/public/{bucket}/{path}" if public_base else url
         uploaded += 1
     return uploaded
 
 
-def remove_seed_frames(tables: dict[str, list[dict[str, Any]]], settings: Any) -> None:
+def remove_seed_frames(tables: dict[str, list[dict[str, Any]]], storage: Any, settings: Any) -> None:
     """Remove the deterministic objects written for a temporary --check seed."""
-    from supabase import create_client
-
-    client = create_client(settings.supabase_url, settings.supabase_servicerole_key.get_secret_value())
-    paths = [f"local-dev/{row['user_ID']}/{row['id']}.jpg" for row in tables.get("imageTable", [])]
+    paths = [_path(row) for row in tables.get("imageTable", [])]
     if paths:
-        client.storage.from_(settings.pond_image_bucket).remove(paths)
+        storage.delete_images(settings.pond_image_bucket, paths)

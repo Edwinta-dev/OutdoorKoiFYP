@@ -175,6 +175,49 @@ def test_supabase_seed_clears_stale_poller_lease_before_replacing_seed(monkeypat
     )
 
 
+def _recording_connection(statements):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, sql, params=None):
+            statements.append((sql, params))
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+    return Connection()
+
+
+def test_seed_moves_id_sequences_past_explicit_seed_ids(monkeypatch):
+    statements = []
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [])
+    local_db.seed(_recording_connection(statements), {
+        "SensorData": [{"id": 40005, "userID": 1, "sensor_type": "pH", "data1": 7.5}],
+        "pond_profile": [{"id": 3, "pond_id": 1}],
+    }, [1])
+    setvals = [sql for sql, _ in statements if "setval" in sql]
+    assert len(setvals) == 1 and '"SensorData"' in setvals[0], \
+        "only tables inserted with their own ids need their sequence moved"
+    inserts = [i for i, (sql, _) in enumerate(statements) if 'insert into public."SensorData"' in sql]
+    first_setval = next(i for i, (sql, _) in enumerate(statements) if "setval" in sql)
+    assert inserts and first_setval > inserts[-1]
+
+
+def test_remove_deletes_the_catalog_seed_inserted(monkeypatch):
+    statements = []
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [{"Title": "Koi"}])
+    local_db.remove(_recording_connection(statements), {}, [1])
+    assert ('delete from public."Fish_Database" where "Title" = any(%s)', (["Koi"],)) in statements
+
+
 def test_seed_order_inserts_parents_first():
     order = local_db.INSERT_ORDER
     assert order.index("UserData") < order.index("pond_profile")
