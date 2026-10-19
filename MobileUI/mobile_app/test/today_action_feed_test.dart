@@ -202,11 +202,11 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('empty: says the pond needs nothing today', (tester) async {
+    testWidgets('empty: names rules that cannot be assessed', (tester) async {
       await pumpFeed(tester, const []);
 
-      expect(find.text('The pond needs nothing today.'), findsOneWidget);
-      expect(find.textContaining('No weather rule has called'), findsOneWidget);
+      expect(find.text('Weather rules could not be checked.'), findsOneWidget);
+      expect(find.textContaining('PREEMPT and WINDOW'), findsOneWidget);
     });
 
     testWidgets('unavailable: does not claim the pond needs nothing', (
@@ -215,7 +215,7 @@ void main() {
       await pumpFeed(tester, null);
 
       expect(find.text("Today's actions could not be loaded."), findsOneWidget);
-      expect(find.text('The pond needs nothing today.'), findsNothing);
+      expect(find.text('Weather rules could not be checked.'), findsNothing);
     });
 
     testWidgets('dismiss hides the action and stores it for today only', (
@@ -290,7 +290,7 @@ void main() {
       await tester.tap(find.byTooltip('Dismiss for today'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The pond needs nothing today.'), findsOneWidget);
+      expect(find.text('All actions dismissed.'), findsOneWidget);
       expect(
         find.text('1 dismissed action is hidden until tomorrow.'),
         findsOneWidget,
@@ -425,7 +425,7 @@ void main() {
       await pumpScreen(tester, const DashboardView());
       await settle(tester);
 
-      expect(find.text('The pond needs nothing today.'), findsOneWidget);
+      expect(find.text('Weather rules could not be checked.'), findsOneWidget);
       await unmount(tester);
     });
 
@@ -440,7 +440,7 @@ void main() {
       await settle(tester);
 
       expect(find.text("Today's actions could not be loaded."), findsOneWidget);
-      expect(find.text('The pond needs nothing today.'), findsNothing);
+      expect(find.text('Weather rules could not be checked.'), findsNothing);
       await unmount(tester);
     });
   });

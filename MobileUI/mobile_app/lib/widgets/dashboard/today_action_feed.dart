@@ -111,12 +111,13 @@ class _TodayActionFeedState extends ConsumerState<TodayActionFeed> {
         else if (visible.isEmpty)
           _message(
             context,
-            'The pond needs nothing today.',
+            hidden > 0
+                ? 'All actions dismissed.'
+                : 'Weather rules could not be checked.',
             hidden > 0
                 ? '$hidden dismissed ${hidden == 1 ? 'action is' : 'actions are'} '
                       'hidden until tomorrow.'
-                : 'No weather rule has called for action. Rules without '
-                      'enough weather data are not counted.',
+                : 'PREEMPT and WINDOW do not have enough weather data to be assessed.',
           )
         else
           for (final action in visible) ...[
