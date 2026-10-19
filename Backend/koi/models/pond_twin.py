@@ -73,7 +73,7 @@ from koi.models import event_ledger as el
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine, salt_tds_step
 from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
-from koi.models.sensor_inputs import SensorInput, parse_timestamp
+from koi.models.sensor_inputs import SensorInput, merge_inputs, parse_timestamp
 from koi.models.tds_prompts import TdsPrompts
 
 log = logging.getLogger(__name__)
@@ -212,52 +212,68 @@ class PondTwin:
         newest reading. Returns one provenance entry per input and the
         sensor warnings of the newest input.
 
-        An input older than the last one applied (a reading committed
-        late, found by the scan's overlap) cannot be put back in the past:
-        it is applied at the last input's time, and its entry says
-        late=True with both times. Placing late readings by their sample
-        time is issue #82.
+        An input at or before the newest input or event already applied
+        (a reading committed late, the rest of a cycle whose first rows an
+        earlier poll read, or an event logged between the node's upload
+        and this poll) belongs in the past. With history (the ledgered
+        inputs) the chemistry engine is rewound to a checkpoint and
+        replayed with these inputs at their own times (event_ledger.py),
+        an input of a cycle already in the history merged into it
+        (sensor_inputs.merge_inputs); their entries say replayed=True.
+        late=True says the input arrived behind the model's sensor clock,
+        whether or not it was replayed.
 
-        An input at or before the newest event already applied (an event
-        logged between the node's upload and this poll) belongs before
-        that event. With history (the ledgered inputs, for the replay)
-        the chemistry engine is rewound and replayed with these inputs in
-        their place (event_ledger.py), and their entries say
-        replayed=True; without it, or without a checkpoint before them,
-        they are applied as above."""
+        A late input older than the replay window has no checkpoint to
+        rewind to: it is left out of the chemistry engine, and its entry
+        says placed=False (the poller records its rows out_of_window).
+        Without history, or with no checkpoint before them (a twin's first
+        local day), late inputs inside the window are applied at the last
+        input's time, model_time saying so."""
         for item in inputs:
             self._record_channels(item)
         newest_event = self.ledger.newest_event_time()
         replay_boundary = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time,
                                            newest_event) if t is not None), default=None)
+        sensor_clock = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time)
+                            if t is not None), default=None)
         late_sensor = {id(item): (self.last_input_at is not None and item.time < self.last_input_at)
                        for item in inputs}
-        within_replay_window = (replay_boundary is not None and inputs
-                                and inputs[0].time >= replay_boundary - el.WINDOW)
-        if (history is not None and inputs and replay_boundary is not None
-                and inputs[0].time <= replay_boundary and within_replay_window):
-            replay = self._replay(inputs[0].time, history, now, extra_inputs=inputs)
-            if replay is not None:
-                replayed = [{
-                    "time": item.time.isoformat(), "time_basis": item.time_basis,
-                    "model_time": item.time.isoformat(), "late": late_sensor[id(item)], "replayed": True,
-                    "row_ids": dict(item.row_ids), "missing": item.missing} for item in inputs]
-                return replayed, replay["warnings"]
+        floor = replay_boundary - el.WINDOW if replay_boundary is not None else None
+        unplaced = {id(item) for item in inputs
+                    if floor is not None and sensor_clock is not None and item.time < sensor_clock
+                    and item.time < floor}
+        out: dict[int, dict] = {id(item): {
+            "time": item.time.isoformat(), "time_basis": item.time_basis, "model_time": None,
+            "late": True, "placed": False, "row_ids": dict(item.row_ids), "missing": item.missing}
+            for item in inputs if id(item) in unplaced}
+        placeable = [item for item in inputs if id(item) not in unplaced]
 
-        provenance: list[dict] = []
+        def ordered() -> list[dict]:
+            return [out[id(item)] for item in inputs]
+
+        if (history is not None and placeable and replay_boundary is not None
+                and placeable[0].time <= replay_boundary):
+            replay = self._replay(placeable[0].time, history, now, extra_inputs=placeable)
+            if replay is not None:
+                for item in placeable:
+                    out[id(item)] = {
+                        "time": item.time.isoformat(), "time_basis": item.time_basis,
+                        "model_time": item.time.isoformat(), "late": late_sensor[id(item)], "replayed": True,
+                        "row_ids": dict(item.row_ids), "missing": item.missing}
+                return ordered(), replay["warnings"]
+
         warnings: list[str] = []
-        for item in inputs:
+        for item in placeable:
             current_input_time = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time)
                                       if t is not None), default=None)
             late = current_input_time is not None and item.time < current_input_time
             model_time = current_input_time if late and current_input_time is not None else item.time
             warnings = self._chemistry_sensor(item, model_time)
-            provenance.append({
+            out[id(item)] = {
                 "time": item.time.isoformat(), "time_basis": item.time_basis,
                 "model_time": model_time.isoformat(), "late": late,
-                "rebuild_required": late,
-                "row_ids": dict(item.row_ids), "missing": item.missing})
-        return provenance, warnings
+                "row_ids": dict(item.row_ids), "missing": item.missing}
+        return ordered(), warnings
 
     def _record_channels(self, item: SensorInput) -> None:
         """Keeps each channel's newest reading (sensor_channels)."""
@@ -446,7 +462,7 @@ class PondTwin:
             if history is None:
                 return None
             inputs = list(history(through, sensor_until))
-        inputs += [i for i in extra_inputs if through is None or i.time > through]
+        inputs = merge_inputs(inputs + [i for i in extra_inputs if through is None or i.time > through])
         events = [e for e in self.ledger.live() if through is None or e.model_time > through]
 
         self.chemistry = self._restore_chemistry(checkpoint)

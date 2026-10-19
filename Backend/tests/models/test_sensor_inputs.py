@@ -16,6 +16,7 @@ from koi.models.sensor_inputs import (
     complete_groups,
     fresh_value,
     group_rows,
+    merge_inputs,
 )
 
 T0 = datetime(2026, 10, 4, tzinfo=timezone.utc)
@@ -193,23 +194,40 @@ def test_a_late_input_is_applied_at_the_last_input_time_and_marked():
     provenance, _ = twin.ingest_sensor_inputs(group_rows(upload(10, T0, pH=7.1, temp=28.0)).inputs)
     assert provenance == [{"time": T0.isoformat(), "time_basis": "ingestion",
                            "model_time": (T0 + timedelta(minutes=15)).isoformat(), "late": True,
-                           "rebuild_required": True,
                            "row_ids": {"ph": 10, "temp": 11}, "missing": ["tds", "lux"]}]
     assert twin.last_input_at == T0 + timedelta(minutes=15)
     # The older reading does not replace the newer one as the channel's latest.
     assert twin.sensor_channels["ph"]["value"] == 7.2
 
 
-def test_late_input_without_a_retained_checkpoint_surfaces_rebuild_requirement():
+def test_a_late_input_older_than_the_replay_window_is_left_out_of_the_model():
     twin = PondTwin.create(_config())
     old = T0 - timedelta(days=40)
     twin.ingest_sensor_inputs(group_rows(upload(20, old, pH=7.2, temp=29.0)).inputs)
     twin.ingest_sensor_inputs(group_rows(upload(30, T0, pH=7.4, temp=29.0)).inputs)
+    before = json.dumps(twin.chemistry.to_snapshot(), sort_keys=True)
     provenance, _ = twin.ingest_sensor_inputs(
         group_rows(upload(10, old - timedelta(days=1), pH=7.1, temp=28.0)).inputs,
         history=lambda _after, _until: [],
     )
-    assert provenance[0]["rebuild_required"] is True
+    assert provenance == [{"time": (old - timedelta(days=1)).isoformat(), "time_basis": "ingestion",
+                           "model_time": None, "late": True, "placed": False,
+                           "row_ids": {"ph": 10, "temp": 11}, "missing": ["tds", "lux"]}]
+    assert json.dumps(twin.chemistry.to_snapshot(), sort_keys=True) == before
+    assert twin.last_input_at == T0 and twin.sensor_channels["ph"]["value"] == 7.4
+
+
+def test_merge_inputs_puts_a_cycle_read_in_two_polls_back_together():
+    def half(first_id, **values):
+        rows = upload(first_id, T0 + timedelta(minutes=first_id), **values)
+        for r in rows:
+            r.update(sampled_at=T0.isoformat(), device_id="node", boot_id="b1", cycle_seq=4)
+        return group_rows(rows).inputs
+
+    [whole] = merge_inputs(half(1, pH=7.6, temp=29.0) + half(5, TDS=220.0, pH=7.7))
+    assert whole.time == T0 and whole.cycle_seq == 4
+    assert whole.channels == {"ph": 7.7, "tds": 220.0, "temp": 29.0, "lux": None}
+    assert whole.row_ids == {"ph": 6, "temp": 2, "tds": 5}
 
 
 def _config():

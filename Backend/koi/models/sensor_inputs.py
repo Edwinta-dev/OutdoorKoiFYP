@@ -65,6 +65,10 @@ class IngestConfig:
 APPLIED = "applied"
 SUPERSEDED = "superseded"
 UNUSABLE = "unusable"
+# A late reading older than the replay window (event_ledger.WINDOW): no
+# checkpoint is left to place it at its sample time, so the model leaves
+# it out rather than apply it at a time it does not describe (#82).
+OUT_OF_WINDOW = "out_of_window"
 
 
 def parse_timestamp(value: object) -> datetime:
@@ -190,6 +194,36 @@ def group_rows(rows: list[dict]) -> Discovery:
                 "disposition": dispositions[int(r["id"])],
             })
     return discovery
+
+
+def input_key(item: SensorInput) -> tuple:
+    """The grouping key of an input, as _group_key gives it for its rows."""
+    if item.device_id is not None and item.boot_id is not None and item.cycle_seq is not None:
+        return ("cycle", item.device_id, item.boot_id, item.cycle_seq)
+    return ("time", item.time)
+
+
+def merge_inputs(inputs: list[SensorInput]) -> list[SensorInput]:
+    """Inputs with the same key as one input, oldest first: a cycle whose
+    rows were read across two polls (a scan's limit, or a store-and-forward
+    retry) is put back together, as group_rows would have grouped it had
+    all its rows been read at once. Per channel the highest row id wins;
+    the time is the earliest member's."""
+    merged: dict[tuple, SensorInput] = {}
+    for item in inputs:
+        key = input_key(item)
+        prior = merged.get(key)
+        if prior is None:
+            merged[key] = item
+            continue
+        channels, row_ids = dict(prior.channels), dict(prior.row_ids)
+        for channel, row_id in item.row_ids.items():
+            if channel not in row_ids or row_id > row_ids[channel]:
+                channels[channel], row_ids[channel] = item.channels.get(channel), row_id
+        first = prior if prior.time <= item.time else item
+        merged[key] = SensorInput(first.time, first.time_basis, channels, row_ids,
+                                  prior.device_id, prior.boot_id, prior.cycle_seq)
+    return sorted(merged.values(), key=lambda i: (i.time, min(i.row_ids.values(), default=0)))
 
 
 def complete_groups(rows: list[dict], limit: int) -> list[dict]:
