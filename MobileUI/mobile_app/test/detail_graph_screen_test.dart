@@ -85,9 +85,9 @@ void main() {
       });
 
       testWidgets(
-        'error: a failed history fetch falls back to the placeholder',
+        'error: a failed history fetch shows a retryable load failure',
         (tester) async {
-          await pumpScreen(
+          final fake = await pumpScreen(
             tester,
             DetailGraphScreen(metricType: metric, title: title),
             source: FakePondDataSource(
@@ -103,8 +103,20 @@ void main() {
 
           expect(find.byType(CircularProgressIndicator), findsNothing);
           expect(find.byType(ScarceDataPlaceholder), findsOneWidget);
+          expect(find.text('History could not be loaded'), findsOneWidget);
+          expect(
+            find.text('Establishing Baseline Cycle Averages'),
+            findsNothing,
+          );
           expect(find.byType(cardType), findsOneWidget);
           expect(find.text('Retry'), findsWidgets);
+          final retry = find.descendant(
+            of: find.byType(ScarceDataPlaceholder),
+            matching: find.text('Retry'),
+          );
+          await tester.tap(retry);
+          await settle(tester);
+          expect(fake.callsTo('fetchHistoricalGraphPayload'), hasLength(2));
         },
       );
     });
