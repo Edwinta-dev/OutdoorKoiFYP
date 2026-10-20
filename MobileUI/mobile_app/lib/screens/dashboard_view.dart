@@ -63,6 +63,15 @@ class DashboardViewState extends ConsumerState<DashboardView> {
         .toList();
     final detailed =
         ref.watch(displayModeProvider).value == DisplayMode.detailed;
+    final safeRange = ref.watch(unifiedSafeRangeProvider);
+    final tempRange = safeRange.temperatureC;
+    final phRange = safeRange.ph;
+    final targetMinTemp = tempRange != null && !tempRange.isEmpty
+        ? tempRange.minimum
+        : comfortMinTempC;
+    final targetMaxTemp = tempRange != null && !tempRange.isEmpty
+        ? tempRange.maximum
+        : comfortMaxTempC;
 
     return Scaffold(
       backgroundColor: AppColors.of(
@@ -92,14 +101,32 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                     children: [
                       TodayActionFeed(actions: todayActions),
                       const SizedBox(height: AppSpace.lg),
+                      if ((tempRange?.isEmpty ?? false) ||
+                          (phRange?.isEmpty ?? false))
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text(
+                            'Stocked species have no shared safe range. Review their care requirements.',
+                          ),
+                        ),
                       if (!detailed)
-                        SimplePondStatus(dashboard: pondDashboard)
+                        SimplePondStatus(
+                          dashboard: pondDashboard,
+                          minTempC: targetMinTemp,
+                          maxTempC: targetMaxTemp,
+                        )
                       else ...[
                         NeaWeatherRibbon(
                           forecastData: forecastData,
                           telemetryData: telemetryData,
-                          onOpenFullForecast: () =>
-                              showNeaFullForecastModal(context, forecastData),
+                          onOpenFullForecast: () {
+                            if (pondDashboard != null) {
+                              showNeaFullForecastModal(
+                                context,
+                                pondDashboard.forecast,
+                              );
+                            }
+                          },
                         ),
 
                         const SizedBox(
@@ -118,8 +145,8 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                           sensorData: dashboardData['raw_sensor'] ?? {},
                           telemetryData: dashboardData['nea_telemetry'] ?? {},
                           forecastData: dashboardData['nea_forecasts'] ?? {},
-                          targetMinTemp: comfortMinTempC,
-                          targetMaxTemp: comfortMaxTempC,
+                          targetMinTemp: targetMinTemp,
+                          targetMaxTemp: targetMaxTemp,
                           onTap: () => _navigateToDetailGraph(
                             'temperature',
                             'Detailed Temperature',
@@ -145,12 +172,17 @@ class DashboardViewState extends ConsumerState<DashboardView> {
                           forecastData: dashboardData['nea_forecasts'] ?? {},
                           telemetryHistory: telemetryHistory,
                           backendAssessment: phAssessment,
+                          targetMinPh: phRange != null && !phRange.isEmpty
+                              ? phRange.minimum
+                              : 6.8,
+                          targetMaxPh: phRange != null && !phRange.isEmpty
+                              ? phRange.maximum
+                              : 8.2,
                           onTap: () => _navigateToDetailGraph(
                             'ph',
                             'pH & Buffer Stability',
                           ),
                         ),
-
                         const SizedBox(height: AppSpace.lg),
 
                         // 3. ALGAL & SOLAR MONITOR
@@ -204,8 +236,15 @@ class DashboardViewState extends ConsumerState<DashboardView> {
 class SimplePondStatus extends StatelessWidget {
   /// Null when the dashboard could not be loaded.
   final PondDashboard? dashboard;
+  final double minTempC;
+  final double maxTempC;
 
-  const SimplePondStatus({super.key, required this.dashboard});
+  const SimplePondStatus({
+    super.key,
+    required this.dashboard,
+    this.minTempC = comfortMinTempC,
+    this.maxTempC = comfortMaxTempC,
+  });
 
   static String _reading(SensorReading r, String name) => switch (r.status) {
     'stale' => 'The last $name reading is old; check the sensor is online.',
@@ -215,16 +254,19 @@ class SimplePondStatus extends StatelessWidget {
     _ => 'No $name reading has arrived from the pond sensor.',
   };
 
-  static String temperatureLine(SensorReading r) {
+  static String temperatureLine(
+    SensorReading r, {
+    double min = comfortMinTempC,
+    double max = comfortMaxTempC,
+  }) {
     final v = r.value;
     if (r.status != 'ok' || v == null) return _reading(r, 'water temperature');
     final measured = 'Water is ${v.toStringAsFixed(1)} °C (measured)';
-    const range =
-        '${comfortMinTempC ~/ 1}-${comfortMaxTempC ~/ 1} °C koi comfort range';
-    if (v < comfortMinTempC) {
+    final range = '${min ~/ 1}-${max ~/ 1} °C koi comfort range';
+    if (v < min) {
       return '$measured, below the $range. Koi eat less in cool water.';
     }
-    if (v > comfortMaxTempC) {
+    if (v > max) {
       return '$measured, above the $range. Warm water holds less oxygen.';
     }
     return '$measured, inside the $range.';
@@ -269,7 +311,14 @@ class SimplePondStatus extends StatelessWidget {
             ),
           ]
         : [
-            (Icons.thermostat_outlined, temperatureLine(d.readings.waterTemp)),
+            (
+              Icons.thermostat_outlined,
+              temperatureLine(
+                d.readings.waterTemp,
+                min: minTempC,
+                max: maxTempC,
+              ),
+            ),
             (
               Icons.water_drop_outlined,
               phLine(d.readings.ph, d.assessments.chemistry),

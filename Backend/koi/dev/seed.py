@@ -15,6 +15,7 @@ fast-forward in koi/dev/replay.py.
 """
 from __future__ import annotations
 
+import csv
 import json
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -27,6 +28,7 @@ from koi.storage.base import IMAGE_COLUMNS, INTERVENTION_COLUMNS, parse_timestam
 from koi.weather.nea import SINGAPORE
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "demo_pond" / "seed.json"
+FISH_CATALOG_PATH = Path(__file__).resolve().parents[3] / "AquariumScraper" / "fish_characteristics_open_media.csv"
 
 # Shifted by whole hours; every other table by the exact offset.
 WEATHER_TABLES = ("weather_telemetry", "weather_forecasts")
@@ -45,6 +47,12 @@ FEEDING_COLUMNS = ("food_grams", "protein_percentage", "event_timestamp")
 
 def load(path: str | Path = SEED_PATH) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def load_fish_catalog(path: str | Path = FISH_CATALOG_PATH) -> list[dict[str, str]]:
+    """Load the species reference rows for the local Supabase profile."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as source:
+        return list(csv.DictReader(source))
 
 
 def _local_date(at: datetime) -> date:

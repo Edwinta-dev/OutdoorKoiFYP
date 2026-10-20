@@ -46,6 +46,9 @@ POND_TABLES = (
     ("pond_algae_evaluations", "userid"),
     ("evaluation_daily", "pond_id"),
     ("pond_chemistry_state", "user_id"),
+    ("kit_readings", "pond"),
+    ("pond_calibration", "pond_id"),
+    ("notification_outbox", "pond"),
     ("sensor_ingest_ledger", "pond_id"),
     ("sensor_ingest_cursor", "pond_id"),
     ("camera_config", "pond_id"),
@@ -55,8 +58,10 @@ POND_TABLES = (
 )
 # Insert order (parents first), and columns left to the database default.
 INSERT_ORDER = ("WeatherStationLookup", "weather_telemetry", "weather_forecasts", "UserData", "pond_profile",
-                "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state")
+                "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state",
+                "Fish_Database")
 DATABASE_IDS = {"pond_profile": "id", "daily_sensor_averages": "id"}
+POLLER_LEASE = "poller"
 
 
 class LocalStackUnavailable(RuntimeError):
@@ -152,13 +157,27 @@ def _delete(cur: Any, tables: dict[str, list[dict]], ponds: list[int]) -> None:
     for row in tables.get("weather_forecasts", []):
         cur.execute("delete from public.weather_forecasts where forecast_type = %s and slot_id = %s",
                     (row["forecast_type"], row["slot_id"]))
+    cur.execute('delete from public."Fish_Database" where "Title" = any(%s)',
+                ([r["Title"] for r in tables.get("Fish_Database", [])],))
+
+
+def _with_catalog(tables: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """The seed's tables plus the species catalog, which is shipped with
+    the repository, not with a migration; seed() and remove() both use it."""
+    from koi.dev.seed import load_fish_catalog
+
+    return {**tables, "Fish_Database": load_fish_catalog()}
 
 
 def seed(conn: Any, tables: dict[str, list[dict]], ponds: list[int]) -> dict[str, int]:
     """Replaces the seed's rows in the local database (one transaction).
     Returns the rows inserted per table."""
     counts: dict[str, int] = {}
+    tables = _with_catalog(tables)
     with conn.cursor() as cur:
+        # The local seed owns this database. A previous hard-stopped dev
+        # process may have left its poller lease active until its TTL expires.
+        cur.execute("delete from public.worker_lease where name = %s", (POLLER_LEASE,))
         _delete(cur, tables, ponds)
         for table in INSERT_ORDER:
             rows = tables.get(table, [])
@@ -169,6 +188,11 @@ def seed(conn: Any, tables: dict[str, list[dict]], ponds: list[int]) -> dict[str
                 cur.execute(f'insert into public."{table}" ({columns}) values ({marks})',
                             [_value(v) for v in row.values()])
             counts[table] = len(rows)
+            if rows and "id" in rows[0] and DATABASE_IDS.get(table) != "id":
+                # Seed rows carry their own ids; move the id sequence past
+                # them, or the next insert without an id collides (#121).
+                cur.execute(f"select setval(pg_get_serial_sequence('public.\"{table}\"', 'id'), "
+                            f'greatest((select max(id) from public."{table}"), 1))')
             if table == "UserData":
                 # The UserData trigger (migration 0008) records each insert
                 # as a profile row; the seed carries its own profiles.
@@ -182,7 +206,7 @@ def remove(conn: Any, tables: dict[str, list[dict]], ponds: list[int], worker_ho
     """Deletes what seed() inserted, anything the services wrote for the
     seed's ponds since, and the cycle report of the given worker."""
     with conn.cursor() as cur:
-        _delete(cur, tables, ponds)
+        _delete(cur, _with_catalog(tables), ponds)
         if worker_holder is not None:
             cur.execute("delete from public.worker_status where holder = %s", (worker_holder,))
     conn.commit()

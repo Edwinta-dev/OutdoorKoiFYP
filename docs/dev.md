@@ -133,6 +133,32 @@ everything of ponds 1 and 2, the seeded sensor row ids, and the weather
 cache and station rows the seed carries. The local stack is disposable;
 `supabase db reset` rebuilds it.
 
+The Supabase profile also uploads synthetic camera frames to
+`imageAnalysisBucket`. If the app runs on a physical device, set
+`KOI_DEV_SUPABASE_PUBLIC_URL` to the local stack's host-reachable base URL
+(for example `http://192.168.1.20:54321`) so seeded image links use that
+address instead of the backend's loopback URL. Uploads still go to the
+local stack URL above.
+
+### Windows physical-device setup
+
+For a Windows development machine and a physical Android phone:
+
+- Keep the phone and development machine on the same Wi-Fi. Use the machine's
+  LAN address in `env/dev.json` and in `KOI_DEV_SUPABASE_PUBLIC_URL` as above.
+- If `supabase start` reports that ports 54289-54388 are unavailable, Hyper-V
+  or WSL may have reserved the Supabase port range. In an Administrator
+  PowerShell, run `net stop winnat` followed by `net start winnat`, then run
+  `supabase stop` and `supabase start` from the repository.
+- If TLS-scanning antivirus software breaks Gradle downloads, set
+  `JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStoreType=Windows-ROOT` in the
+  shell that launches Flutter/Gradle, then retry the build. This uses the
+  Windows certificate store for Java TLS validation.
+- Keep the Android SDK under the same Windows user account that runs the
+  build. An SDK installed under another account can be readable but still
+  fail with `javac AccessDenied` because the build needs access as its own
+  user.
+
 `--check` here also checks every migration in `supabase/migrations` is
 applied, and that each pond's dashboard built from the local database is
 identical to the memory profile's on the same seed (apart from the

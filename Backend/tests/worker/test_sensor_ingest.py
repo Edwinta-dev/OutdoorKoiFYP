@@ -303,3 +303,53 @@ def test_old_rows_without_v2_fields_still_read_as_ingestion_time():
     assert {(r["sampled_at"], r["flags"]) for r in found["rows"]} == {(None, None)}
     poll(EngineRegistry(storage), minutes(1))
     assert {r["time_basis"] for r in storage.rows("sensor_ingest_ledger")} == {"ingestion"}
+
+
+def _cycle(storage, created, sampled, reading, first_id):
+    """Rows of one v2 cycle (device node-1, boot b1, cycle 9) inserted at created."""
+    return storage.add_rows("SensorData", [
+        {"id": first_id + i, "userID": POND, "sensor_type": t, "data1": v, "created_at": created.isoformat(),
+         "sampled_at": sampled.isoformat(), "flags": 0, "device_id": "node-1", "boot_id": "b1", "cycle_seq": 9}
+        for i, (t, v) in enumerate(reading.items())])
+
+
+def test_a_cycle_split_across_two_polls_is_merged_into_one_input():
+    """A store-and-forward retry delivers the rest of a cycle after a poll
+    has read its first rows. The second poll replays the cycle as one
+    input at its sample time: the model ends as if it had read it whole."""
+    day2 = T0 + timedelta(days=2)
+    whole = make_storage()
+    upload(whole, minutes(0), first_id=1)
+    poll(EngineRegistry(whole), minutes(1))
+    _cycle(whole, day2 + timedelta(minutes=5), day2, {"pH": 7.4, "temp": 28.0, "TDS": 230.0, "LUX": 900.0}, 100)
+    poll(EngineRegistry(whole), day2 + timedelta(minutes=30))
+
+    split = make_storage()
+    registry = EngineRegistry(split)
+    upload(split, minutes(0), first_id=1)
+    poll(registry, minutes(1))
+    _cycle(split, day2 + timedelta(minutes=5), day2, {"pH": 7.4, "temp": 28.0}, 100)
+    poll(registry, day2 + timedelta(minutes=10))
+    _cycle(split, day2 + timedelta(minutes=20), day2, {"TDS": 230.0, "LUX": 900.0}, 102)
+    second = poll(registry, day2 + timedelta(minutes=30))
+
+    assert (second.sensor["inputs"], second.sensor["late_inputs"], second.sensor["replayed_inputs"]) == (1, 0, 1)
+    assert sensor_state(split) == sensor_state(whole)
+    assert ledger(split) == ledger(whole)
+
+
+def test_a_late_row_older_than_the_replay_window_is_left_out_and_recorded():
+    storage = make_storage()
+    registry = EngineRegistry(storage)
+    upload(storage, minutes(0), first_id=1)
+    poll(registry, minutes(1))
+    later = T0 + timedelta(days=40)
+    upload(storage, later, first_id=10)
+    poll(registry, later + timedelta(minutes=1))
+    before = sensor_state(storage)
+    # Sampled 35 days before the model's newest reading, delivered now.
+    _cycle(storage, later + timedelta(minutes=5), later - timedelta(days=35), {"pH": 6.5, "temp": 20.0}, 100)
+    result = poll(registry, later + timedelta(minutes=6))
+    assert (result.sensor["inputs"], result.sensor["late_inputs"], result.sensor["replayed_inputs"]) == (1, 1, 0)
+    assert dict(ledger(storage))[100] == dict(ledger(storage))[101] == "out_of_window"
+    assert sensor_state(storage) == before, "the reading did not change the model"

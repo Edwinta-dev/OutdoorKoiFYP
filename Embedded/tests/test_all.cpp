@@ -4,6 +4,9 @@
 //   g++ -std=c++17 -Wall -I Embedded/libraries/koi_sensing/src Embedded/tests/test_all.cpp -o build/fw_tests && ./build/fw_tests
 #include <cstdio>
 #include <cmath>
+#include <map>
+#include <string>
+#include <vector>
 #include "koi_sensing.h"
 
 static int g_pass = 0, g_fail = 0;
@@ -297,10 +300,11 @@ void test_sample_cycle() {
   }
   CHECK(q.count == PENDING_CYCLE_CAPACITY && pendingAt(q, 0).cycleSeq == 1);
   PendingCycle next = {};
-  next.cycleSeq = 5;
+  next.cycleSeq = PENDING_CYCLE_CAPACITY + 1;
   CHECK(pendingPush(q, next));
   CHECK(q.count == PENDING_CYCLE_CAPACITY);
-  CHECK(pendingAt(q, 0).cycleSeq == 2 && pendingAt(q, PENDING_CYCLE_CAPACITY - 1).cycleSeq == 5);
+  CHECK(pendingAt(q, 0).cycleSeq == 2 &&
+        pendingAt(q, PENDING_CYCLE_CAPACITY - 1).cycleSeq == (uint32_t)PENDING_CYCLE_CAPACITY + 1);
   pendingClear(q);
   CHECK(q.count == 0);
 
@@ -308,6 +312,296 @@ void test_sample_cycle() {
   for (int i = 0; i < MAX_READINGS_PER_CYCLE; i++) CHECK(pendingAddReading(c, Channel::Ph, 7.0f, 0));
   CHECK(!pendingAddReading(c, Channel::Ph, 7.0f, 0));
   CHECK(c.nReadings == MAX_READINGS_PER_CYCLE);
+}
+
+void test_battery_monitor() {
+  // 100k over 47k: the midpoint is 47/147 of the battery.
+  CHECK(batteryMvFromAdc(1400.0f, 100000.0f, 47000.0f) == 4379);   // 1400 * 147 / 47 = 4378.7
+  CHECK(batteryMvFromAdc(1000.0f, 100000.0f, 100000.0f) == 2000);  // equal halves
+  CHECK(batteryMvFromAdc(3300.0f, 0.0f, 47000.0f) == 3300);        // no top resistor: the pin itself
+  CHECK(batteryMvFromAdc(0.0f, 100000.0f, 47000.0f) == 0);
+  CHECK(batteryMvFromAdc(-1.0f, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(NAN, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(INFINITY, 100000.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, 100000.0f, 0.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, -1.0f, 47000.0f) == -1);
+  CHECK(batteryMvFromAdc(1400.0f, NAN, 47000.0f) == -1);
+  // The database's 0..20000 range: 20000 is sent, anything above is not.
+  CHECK(batteryMvFromAdc(4000.0f, 400000.0f, 100000.0f) == 20000);
+  CHECK(batteryMvFromAdc(4001.0f, 400000.0f, 100000.0f) == -1);
+
+  CHECK(batteryIsLow(4399, 4400));
+  CHECK(!batteryIsLow(4400, 4400));                                  // at the threshold is not low
+  CHECK(!batteryIsLow(-1, 4400));                                    // not measured
+  CHECK(!batteryIsLow(0, 4400));                                     // no divider connected
+
+  CHECK(SAMPLE_FLAG_BATTERY_LOW == 16);
+  CHECK((SAMPLE_FLAG_BATTERY_LOW & (SAMPLE_FLAG_TIME_UNSYNCED | SAMPLE_FLAG_TEMP_FALLBACK |
+                                    SAMPLE_FLAG_PH_UNCALIBRATED | SAMPLE_FLAG_LUX_SATURATED)) == 0);
+  CHECK(uploadRowFlags(0, true, 5200, 4400) == 0);
+  CHECK(uploadRowFlags(0, false, 5200, 4400) == SAMPLE_FLAG_TIME_UNSYNCED);
+  CHECK(uploadRowFlags(SAMPLE_FLAG_PH_UNCALIBRATED, true, 4300, 4400) ==
+        (SAMPLE_FLAG_PH_UNCALIBRATED | SAMPLE_FLAG_BATTERY_LOW));
+  CHECK(uploadRowFlags(0, false, 4300, 4400) == (SAMPLE_FLAG_TIME_UNSYNCED | SAMPLE_FLAG_BATTERY_LOW));
+  CHECK(uploadRowFlags(0, true, -1, 4400) == 0);                     // no divider: never flagged
+  CHECK(uploadRowFlags(0, true, 11500, 11800) == SAMPLE_FLAG_BATTERY_LOW);  // threshold is the caller's
+  CHECK(uploadRowFlags(0x0F, false, 1, 4400) == 31);                 // every bit fits 0028's 0..31
+}
+
+// NVS stand-in: blobs by key. failAfter counts the writes still allowed
+// (-1: no limit), to cut the power between two writes.
+struct MemStorage : SpillStorage {
+  std::map<std::string, std::vector<uint8_t>> blobs;
+  int writes = 0;
+  int failAfter = -1;
+  bool read(const char* key, void* out, size_t len) override {
+    auto it = blobs.find(key);
+    if (it == blobs.end() || it->second.size() != len) return false;
+    memcpy(out, it->second.data(), len);
+    return true;
+  }
+  bool write(const char* key, const void* data, size_t len) override {
+    if (failAfter == 0) return false;
+    if (failAfter > 0) failAfter--;
+    const uint8_t* p = (const uint8_t*)data;
+    blobs[key] = std::vector<uint8_t>(p, p + len);
+    writes++;
+    return true;
+  }
+};
+
+static PendingCycle sfCycle(uint32_t seq, int readings = 4) {
+  PendingCycle c = {};
+  c.bootId = 0x0000000700000042ULL;
+  c.cycleSeq = seq;
+  c.sampledEpochMs = 1790000000000LL + (int64_t)seq * 15000;
+  c.batteryMv = -1;
+  for (int i = 0; i < readings; i++) pendingAddReading(c, (Channel)(i % 4), 7.0f + seq, 0);
+  return c;
+}
+
+// Drains everything the way the sketch does, batch by batch, every batch
+// stored; returns the cycle_seqs in upload order.
+static std::vector<uint32_t> sfDrainAll(PendingCycles& rtc, SpillStorage& s, SpillMeta& m) {
+  std::vector<uint32_t> seqs;
+  static UploadBatch b;
+  for (int guard = 0; guard < 100; guard++) {
+    batchPlan(rtc, s, m, b);
+    if (batchEmpty(b)) break;
+    for (int i = 0; i < b.nCycles; i++) seqs.push_back(b.cycles[i].cycleSeq);
+    batchCommit(rtc, s, m, b);
+  }
+  return seqs;
+}
+
+static bool sfAscending(const std::vector<uint32_t>& v, uint32_t first, uint32_t last) {
+  if (v.size() != (size_t)(last - first + 1)) return false;
+  for (size_t i = 0; i < v.size(); i++) if (v[i] != first + (uint32_t)i) return false;
+  return true;
+}
+
+void test_store_forward() {
+  CHECK(PENDING_CYCLE_CAPACITY >= 24);
+  CHECK(sizeof(PendingCycles) <= 2048);
+  CHECK(INGEST_MAX_ROWS == 32);
+  CHECK(UPLOAD_MAX_CYCLES * 2 >= INGEST_MAX_ROWS);   // TDS and pH are always read
+  char key[8];
+  spillSlotKey(SPILL_CAPACITY - 1, key);
+  CHECK(strlen(key) <= 15);                            // NVS key length limit
+
+  // Nothing stored yet: an empty spill.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    CHECK(m.count == 0 && m.head == 0 && m.magic == SPILL_MAGIC);
+  }
+
+  // Wrap: the RTC ring keeps order after its head has moved round.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < 10; i++) CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::Kept);
+    static UploadBatch b;
+    batchPlan(rtc, s, m, b);
+    CHECK(b.nCycles == 8 && b.rows == 32 && b.fromRtc == 8 && b.fromSpill == 0);
+    CHECK(batchCommit(rtc, s, m, b));
+    CHECK(rtc.count == 2 && rtc.head == 8);
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY - 2; i++)
+      CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::Kept);
+    CHECK(rtc.count == PENDING_CYCLE_CAPACITY && pendingAt(rtc, 0).cycleSeq == 9);
+    CHECK(s.writes == 0);                              // no flash while the RTC ring has room
+    CHECK(sfAscending(sfDrainAll(rtc, s, m), 9, seq - 1));
+    CHECK(rtc.count == 0);
+  }
+
+  // Spill: a full RTC ring moves its oldest to NVS; the drain sends the
+  // spill first, then RTC, oldest first, at most 32 rows per batch.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::Spilled);
+    CHECK(m.count == 1 && rtc.count == PENDING_CYCLE_CAPACITY && pendingAt(rtc, 0).cycleSeq == 2);
+    CHECK(spillLoad(s).count == 1);                    // header written through
+    for (int i = 0; i < 9; i++) CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::Spilled);
+    CHECK(bufferedCycles(rtc, m) == PENDING_CYCLE_CAPACITY + 10);
+
+    static UploadBatch b;
+    batchPlan(rtc, s, m, b);
+    CHECK(b.nCycles == 8 && b.fromSpill == 8 && b.fromRtc == 0);
+    CHECK(b.cycles[0].cycleSeq == 1 && b.cycles[7].cycleSeq == 8);
+    CHECK(b.cycles[0].sampledEpochMs == 1790000000000LL + 15000);   // the original sample time
+    CHECK(b.cycles[0].bootId == 0x0000000700000042ULL);
+    CHECK(batchCommit(rtc, s, m, b));
+    batchPlan(rtc, s, m, b);                           // spill tail, then RTC, in one batch
+    CHECK(b.fromSpill == 2 && b.fromRtc == 6 && b.cycles[0].cycleSeq == 9 && b.cycles[2].cycleSeq == 11);
+    CHECK(sfAscending(sfDrainAll(rtc, s, m), 9, seq - 1));
+    CHECK(m.count == 0 && spillLoad(s).count == 0 && rtc.count == 0);
+  }
+
+  // Rows, not cycles, fill a batch: two-reading cycles go 16 to a batch.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    for (uint32_t seq = 1; seq <= 20; seq++) bufferPush(rtc, s, m, sfCycle(seq, 2));
+    static UploadBatch b;
+    batchPlan(rtc, s, m, b);
+    CHECK(b.nCycles == UPLOAD_MAX_CYCLES && b.rows == 32);
+    batchPlan(rtc, s, m, b, 7);                        // 7 rows allowed: three 2-row cycles
+    CHECK(b.nCycles == 3 && b.rows == 6);
+  }
+
+  // Spill full: its oldest is dropped and the order still holds.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY + SPILL_CAPACITY; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    CHECK(m.count == SPILL_CAPACITY);
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::SpilledDroppedOldest);
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::SpilledDroppedOldest);
+    CHECK(m.count == SPILL_CAPACITY && m.head == 2);
+    CHECK(sfAscending(sfDrainAll(rtc, s, m), 3, seq - 1));
+  }
+
+  // Power-loss restart: the RTC ring is gone, the spill is read back from
+  // NVS and drains first with each cycle's original identity and time.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY + 5; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    pendingClear(rtc);                                 // cold boot
+    SpillMeta after = spillLoad(s);
+    CHECK(after.count == 5 && after.head == 0);
+    PendingCycle fresh = sfCycle(1);                   // new boot: cycle_seq restarts
+    fresh.bootId = 0x0000000800000099ULL;
+    bufferPush(rtc, s, after, fresh);
+    static UploadBatch b;
+    batchPlan(rtc, s, after, b);
+    CHECK(b.nCycles == 6 && b.fromSpill == 5 && b.fromRtc == 1);
+    CHECK(b.cycles[0].cycleSeq == 1 && b.cycles[4].cycleSeq == 5);
+    CHECK(b.cycles[4].sampledEpochMs == 1790000000000LL + 5 * 15000);
+    CHECK(b.cycles[4].bootId == 0x0000000700000042ULL && b.cycles[5].bootId == 0x0000000800000099ULL);
+  }
+
+  // Power lost between the slot write and the header write: the header still
+  // describes whole cycles; only the cycle being written is missing.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY + 3; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    s.failAfter = 1;                                   // the slot is written, the header is not
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::DroppedOldest);
+    SpillMeta reboot = spillLoad(s);
+    CHECK(reboot.count == 3 && reboot.head == 0);
+    s.failAfter = -1;
+    pendingClear(rtc);
+    CHECK(sfAscending(sfDrainAll(rtc, s, reboot), 1, 3));
+  }
+
+  // The same with the spill full: the oldest is released before its slot is reused.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY + SPILL_CAPACITY; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    s.failAfter = 1;                                   // header released, slot not written
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::DroppedOldest);
+    SpillMeta reboot = spillLoad(s);
+    CHECK(reboot.count == SPILL_CAPACITY - 1 && reboot.head == 1);
+    s.failAfter = -1;
+    pendingClear(rtc);
+    CHECK(sfAscending(sfDrainAll(rtc, s, reboot), 2, SPILL_CAPACITY));
+  }
+
+  // NVS full or failing: the oldest RTC cycle is lost, as before #44.
+  {
+    MemStorage s;
+    s.failAfter = 0;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    uint32_t seq = 1;
+    for (int i = 0; i < PENDING_CYCLE_CAPACITY; i++) bufferPush(rtc, s, m, sfCycle(seq++));
+    CHECK(bufferPush(rtc, s, m, sfCycle(seq++)) == BufferPush::DroppedOldest);
+    CHECK(m.count == 0 && rtc.count == PENDING_CYCLE_CAPACITY && pendingAt(rtc, 0).cycleSeq == 2);
+  }
+
+  // A missing slot or a header from another layout does not stall the drain.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    for (uint32_t seq = 1; seq <= (uint32_t)PENDING_CYCLE_CAPACITY + 3; seq++) bufferPush(rtc, s, m, sfCycle(seq));
+    s.blobs.erase("c1");                               // the second-oldest spilled cycle
+    pendingClear(rtc);
+    SpillMeta reboot = spillLoad(s);
+    std::vector<uint32_t> got = sfDrainAll(rtc, s, reboot);
+    CHECK(got.size() == 2 && got[0] == 1 && got[1] == 3);
+    CHECK(reboot.count == 0);
+
+    SpillMeta other = spillEmpty();
+    other.count = 3;
+    other.recordSize = (uint16_t)(sizeof(PendingCycle) + 8);
+    s.write(SPILL_META_KEY, &other, sizeof other);
+    CHECK(spillLoad(s).count == 0);
+    other = spillEmpty();
+    other.count = SPILL_CAPACITY + 1;
+    s.write(SPILL_META_KEY, &other, sizeof other);
+    CHECK(spillLoad(s).count == 0);
+  }
+
+  CHECK(batchOutcome(true, 200) == BatchOutcome::Stored);
+  CHECK(batchOutcome(false, -1) == BatchOutcome::Retry);    // no connection
+  CHECK(batchOutcome(false, 429) == BatchOutcome::Retry);
+  CHECK(batchOutcome(false, 503) == BatchOutcome::Retry);
+  CHECK(batchOutcome(false, 200) == BatchOutcome::Refused); // 200 without an accepted count
+  CHECK(batchOutcome(false, 401) == BatchOutcome::Refused);
+  CHECK(batchOutcome(false, 413) == BatchOutcome::Refused);
+
+  // A refused batch is committed too (dropped), so the next one moves on.
+  {
+    MemStorage s;
+    SpillMeta m = spillLoad(s);
+    PendingCycles rtc; pendingClear(rtc);
+    for (uint32_t seq = 1; seq <= 3; seq++) bufferPush(rtc, s, m, sfCycle(seq));
+    static UploadBatch b;
+    batchPlan(rtc, s, m, b, 8);
+    CHECK(b.nCycles == 2);
+    batchCommit(rtc, s, m, b);
+    batchPlan(rtc, s, m, b);
+    CHECK(b.nCycles == 1 && b.cycles[0].cycleSeq == 3);
+  }
 }
 
 int main() {
@@ -322,6 +616,8 @@ int main() {
   test_camera_wake();
   test_ingest_reply();
   test_sample_cycle();
+  test_battery_monitor();
+  test_store_forward();
   printf("\n%d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

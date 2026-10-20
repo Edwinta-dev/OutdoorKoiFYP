@@ -6,6 +6,7 @@ Supabase stack is in tests/sql/test_sql_dev_profile.py.
 Run from Backend/: python -m pytest tests/dev
 """
 import functools
+import re
 import subprocess
 import types
 
@@ -146,12 +147,109 @@ def test_json_values_are_sent_as_text():
     assert local_db._value("base") == "base" and local_db._value(None) is None
 
 
+def test_supabase_seed_clears_stale_poller_lease_before_replacing_seed(monkeypatch):
+    statements = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, sql, params=None):
+            statements.append((sql, params))
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [])
+    local_db.seed(Connection(), {}, [1])
+
+    assert statements[0] == (
+        "delete from public.worker_lease where name = %s", (local_db.POLLER_LEASE,)
+    )
+
+
+def _recording_connection(statements):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, sql, params=None):
+            statements.append((sql, params))
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+    return Connection()
+
+
+def test_seed_moves_id_sequences_past_explicit_seed_ids(monkeypatch):
+    statements = []
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [])
+    local_db.seed(_recording_connection(statements), {
+        "SensorData": [{"id": 40005, "userID": 1, "sensor_type": "pH", "data1": 7.5}],
+        "pond_profile": [{"id": 3, "pond_id": 1}],
+    }, [1])
+    setvals = [sql for sql, _ in statements if "setval" in sql]
+    assert len(setvals) == 1 and '"SensorData"' in setvals[0], \
+        "only tables inserted with their own ids need their sequence moved"
+    inserts = [i for i, (sql, _) in enumerate(statements) if 'insert into public."SensorData"' in sql]
+    first_setval = next(i for i, (sql, _) in enumerate(statements) if "setval" in sql)
+    assert inserts and first_setval > inserts[-1]
+
+
+def test_remove_deletes_the_catalog_seed_inserted(monkeypatch):
+    statements = []
+    monkeypatch.setattr("koi.dev.seed.load_fish_catalog", lambda: [{"Title": "Koi"}])
+    local_db.remove(_recording_connection(statements), {}, [1])
+    assert ('delete from public."Fish_Database" where "Title" = any(%s)', (["Koi"],)) in statements
+
+
 def test_seed_order_inserts_parents_first():
     order = local_db.INSERT_ORDER
     assert order.index("UserData") < order.index("pond_profile")
     deletes = [t for t, _ in local_db.POND_TABLES]
     assert deletes.index("pond_profile") < deletes.index("UserData")
     assert deletes.index("algae_severity_ratings") < deletes.index("imageTable")
+
+
+def test_every_userdata_foreign_key_is_deleted_before_userdata():
+    migrations = sorted(local_db.MIGRATIONS.glob("*.sql"))
+    declared = set()
+    for migration in migrations:
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", "", migration.read_text(encoding="utf-8"),
+                     flags=re.DOTALL)
+        for statement in sql.split(";"):
+            create = re.search(
+                r'create\s+table\s+(?:if\s+not\s+exists\s+)?'
+                r'(?:"?public"?\s*\.\s*)?"?([\w]+)"?', statement, re.IGNORECASE)
+            alter = re.search(
+                r'alter\s+table\s+(?:if\s+exists\s+)?'
+                r'(?:"?public"?\s*\.\s*)?"?([\w]+)"?', statement, re.IGNORECASE)
+            if re.search(r'references\s+(?:"?public"?\s*\.\s*)?"?UserData"?',
+                         statement, re.IGNORECASE):
+                target = create or alter
+                assert target, f"Could not identify table for UserData foreign key in {migration.name}: {statement}"
+                declared.add(target.group(1))
+
+    delete_order = [table for table, _ in local_db.POND_TABLES]
+    missing = declared - set(delete_order)
+    assert not missing, f"UserData foreign-key tables missing from POND_TABLES: {sorted(missing)}"
+    assert all(delete_order.index(table) < delete_order.index("UserData") for table in declared)
+    assert {"kit_readings", "pond_calibration", "notification_outbox"} <= declared
 
 
 # ---------------------------------------------------------------------

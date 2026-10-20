@@ -129,15 +129,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 1
         settings = dev_settings("supabase", supabase_url=stack_info.api_url,
                                 supabase_servicerole_key=stack_info.service_role_key)
-        counts = local_db.seed(conn, tables, ponds)
-        outcomes.append(Outcome("seed written to the local database", True,
-                                ", ".join(f"{t} {n}" for t, n in counts.items())))
+        from koi.dev.frames import upload_seed_frames
         from koi.storage import SupabaseStorage
 
         storage: Storage = SupabaseStorage(settings)
+        frame_count = upload_seed_frames(tables, storage, settings)
+        counts = local_db.seed(conn, tables, ponds)
+        counts["camera frames uploaded"] = frame_count
+        outcomes.append(Outcome("seed written to the local database", True,
+                                ", ".join(f"{t} {n}" for t, n in counts.items())))
         if args.check and not args.keep:
             def cleanup(stack: Stack) -> None:
                 local_db.remove(conn, tables, ponds, worker_holder=stack.worker.holder)
+                from koi.dev.frames import remove_seed_frames
+
+                remove_seed_frames(tables, storage, settings)
     else:
         settings = dev_settings("memory")
         storage = memory_storage(tables, ponds, now)

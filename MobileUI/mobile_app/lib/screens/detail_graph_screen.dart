@@ -84,6 +84,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
     );
     _isLoading = profile.isLoading || state.isLoading;
     final data = state.asData?.value;
+    final historyFailed = state.hasError;
     _dailyTrends = data?.days.map((day) => day.toJson()).toList() ?? [];
     _interventions =
         data?.interventions.map((event) => event.toJson()).toList() ?? [];
@@ -166,7 +167,12 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                   const SizedBox(height: AppSpace.lg),
 
                   // --- 3. HISTORICAL GRAPH WITH INTERVENTIONS ---
-                  filteredPoints.isEmpty
+                  historyFailed
+                      ? ScarceDataPlaceholder(
+                          loadError: true,
+                          onRetry: _loadUserPreferencesAndPayload,
+                        )
+                      : filteredPoints.isEmpty
                       ? const ScarceDataPlaceholder()
                       : HistoricalLineChart(
                           points: filteredPoints,

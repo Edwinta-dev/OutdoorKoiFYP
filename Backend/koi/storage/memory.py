@@ -200,7 +200,7 @@ def _same_user(row: dict, column: str, user_id: object) -> bool:
 
 class MemoryStorage:
     # notification_outbox's checks (migration 0024).
-    NOTIFICATION_KINDS = ("status_red", "ladder_action", "node_silent", "camera_obstructed")
+    NOTIFICATION_KINDS = ("status_red", "ladder_action", "node_silent", "camera_obstructed", "battery_low")
     NOTIFICATION_SEVERITIES = ("info", "warning", "critical")
 
     def __init__(self, seed: Optional[dict] = None, clock: Optional[Callable[[], datetime]] = None):
@@ -423,7 +423,9 @@ class MemoryStorage:
         sensor_ingest_history return it (migration 0027 added sampled_at
         and flags)."""
         return {"id": row["id"], "sensor_type": row["sensor_type"], "value": row.get("data1"),
-                "created_at": row["created_at"], "sampled_at": row.get("sampled_at"), "flags": row.get("flags")}
+                "created_at": row["created_at"], "sampled_at": row.get("sampled_at"), "flags": row.get("flags"),
+                "device_id": row.get("device_id"), "boot_id": row.get("boot_id"),
+                "cycle_seq": row.get("cycle_seq")}
 
     # --- interventions ------------------------------------------------
     def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
@@ -795,13 +797,40 @@ class MemoryStorage:
                 before = [r for r in mine if parse_timestamp(r["received_at"]) < since]
                 contacts += before[-1:] + [r for r in mine if parse_timestamp(r["received_at"]) >= since]
             sensor = sorted(self._select("SensorData", user_id), key=self._reading_key)
-            battery = [{"at": r["created_at"], "mv": r.get("data1")} for r in sensor
+            battery = [(parse_timestamp(r["created_at"]), r["id"], {"at": r["created_at"], "mv": r.get("data1"),
+                                                                    "low": None})
+                       for r in sensor
                        if r.get("sensor_type") == "battery_mv" and parse_timestamp(r["created_at"]) >= since]
+            # Payload v2 (0028): one reading per cycle, timed by its reading time.
+            cycles: set = set()
+            for r in sensor:
+                at = self._latest_key(r)[0]
+                key = (r.get("device_id"), r.get("boot_id"), r.get("cycle_seq"), at)
+                if r.get("battery_mv") is None or at < since or key in cycles:
+                    continue
+                cycles.add(key)
+                flags = r.get("flags")
+                battery.append((at, r["id"], {"at": at.isoformat(), "mv": r["battery_mv"],
+                                              "low": None if flags is None else bool(flags & 16)}))  # battery_low
+            battery.sort(key=lambda b: (b[0], b[1]))
             resets = [r for r in sensor if r.get("sensor_type") == "reset_reason"]
+            reset = ((parse_timestamp(resets[-1]["created_at"]),
+                      {"at": resets[-1]["created_at"], "code": resets[-1].get("data1"), "reason": None})
+                     if resets else None)
+            named = sorted((r for r in sensor if r.get("reset_reason") is not None), key=self._latest_key)
+            if named:
+                newest = named[-1]
+                at = self._latest_key(newest)[0]
+                boot = [self._latest_key(r)[0] for r in sensor
+                        if newest.get("boot_id") is not None and r.get("boot_id") == newest["boot_id"]
+                        and r.get("device_id") == newest.get("device_id")]
+                if reset is None or at > reset[0]:
+                    reset = (at, {"at": min(boot, default=at).isoformat(), "code": None,
+                                  "reason": newest["reset_reason"]})
         return {"devices": devices,
                 "contacts": [self._project(c, ("kind", "received_at", "expected_next_at")) for c in contacts],
-                "battery": battery,
-                "reset": {"at": resets[-1]["created_at"], "code": resets[-1].get("data1")} if resets else None}
+                "battery": [b for _, _, b in battery],
+                "reset": reset[1] if reset else None}
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:

@@ -71,6 +71,29 @@ name in `.env`. Both services read the same file.
 | `CAMERA_DYNAMIC_RATE_LEVELS` | `0.10,0.20` | camera; green-ratio rise per frame past which the dynamic interval steps from 2 h to 1 h to 30 min |
 | `CAMERA_OBSTRUCTION_CONFIRM_FRAMES` | `3` | camera; consistent obstructed frames that restart the baseline (issue #80); `0` keeps the old latch |
 | `CAMERA_OBSTRUCTION_TOLERANCE` | `0.05` | camera; how close (green ratio) those frames must stay to their mean |
+| `CAMERA_COLOUR_GRID_ROWS` | `3` | camera; rows in the whole-frame colour grid |
+| `CAMERA_COLOUR_GRID_COLS` | `3` | camera; columns in the whole-frame colour grid |
+| `CAMERA_GCC_MIN` | `0.30` | camera; lower provisional colour-cast quality bound |
+| `CAMERA_GCC_MAX` | `0.45` | camera; upper provisional colour-cast quality bound |
+| `CAMERA_S_MEAN_MIN` | `0` | camera; lower mean saturation quality bound (OpenCV 0..255) |
+| `CAMERA_S_MEAN_MAX` | `200` | camera; upper mean saturation quality bound (OpenCV 0..255) |
+| `KOI_ALGAE_DAILY_STATISTIC` | `p90` | camera/poller; daily GCC statistic |
+| `KOI_ALGAE_DAY_START_HOUR` | `7` | camera/poller; start of local daylight window |
+| `KOI_ALGAE_DAY_END_HOUR` | `19` | camera/poller; end of local daylight window |
+| `KOI_ALGAE_WINDOW_DAYS` | `3` | camera/poller; daily observation window |
+| `KOI_ALGAE_GROWTH_WINDOW_DAYS` | `3` | poller; recent growth fitting window |
+| `KOI_ALGAE_GROWTH_SLOW_WINDOW_DAYS` | `7` | poller; slower fallback growth window |
+| `KOI_ALGAE_GROWTH_K` | `3` | poller; growth fit parameter |
+| `KOI_ALGAE_GROWTH_MIN_RATE` | `0.001` | poller; minimum accepted growth rate |
+| `KOI_ALGAE_GROWTH_MIN_QUIET_DIFFS` | `7` | poller; minimum quiet differences for fitting |
+| `KOI_ALGAE_WATCH_OFFSET` | `0.03` | poller; GCC rise above baseline for watch |
+| `KOI_ALGAE_ACTION_OFFSET` | `0.06` | poller; GCC rise above baseline for action |
+| `KOI_ALGAE_REFERENCE_CELLS` | `6,7,8` | camera/poller; grid cells used as reference |
+| `KOI_ALGAE_OBJECT_CELLS` | empty | camera/poller; optional object grid cells |
+| `KOI_ALGAE_CELL_K` | `3` | camera/poller; cell growth fit parameter |
+| `KOI_ALGAE_CELL_RUN` | `2` | camera/poller; consecutive cell readings for a run |
+| `KOI_ALGAE_CELL_UNRELIABLE_RATIO` | `4` | camera/poller; reference variation reliability bound |
+| `KOI_ALGAE_HISTORY_DAYS` | `30` | camera/poller; GCC history fetched for algae analysis |
 | `NEA_API_BASE_URL` | `https://api-open.data.gov.sg/v2/real-time/api` | weather job |
 | `NEA_API_KEY` | empty | weather job; optional data.gov.sg key (server-side only) |
 | `NEA_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | weather job; spacing between requests |
@@ -80,6 +103,13 @@ name in `.env`. Both services read the same file.
 | `SENTRY_DSN` | empty (off) | all three; error tracking turns on when set (server-side only) |
 | `SENTRY_ENVIRONMENT` | `KOI_ENV` | all three |
 | `SENTRY_RELEASE` | `koi@<version>+twin.<snapshot version>` | all three |
+| `KOI_DEV_SUPABASE_URL` | empty | local Supabase dev profile only; local stack URL |
+| `KOI_DEV_SUPABASE_SERVICE_ROLE_KEY` | empty | local Supabase dev profile only; local stack key |
+| `KOI_DEV_DB_URL` | empty | local Supabase dev profile only; local stack database URL |
+| `KOI_TDS_PROMPTS` | `false` | API/worker; enable TDS event prompts |
+| `KOI_TDS_PROMPT_MIN_STEP_PPM` | `20` | API/worker; minimum TDS step to prompt |
+| `KOI_TDS_PROMPT_CONFIDENCE_THRESHOLD` | `0.8` | API/worker; minimum confidence to prompt |
+| `KOI_TDS_PROMPT_COOLDOWN_HOURS` | `24` | API/worker; repeat prompt cooldown |
 
 The old camera service loaded its `.env` with `override=True`, so the file
 beat the environment. Settings use the usual order instead: the
@@ -272,20 +302,22 @@ PythonAnywhere camera uses.
 
 ## Where each service runs
 
-As of 2026-10-03 (permanent hosting for the API and worker: issue #83):
+As of 2026-10-18:
 
 | Service | Runs on | Code |
 |---|---|---|
-| Camera (`koi.camera`) | PythonAnywhere free tier, `edwinta.pythonanywhere.com` | `~/koi-camera/Backend`, a sparse clone of `main` |
-| Digital twin API (`koi.api`) | The owner's laptop, for now | this repository |
-| Poller (`koi.worker`) | The owner's laptop, for now | this repository |
+| Camera (`koi.camera`) | PythonAnywhere free tier, `edwinta.pythonanywhere.com` | `~/koi-camera/Backend`, sparse clone containing `Backend/` only |
+| Digital twin API (`koi.api`) | Owner's laptop | this repository's `Backend/` |
+| Poller (`koi.worker`) | Owner's laptop | this repository's `Backend/` |
 
 The free tier allows one web app (the camera), no always-on tasks and
 512 MB of disk, so the API and the worker cannot run there.
 
 ### Camera on PythonAnywhere
 
-Web tab settings: source and working directory `/home/edwinta/koi-camera/Backend`,
+The free tier hosts only the camera web app; it has no always-on task for the
+API or worker. The sparse clone is updated from the repository's selected
+branch. Web tab source and working directory `/home/edwinta/koi-camera/Backend`,
 virtualenv `/home/edwinta/.virtualenvs/koi` (Python 3.11), WSGI file
 `/var/www/edwinta_pythonanywhere_com_wsgi.py`:
 
@@ -299,8 +331,8 @@ from koi.camera import create_app
 application = create_app()
 ```
 
-First install, from a Bash console with the virtualenv active. The
-`Backend/` folder alone keeps the clone at about 4 MB:
+The camera runs in its dedicated Python 3.11 virtualenv. Initial setup, from a
+Bash console (the clone contains only `Backend/`):
 
 ```bash
 git clone --depth 1 --filter=blob:none --sparse https://github.com/Edwinta-dev/OutdoorKoiFYP.git ~/koi-camera
@@ -315,17 +347,18 @@ if `requirements.lock` changed, then Reload on the Web tab, ideally between
 camera wake-ups. Check `GET /` and `GET /metrics` return 200 and the error log
 is clean.
 
-Rollback: `~/Camera` still holds the pre-refactor camera app. Copy
-`~/camera_wsgi_backup.py` back over the WSGI file and Reload;
-`~/koi-venv-freeze-before-20261003.txt` restores the virtualenv's earlier
-packages with `pip install -r`.
+Rollback: check out the prior known-good commit in `~/koi-camera`, reinstall
+`Backend/requirements.txt` if its lock changed, and Reload the web app. The
+original pre-refactor backup remains available as `~/Camera` and
+`~/camera_wsgi_backup.py` if reverting to that deployment is required.
 
 The free site stops unless "Run until 1 month from today" is clicked on the
 Web tab once a month.
 
 ### API and worker on the laptop
 
-From `Backend/`, with `Backend/.env` set as for production
+From `Backend/`, with `Backend/.env` configured with the live Supabase URL,
+service-role key and API JWT secret
 (`KOI_ENV=production`, the Supabase URL and service-role key,
 `SUPABASE_JWT_SECRET`):
 
@@ -340,13 +373,8 @@ stored pond state stops advancing until the worker runs again. The app
 cannot use this API yet: it has no sign-in (#49), and `KOI_AUTH=required`
 refuses unsigned requests.
 
-Database: apply `supabase/migrations/0002_worker_lease.sql` before
-deploying this version: the snapshot reads and writes and the worker
-lease need its column, table and functions. Apply the rest of
-`supabase/migrations/` before or after the restart. The
-evaluation pushes are fail-soft, so the service runs without the
-evaluation tables; you lose the cached `/assessment/*` history until they
-exist. Existing `pond_chemistry_state` rows load unchanged —
+Database migrations 0006-0011 were applied to live on 2026-10-03; see
+`supabase/README.md`. Existing `pond_chemistry_state` rows load unchanged —
 `PondTwin.from_snapshot` detects the legacy bare-chemistry shape and wraps
 it, preserving accumulated nitrogen state.
 

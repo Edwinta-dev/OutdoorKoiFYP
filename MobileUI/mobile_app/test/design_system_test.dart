@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:mobile_app/screens/main_layout.dart';
 import 'package:mobile_app/screens/onboarding_screen.dart';
 import 'package:mobile_app/screens/settings_view.dart';
 import 'package:mobile_app/theme/app_theme.dart';
+import 'package:mobile_app/utils/pond_dashboard.dart';
 import 'package:mobile_app/widgets/modals/quick_log_modals.dart';
 import 'package:mobile_app/widgets/modals/nea_full_forecast_modal.dart';
 import 'package:mobile_app/widgets/shared/pond_widgets.dart';
@@ -186,6 +188,14 @@ void main() {
       testWidgets('$modal modal at 1.6 text scale in $brightness', (
         tester,
       ) async {
+        final dashboardFixture =
+            jsonDecode(
+                  File('test/fixtures/v1_dashboard.json').readAsStringSync(),
+                )
+                as Map<String, dynamic>;
+        final forecast = PondDashboard.fromJson(
+          dashboardFixture['complete'] as Map<String, dynamic>,
+        ).forecast;
         await pumpScreen(
           tester,
           Scaffold(
@@ -193,10 +203,7 @@ void main() {
               builder: (context) => TextButton(
                 onPressed: () => modal == 'actions'
                     ? showQuickActionSelector(context)
-                    : showNeaFullForecastModal(
-                        context,
-                        Fixtures.dashboardPayload()['nea_forecasts'],
-                      ),
+                    : showNeaFullForecastModal(context, forecast),
                 child: const Text('Open'),
               ),
             ),
@@ -301,7 +308,9 @@ void main() {
         ),
       );
       await settle(tester);
-      final cameraLabel = tester.widget<Text>(find.text('camera reads 12.00%'));
+      final cameraLabel = tester.widget<Text>(
+        find.text('camera reads green ratio 12.00%'),
+      );
       expect(cameraLabel.style!.color, AppColors(brightness).onImage);
       final blocked = tester.widget<Text>(find.text('view may be blocked'));
       expect(blocked.style!.color, AppColors(brightness).warningOnImage);

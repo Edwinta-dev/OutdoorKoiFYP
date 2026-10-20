@@ -202,6 +202,7 @@ class Fixtures {
     id: 501,
     imageUrl: null,
     greenRatio: 0.12,
+    gcc: null,
     capturedAt: now.subtract(const Duration(hours: 2)),
     state: 'base',
   );

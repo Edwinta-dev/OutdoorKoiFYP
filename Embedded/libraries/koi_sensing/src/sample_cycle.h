@@ -99,7 +99,8 @@ inline bool ingestShouldRetry(int httpStatus) {
 // ---------------------------------------------------------------------
 // The cycles waiting to be uploaded. Plain data, so it can live in RTC
 // memory (RTC_DATA_ATTR) and survive deep sleep; it is cleared on a cold
-// boot. When full, the oldest cycle is dropped to make room.
+// boot. When full, pendingPush drops the oldest; the sensor node first moves
+// it to NVS (store_forward.h, issue #44).
 // ---------------------------------------------------------------------
 enum class Channel : uint8_t { Temp = 0, Tds = 1, Ph = 2, Lux = 3 };
 
@@ -114,7 +115,7 @@ inline const char* channelSensorType(Channel c) {
 }
 
 const int MAX_READINGS_PER_CYCLE = 4;
-const int PENDING_CYCLE_CAPACITY = 4;   // 4 cycles x 4 readings = 16 rows, under the server's 32
+const int PENDING_CYCLE_CAPACITY = 24;  // issue #44: at least 24; 80 bytes each, under 2 KB of the 8 KB RTC slow memory
 
 struct PendingReading {
   Channel channel;
@@ -137,6 +138,7 @@ struct PendingCycles {
   uint8_t head;    // index of the oldest
   uint8_t count;
 };
+static_assert(sizeof(PendingCycles) <= 2048, "PendingCycles must stay small enough for RTC slow memory");
 
 inline void pendingClear(PendingCycles& q) { q.head = 0; q.count = 0; }
 

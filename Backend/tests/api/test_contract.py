@@ -196,12 +196,14 @@ def test_forecast_models_read_only_emitted_keys(evap_payload, algae_payload):
         ("EvaporationDay", evap_payload["trajectory"][0]),
         ("TdsCrossCheck", evap_payload["tds_cross_check"]),
         ("EvaporationForecast", evap_payload),
-        ("AlgaeDay", algae_payload["trajectory"][0]),
+        ("AlgaeDay", algae_payload["trajectory"][0], {"gcc"}),
         ("AlgaeThresholds", algae_payload["thresholds"]),
-        ("AlgaeForecast", algae_payload),
+        ("AlgaeForecast", algae_payload, {"current_gcc"}),
     ]
-    for class_name, payload in cases:
-        assert_dart_keys_present(class_name, payload)
+    for case in cases:
+        class_name, payload = case[:2]
+        optional = case[2] if len(case) > 2 else frozenset()
+        assert_dart_keys_present(class_name, payload, optional)
 
     # AlgaeForecast reads scrub_benefit's inner keys via a separate map.
     scrub_keys = {"days_bought", "post_scrub_green_ratio"}

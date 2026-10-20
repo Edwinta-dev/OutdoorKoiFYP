@@ -231,10 +231,8 @@ maintenance step (details in `Backend/koi/tools/rebuild.py`).
 
 Python 3.11 or newer. `Backend/requirements.lock` pins every dependency;
 `Backend/requirements.txt` installs those pins plus the package (used by
-the camera on PythonAnywhere). Where each service runs today (camera on
-PythonAnywhere; API and worker on the owner's laptop until #83), and how to
-update or roll back the camera: "Where each service runs" in
-`Backend/README_INTEGRATION.md`.
+the camera on PythonAnywhere). Current deployment locations, setup, update
+and rollback steps are in [Where each service runs](Backend/README_INTEGRATION.md#where-each-service-runs).
 
 **App**
 

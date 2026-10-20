@@ -30,6 +30,12 @@ TRIGGERS
                      from the current_state labels of the imageTable
                      rows the poll already read (obstruction_episode);
                      the camera service is unchanged.
+  battery_low        issue #42. The sensor node's newest battery reading
+                     in the device window (device_health.WINDOW, 24 h)
+                     carries the battery_low flag: the node read its
+                     supply below its own threshold (secrets.h
+                     KOI_BATTERY_LOW_MV, migration 0028). Legacy
+                     battery_mv rows have no flag and never trigger it.
 
 --------------------------------------------------------------------
 DEDUPE AND COOL-DOWN
@@ -48,6 +54,10 @@ the cool-down before it, as one step in the database. So:
                                    view clears (a new episode has a new
                                    start)
   camera_obstructed:clear:<at>     365 d: once per clearing
+  battery_low:sensor               24 h: a daily reminder while the newest
+                                   reading stays low, so a voltage that
+                                   wobbles around the threshold under
+                                   Wi-Fi load does not repeat each cycle
 
 Writing is best effort: a failed write is logged and skipped, and never
 fails the poll.
@@ -73,7 +83,8 @@ STATUS_RED = "status_red"
 LADDER_ACTION = "ladder_action"
 NODE_SILENT = "node_silent"
 CAMERA_OBSTRUCTED = "camera_obstructed"
-KINDS = (STATUS_RED, LADDER_ACTION, NODE_SILENT, CAMERA_OBSTRUCTED)
+BATTERY_LOW = "battery_low"
+KINDS = (STATUS_RED, LADDER_ACTION, NODE_SILENT, CAMERA_OBSTRUCTED, BATTERY_LOW)
 
 INFO, WARNING, CRITICAL = "info", "warning", "critical"
 
@@ -83,6 +94,7 @@ COOLDOWNS: dict[str, timedelta] = {
     NODE_SILENT: timedelta(hours=24),
     # Keys are per episode (issue #41), so this only has to outlast one.
     CAMERA_OBSTRUCTED: timedelta(days=365),
+    BATTERY_LOW: timedelta(hours=24),
 }
 
 # A frame older than this does not raise camera_obstructed: a camera that
@@ -164,6 +176,33 @@ def node_silent(activity: Optional[dict], default_interval: timedelta, now: date
                    "expected_interval_seconds": int(interval.total_seconds()),
                    "silent_after_intervals": device_health.SILENT_AFTER_INTERVALS},
                   f"{NODE_SILENT}:{device_health.SENSOR}", now)
+
+
+def battery_low(activity: Optional[dict], now: datetime) -> Optional[dict]:
+    """A warning when the newest battery reading in a pond_device_activity
+    result is flagged low by the node; None when it is not, has no flag
+    (a legacy battery_mv row), or activity is unknown."""
+    if activity is None:
+        return None
+    readings = [b for b in activity.get("battery") or [] if b.get("at") is not None and b.get("mv") is not None]
+    if not readings:
+        return None
+    newest = max(readings, key=lambda b: parse_timestamp(b["at"]))
+    if newest.get("low") is not True:
+        return None
+    at = parse_timestamp(newest["at"])
+    volts = float(newest["mv"]) / 1000.0
+    trend = device_health.battery_trend(readings)
+    falling = (f" It has been falling by about {-trend['slope_mv_per_day']:.0f} mV a day."
+               if trend["trend"] == "falling" else "")
+    return _entry(BATTERY_LOW, WARNING, "Sensor node battery is low",
+                  f"The sensor node's battery read {volts:.2f} V at {_clock(at, now)}, below the low-battery "
+                  f"level set on the node.{falling} Replace or recharge the batteries soon. When they run flat "
+                  f"the node stops reporting, and the water assessments become model estimates without fresh "
+                  f"measurements.",
+                  {"device": device_health.SENSOR, "battery_mv": newest["mv"], "measured_at": at.isoformat(),
+                   "trend": trend["trend"], "slope_mv_per_day": trend["slope_mv_per_day"]},
+                  f"{BATTERY_LOW}:{device_health.SENSOR}", now)
 
 
 def _frame_state(row: dict) -> Optional[str]:
@@ -317,6 +356,7 @@ def notify_cycle(storage: Any, user_id: int, now: datetime, current: dict[str, O
             entries.extend(ladder_actions(evaluated or {}, now))
         activity = fail_soft(lambda: storage.fetch_device_activity(user_id, now - device_health.WINDOW), None)
         entries.append(node_silent(activity, default_sensor_interval, now))
+        entries.append(battery_low(activity, now))
         entries.append(camera_obstructed(image_rows, now))
         return enqueue(storage, user_id, [e for e in entries if e is not None])
     except Exception as exc:  # noqa: BLE001 - see docstring

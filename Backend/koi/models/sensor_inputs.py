@@ -19,15 +19,8 @@ Two clocks are kept apart:
     stored it, not when the probe sampled, and every time reported from
     here says so.
 
-Inputs are ordered by (effective_sample_time, id). The node uploads one
-cycle's readings in a single insert, so they share created_at; the rows
-at one effective_sample_time form one input, holding the channels that
-were sent and None for the ones that were not. If a channel appears
-twice at the same time, the row with the higher id is used and the other
-is recorded as superseded. Grouping rows into device cycles by device id
-and cycle number, and placing readings that arrive late by their sample
-time, belong to issue #82: it changes effective_sample_time and
-_group_key below, and nothing else here.
+Inputs are ordered by (effective_sample_time, id). Complete v2 identities
+group by device, boot and cycle; legacy rows group by effective time.
 """
 from __future__ import annotations
 
@@ -72,6 +65,10 @@ class IngestConfig:
 APPLIED = "applied"
 SUPERSEDED = "superseded"
 UNUSABLE = "unusable"
+# A late reading older than the replay window (event_ledger.WINDOW): no
+# checkpoint is left to place it at its sample time, so the model leaves
+# it out rather than apply it at a time it does not describe (#82).
+OUT_OF_WINDOW = "out_of_window"
 
 
 def parse_timestamp(value: object) -> datetime:
@@ -90,8 +87,11 @@ def effective_sample_time(row: dict) -> tuple[datetime, str]:
     return parse_timestamp(row["created_at"]), TIME_BASIS_INGESTION
 
 
-def _group_key(row: dict) -> datetime:
-    return effective_sample_time(row)[0]
+def _group_key(row: dict) -> tuple:
+    device_id, boot_id, cycle_seq = row.get("device_id"), row.get("boot_id"), row.get("cycle_seq")
+    if device_id is not None and boot_id is not None and cycle_seq is not None:
+        return ("cycle", str(device_id), str(boot_id), int(cycle_seq))
+    return ("time", effective_sample_time(row)[0])
 
 
 def _number(value: Any) -> Optional[float]:
@@ -109,6 +109,9 @@ class SensorInput:
     time_basis: str
     channels: dict[str, Optional[float]]
     row_ids: dict[str, int]
+    device_id: Optional[str] = None
+    boot_id: Optional[str] = None
+    cycle_seq: Optional[int] = None
 
     @property
     def missing(self) -> list[str]:
@@ -144,7 +147,6 @@ def group_rows(rows: list[dict]) -> Discovery:
     flags}; the last two may be absent or null) -> the inputs, oldest
     first. Rows of an unknown sensor_type are left out and not recorded."""
     known = [r for r in rows if r.get("sensor_type") in _CHANNEL_OF]
-    known.sort(key=lambda r: (_group_key(r), int(r["id"])))
     discovery = Discovery()
     for r in known:
         created = parse_timestamp(r["created_at"])
@@ -152,12 +154,17 @@ def group_rows(rows: list[dict]) -> Discovery:
             discovery.watermark = created
     discovery.received = sorted({parse_timestamp(r["created_at"]) for r in known})
 
-    groups: dict[datetime, list[dict]] = {}
+    groups: dict[tuple, list[dict]] = {}
     for r in known:
         groups.setdefault(_group_key(r), []).append(r)
 
-    for time, members in groups.items():
-        basis = effective_sample_time(members[0])[1]
+    ordered_groups = sorted(groups.items(), key=lambda item: (
+        min(effective_sample_time(r)[0] for r in item[1]),
+        min(int(r["id"]) for r in item[1])))
+    for key, members in ordered_groups:
+        members.sort(key=lambda r: int(r["id"]))
+        first = min(members, key=lambda r: (effective_sample_time(r)[0], int(r["id"])))
+        time, basis = effective_sample_time(first)
         channels: dict[str, Optional[float]] = {c: None for c in CHANNELS}
         row_ids: dict[str, int] = {}
         dispositions: dict[int, str] = {}
@@ -173,7 +180,11 @@ def group_rows(rows: list[dict]) -> Discovery:
             channels[channel] = value
             row_ids[channel] = int(r["id"])
             dispositions[int(r["id"])] = APPLIED
-        discovery.inputs.append(SensorInput(time, basis, channels, row_ids))
+        cycle_key = key[0] == "cycle"
+        discovery.inputs.append(SensorInput(time, basis, channels, row_ids,
+                                            str(first["device_id"]) if cycle_key else None,
+                                            str(first["boot_id"]) if cycle_key else None,
+                                            int(first["cycle_seq"]) if cycle_key else None))
         for r in members:
             discovery.ledger.append({
                 "sensor_row_id": int(r["id"]),
@@ -183,6 +194,36 @@ def group_rows(rows: list[dict]) -> Discovery:
                 "disposition": dispositions[int(r["id"])],
             })
     return discovery
+
+
+def input_key(item: SensorInput) -> tuple:
+    """The grouping key of an input, as _group_key gives it for its rows."""
+    if item.device_id is not None and item.boot_id is not None and item.cycle_seq is not None:
+        return ("cycle", item.device_id, item.boot_id, item.cycle_seq)
+    return ("time", item.time)
+
+
+def merge_inputs(inputs: list[SensorInput]) -> list[SensorInput]:
+    """Inputs with the same key as one input, oldest first: a cycle whose
+    rows were read across two polls (a scan's limit, or a store-and-forward
+    retry) is put back together, as group_rows would have grouped it had
+    all its rows been read at once. Per channel the highest row id wins;
+    the time is the earliest member's."""
+    merged: dict[tuple, SensorInput] = {}
+    for item in inputs:
+        key = input_key(item)
+        prior = merged.get(key)
+        if prior is None:
+            merged[key] = item
+            continue
+        channels, row_ids = dict(prior.channels), dict(prior.row_ids)
+        for channel, row_id in item.row_ids.items():
+            if channel not in row_ids or row_id > row_ids[channel]:
+                channels[channel], row_ids[channel] = item.channels.get(channel), row_id
+        first = prior if prior.time <= item.time else item
+        merged[key] = SensorInput(first.time, first.time_basis, channels, row_ids,
+                                  prior.device_id, prior.boot_id, prior.cycle_seq)
+    return sorted(merged.values(), key=lambda i: (i.time, min(i.row_ids.values(), default=0)))
 
 
 def complete_groups(rows: list[dict], limit: int) -> list[dict]:

@@ -8,11 +8,9 @@ import 'package:mobile_app/theme/app_theme.dart';
 //
 // The distinguishing feature versus the other two lookaheads is that this
 // one is GROUNDED on a real measurement: the ESP32-CAM's HSV green-pixel
-// ratio, stored in imageTable. The card makes that visible - it shows the
-// latest camera frame, says whether the growth rate was fitted from that
-// history or fell back to a literature default, and surfaces how many
-// frames were rejected as obstructed. A forecast the user can see the
-// evidence for is one they can calibrate their trust against.
+// ratio, stored in imageTable. It says whether the growth rate was fitted
+// from that history or fell back to a literature default, and surfaces how
+// many frames were rejected as obstructed.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,16 +114,7 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
           ),
           const SizedBox(height: AppSpace.lg),
 
-          // --- Camera frame + headline, side by side. The thumbnail is
-          //     the whole point: this forecast has a photo behind it.
-          AdaptiveRow(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _cameraThumbnail(f),
-              const SizedBox(width: AppSpace.lg),
-              Expanded(child: _headline(days, accent)),
-            ],
-          ),
+          _headline(days, accent),
 
           const SizedBox(height: AppSpace.lg),
 
@@ -141,7 +130,9 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
               Expanded(
                 child: _metricBox(
                   'Coverage',
-                  '${(f.currentGreenRatio * 100).toStringAsFixed(2)}%',
+                  f.currentSignal == null
+                      ? 'unknown'
+                      : '${(f.currentSignal! * 100).toStringAsFixed(2)}%',
                   AppColors.of(context).water,
                 ),
               ),
@@ -235,57 +226,6 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _cameraThumbnail(AlgaeForecast f) {
-    final double size = 72;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.control),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: f.latestImageUrl == null
-            ? Container(
-                color: AppColors.of(context).text.withValues(alpha: 0.04),
-                child: Icon(
-                  Icons.photo_camera_outlined,
-                  color: AppColors.of(context).outline,
-                  size: 24,
-                ),
-              )
-            : Image.network(
-                f.latestImageUrl!,
-                fit: BoxFit.cover,
-                // The pond camera is on the LAN and the bucket is public,
-                // but a phone on mobile data may not reach either - fail
-                // to a placeholder rather than a broken-image glyph.
-                errorBuilder: (_, _, _) => Container(
-                  color: AppColors.of(context).text.withValues(alpha: 0.04),
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: AppColors.of(context).outline,
-                    size: 22,
-                  ),
-                ),
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    color: AppColors.of(context).text.withValues(alpha: 0.04),
-                    child: Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.of(context).water,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-
   Widget _headline(int? days, Color accent) {
     final String big;
     final String sub;
@@ -332,14 +272,14 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Green coverage vs alert level',
+              '${f.signalLabel} vs alert level',
               style: AppType.style(
                 color: AppColors.of(context).textMuted,
                 fontSize: AppType.micro,
               ),
             ),
             Text(
-              '${(f.currentGreenRatio * 100).toStringAsFixed(2)}% '
+              '${f.currentSignal == null ? 'unknown' : '${(f.currentSignal! * 100).toStringAsFixed(2)}%'} '
               'of ${(f.thresholds.action * 100).toStringAsFixed(1)}%',
               style: AppType.style(
                 color: accent,

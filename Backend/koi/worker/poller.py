@@ -28,7 +28,8 @@ inside the pond's lock, each cycle asks storage for the pond's SensorData
 rows not yet in the ingest ledger (Storage.fetch_pending_sensor_rows,
 migration 0014), scanning from Settings.sensor_ingest_overlap_minutes
 before the newest insert time already ingested, so a row committed after
-a newer one is still found. koi/models/sensor_inputs.py groups them into
+a newer one is still found (bound restored in migration 0030, #120).
+koi/models/sensor_inputs.py groups them into
 inputs (one per upload, a channel the node did not send passed as
 missing) in (effective_sample_time, id) order, and
 PondTwin.ingest_sensor_inputs applies each at its own time. The rows
@@ -149,6 +150,8 @@ from koi.models.hypoxia import assess_hypoxia
 from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
 from koi.models.sensor_inputs import (
+    APPLIED,
+    OUT_OF_WINDOW,
     SENSOR_TYPES,
     TIME_BASIS_INGESTION,
     Discovery,
@@ -315,7 +318,7 @@ def _discover(registry: EngineRegistry, user_id: int, twin: PondTwin, now: datet
     twin's last chemistry ingest (a snapshot from before the ledger) or,
     for a new twin, at its first row."""
     config: IngestConfig = registry.sensor_ingest
-    start = twin.chemistry._last_ingest_time if twin.last_input_at is None else twin.last_input_at
+    start = twin.chemistry.last_ingest_time if twin.last_input_at is None else twin.last_input_at
     found = registry.storage.fetch_pending_sensor_rows(
         user_id, SENSOR_TYPES, start=start, until=now,
         overlap_seconds=config.overlap_minutes * 60, limit=config.batch_rows)
@@ -415,13 +418,20 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         commit["received"] = discovery.received
         # A twin from before the ledger has read sensors (its chemistry
         # has an ingest time) even with no channel readings recorded.
-        if not discovery.inputs and not twin.sensor_channels and twin.chemistry._last_ingest_time is None:
+        if not discovery.inputs and not twin.sensor_channels and twin.chemistry.last_ingest_time is None:
             raise PondSkipped("no sensor reading for this pond yet")
         # Events first: one logged since the last cycle usually falls
         # before this cycle's readings, so both go in in order.
         events = (_events_report(twin.reconcile_events(intervention_rows, now=now, history=history))
                   if intervention_rows is not None else {"reconciled": False})
         provenance, sensor_warnings = twin.ingest_sensor_inputs(discovery.inputs, history=history, now=now)
+        # A late input older than the replay window was left out of the
+        # model; its rows say so instead of "applied".
+        unplaced_rows = {row_id for item in provenance if item.get("placed") is False
+                         for row_id in item["row_ids"].values()}
+        for entry in discovery.ledger:
+            if entry["sensor_row_id"] in unplaced_rows and entry["disposition"] == APPLIED:
+                entry["disposition"] = OUT_OF_WINDOW
         twin.tds_prompts.observe(discovery.inputs, twin.ledger, registry.tds_prompt_config)
 
         # The newest reading of each channel, used while it is fresh. A

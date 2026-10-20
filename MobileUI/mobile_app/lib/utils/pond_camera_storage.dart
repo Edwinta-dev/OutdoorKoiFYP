@@ -26,6 +26,7 @@ class PondCameraFrame {
   final int? id;
   final String? imageUrl;
   final double? greenRatio;
+  final double? gcc;
   final DateTime? capturedAt;
 
   /// hsvEngine's own label for this frame - "base", "dynamic" or
@@ -39,6 +40,7 @@ class PondCameraFrame {
     required this.id,
     required this.imageUrl,
     required this.greenRatio,
+    this.gcc,
     required this.capturedAt,
     required this.state,
     this.thumbnailUrl,
@@ -50,6 +52,7 @@ class PondCameraFrame {
         id: (json['id'] as num?)?.toInt(),
         imageUrl: json['imageURL'] as String?,
         greenRatio: (json['green_ratio'] as num?)?.toDouble(),
+        gcc: (json['gcc'] as num?)?.toDouble(),
         capturedAt: DateTime.tryParse('${json['created_at']}'),
         state: PondCameraStorage._stateLabel(json['current_state']),
         quality: json['quality'] is Map
@@ -93,7 +96,7 @@ class PondCameraStorage {
       final rows = await (client ?? Supabase.instance.client)
           .from(tableName)
           .select(
-            'id, created_at, green_ratio, current_state, "imageURL", quality, thumbnail_path',
+            'id, created_at, green_ratio, gcc, current_state, "imageURL", quality, thumbnail_path',
           )
           .eq('user_ID', userId)
           .gte('created_at', start.toUtc().toIso8601String())
@@ -126,7 +129,7 @@ class PondCameraStorage {
       // "userid"; all three coexist in this schema.
       final rows = await (client ?? Supabase.instance.client)
           .from(tableName)
-          .select('id, created_at, green_ratio, current_state, "imageURL"')
+          .select('id, created_at, green_ratio, gcc, current_state, "imageURL"')
           .eq('user_ID', uid)
           .order('created_at', ascending: false)
           .limit(1);
@@ -154,6 +157,7 @@ class PondCameraStorage {
       id: parsed.id,
       imageUrl: _rebuildUrl(stored, client) ?? stored,
       greenRatio: parsed.greenRatio,
+      gcc: parsed.gcc,
       capturedAt: parsed.capturedAt,
       state: parsed.state,
       quality: parsed.quality,

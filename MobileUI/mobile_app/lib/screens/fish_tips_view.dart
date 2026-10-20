@@ -37,37 +37,10 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
   List<Map<String, dynamic>> get _fishProfiles =>
       ref.read(fishProfilesProvider).asData?.value ?? [];
 
-  String _computeWidestNumericalRange(String key) {
-    try {
-      final List<double> extractedNumbers = [];
-      String suffix = '';
-
-      for (var fish in _fishProfiles) {
-        final rawVal = fish[key]?.toString() ?? '';
-        final matches = RegExp(r'([\d\.]+)').allMatches(rawVal);
-        for (var match in matches) {
-          final val = double.tryParse(match.group(1) ?? '');
-          if (val != null) extractedNumbers.add(val);
-        }
-        if (suffix.isEmpty && rawVal.contains('°C')) {
-          suffix = '°C';
-        }
-      }
-
-      if (extractedNumbers.isEmpty) return 'Compatible Range';
-
-      extractedNumbers.sort();
-      final lowest = extractedNumbers.first;
-      final highest = extractedNumbers.last;
-
-      if ((lowest - highest).abs() < 0.01) {
-        return '$lowest$suffix';
-      }
-
-      return '$lowest - $highest$suffix';
-    } catch (_) {
-      return 'Compatible Range';
-    }
+  String _formatRange(SafeNumericRange? range, String suffix) {
+    if (range == null) return 'Compatible range unavailable';
+    if (range.isEmpty) return 'No shared safe range';
+    return '${range.minimum} - ${range.maximum}$suffix';
   }
 
   @override
@@ -104,12 +77,11 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
     final currentFish =
         _fishProfiles[_currentCarouselIndex.clamp(0, _fishProfiles.length - 1)];
     final speciesTitle = currentFish['Title'] ?? 'Unknown Species';
+    final safeRange = ref.watch(unifiedSafeRangeProvider);
 
     final Map<String, String> parameters = {
-      if (_fishProfiles.length > 1) ...{
-        'Unified Safe pH': _computeWidestNumericalRange('pH'),
-        'Unified Temperature': _computeWidestNumericalRange('Temperature'),
-      },
+      'Unified Safe pH': _formatRange(safeRange.ph, ''),
+      'Unified Temperature': _formatRange(safeRange.temperatureC, '°C'),
       'Maximum Size': currentFish['Maximum Size']?.toString() ?? 'N/A',
       'Life Span': currentFish['Life Span']?.toString() ?? 'N/A',
       'Tank Region': currentFish['Tank Region']?.toString() ?? 'N/A',

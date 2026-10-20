@@ -216,7 +216,8 @@ def test_sql_ledger_sensor_history_returns_only_ledgered_rows_in_the_window(db):
     storage.save_engine_snapshot(POND_A, {"version": 4}, base_version=0, ingest={"rows": ledger, "watermark": None})
     rows = storage.fetch_ingested_sensor_rows(POND_A, SENSOR_TYPES, T0, T0 + timedelta(minutes=45))
     assert [r["id"] for r in rows] == applied[1] + applied[2] + applied[3]
-    assert set(rows[0]) == {"id", "sensor_type", "value", "created_at", "sampled_at", "flags"}
+    assert set(rows[0]) == {"id", "sensor_type", "value", "created_at", "sampled_at", "flags",
+                            "device_id", "boot_id", "cycle_seq"}
     everything = storage.fetch_ingested_sensor_rows(POND_A, SENSOR_TYPES, None, T0 + timedelta(days=1))
     assert [r["id"] for r in everything] == [i for ids in applied for i in ids]
     assert not set(pending) & {r["id"] for r in everything}

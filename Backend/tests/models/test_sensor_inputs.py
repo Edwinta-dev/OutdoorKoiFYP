@@ -16,6 +16,7 @@ from koi.models.sensor_inputs import (
     complete_groups,
     fresh_value,
     group_rows,
+    merge_inputs,
 )
 
 T0 = datetime(2026, 10, 4, tzinfo=timezone.utc)
@@ -49,6 +50,37 @@ def test_inputs_are_ordered_by_time_then_id_whatever_order_rows_arrive_in():
     assert [i.row_ids["ph"] for i in d.inputs] == [50, 10]
     # The watermark is ingestion progress: the newest insert time read.
     assert d.watermark == T0 + timedelta(minutes=15)
+
+
+def test_v2_rows_group_by_device_boot_and_cycle_even_with_equal_cycle_numbers():
+    rows = [
+        row(1, "pH", 7.1, T0, sampled_at=T0.isoformat(), device_id="a", boot_id="boot-a", cycle_seq=4),
+        row(2, "temp", 28.0, T0, sampled_at=T0.isoformat(), device_id="a", boot_id="boot-a", cycle_seq=4),
+        row(3, "pH", 7.8, T0, sampled_at=T0.isoformat(), device_id="b", boot_id="boot-b", cycle_seq=4),
+    ]
+    d = group_rows(rows)
+    assert len(d.inputs) == 2
+    assert d.inputs[0].channels["ph"] == 7.1 and d.inputs[0].channels["temp"] == 28.0
+    assert d.inputs[1].channels["ph"] == 7.8
+
+
+def test_equal_time_legacy_rows_still_form_one_group():
+    d = group_rows(upload(1, T0, pH=7.1) + upload(2, T0, temp=28.0))
+    assert len(d.inputs) == 1 and d.inputs[0].channels["temp"] == 28.0
+
+
+def test_v2_replay_orders_by_sample_time_before_id_for_buffered_upload():
+    # One buffered upload can contain cycles sampled hours apart, with ids
+    # allocated in the opposite order to the actual sample times.
+    rows = [
+        row(90, "pH", 7.3, T0 + timedelta(hours=4), sampled_at=(T0 + timedelta(hours=4)).isoformat(),
+            device_id="node", boot_id="boot", cycle_seq=2),
+        row(10, "pH", 7.1, T0 + timedelta(hours=4), sampled_at=T0.isoformat(),
+            device_id="node", boot_id="boot", cycle_seq=1),
+    ]
+    d = group_rows(rows)
+    assert [i.time for i in d.inputs] == [T0, T0 + timedelta(hours=4)]
+    assert [i.row_ids["ph"] for i in d.inputs] == [10, 90]
 
 
 def test_a_channel_not_sent_is_missing_and_the_others_kept():
@@ -166,6 +198,36 @@ def test_a_late_input_is_applied_at_the_last_input_time_and_marked():
     assert twin.last_input_at == T0 + timedelta(minutes=15)
     # The older reading does not replace the newer one as the channel's latest.
     assert twin.sensor_channels["ph"]["value"] == 7.2
+
+
+def test_a_late_input_older_than_the_replay_window_is_left_out_of_the_model():
+    twin = PondTwin.create(_config())
+    old = T0 - timedelta(days=40)
+    twin.ingest_sensor_inputs(group_rows(upload(20, old, pH=7.2, temp=29.0)).inputs)
+    twin.ingest_sensor_inputs(group_rows(upload(30, T0, pH=7.4, temp=29.0)).inputs)
+    before = json.dumps(twin.chemistry.to_snapshot(), sort_keys=True)
+    provenance, _ = twin.ingest_sensor_inputs(
+        group_rows(upload(10, old - timedelta(days=1), pH=7.1, temp=28.0)).inputs,
+        history=lambda _after, _until: [],
+    )
+    assert provenance == [{"time": (old - timedelta(days=1)).isoformat(), "time_basis": "ingestion",
+                           "model_time": None, "late": True, "placed": False,
+                           "row_ids": {"ph": 10, "temp": 11}, "missing": ["tds", "lux"]}]
+    assert json.dumps(twin.chemistry.to_snapshot(), sort_keys=True) == before
+    assert twin.last_input_at == T0 and twin.sensor_channels["ph"]["value"] == 7.4
+
+
+def test_merge_inputs_puts_a_cycle_read_in_two_polls_back_together():
+    def half(first_id, **values):
+        rows = upload(first_id, T0 + timedelta(minutes=first_id), **values)
+        for r in rows:
+            r.update(sampled_at=T0.isoformat(), device_id="node", boot_id="b1", cycle_seq=4)
+        return group_rows(rows).inputs
+
+    [whole] = merge_inputs(half(1, pH=7.6, temp=29.0) + half(5, TDS=220.0, pH=7.7))
+    assert whole.time == T0 and whole.cycle_seq == 4
+    assert whole.channels == {"ph": 7.7, "tds": 220.0, "temp": 29.0, "lux": None}
+    assert whole.row_ids == {"ph": 6, "temp": 2, "tds": 5}
 
 
 def _config():

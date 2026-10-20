@@ -1,0 +1,125 @@
+# 0102: Local dev camera frames have usable URLs
+<!-- verify-banner:begin -->
+> ⚠ Agent-written record: its claims are hypotheses to verify against the code, not ground truth. Evidence levels in Verified facts: [checked] confirmed by the tool · [tested] cited test exists and passed in this run · [claimed] not verified.
+<!-- verify-banner:end -->
+Status: implemented · Issue: #102 · Date: 2026-10-19
+
+## In short
+The local Supabase dev profile now uploads deterministic synthetic JPEGs for every seeded `imageTable` row to `imageAnalysisBucket`. The rows use the local Supabase public object URLs, so the gallery, algae photo and mask editor can load frames during local development.
+
+## How it works
+1. The Supabase profile loads and shifts the regular demo seed as before.
+2. Before inserting its rows, it makes a small synthetic JPEG for each camera row. The green portion of each image is sized from that row's recorded green ratio.
+3. It uploads the image to a stable path in the configured image bucket and replaces the example URL with the local stack's public URL.
+4. The database seed then writes those updated rows. A `--check` run removes both its seeded rows and the corresponding storage objects when it cleans up.
+
+## Main design choice
+Generate compact frames during the Supabase seed instead of committing 85 binary files. This keeps the images reproducible and keeps them tied to each row's ratio without adding source assets. Real JPEG assets would be better if visual realism or camera-quality testing were the goal; this issue only needs frames that load and carry the recorded coverage.
+
+## Traps: why the obvious fix is wrong
+- Updating only the URLs leaves the app with objects that do not exist. Both the bytes and matching row URLs must be written to the local bucket.
+- Upload paths are stable and uploads use upsert so reseeding replaces rather than accumulates the same 85 objects.
+- The memory profile is process-local and does not need Storage objects, so this runs only in the Supabase profile.
+
+## Components
+- `Backend/koi/dev/frames.py::synthetic_frame` - deterministic JPEG construction
+- `Backend/koi/dev/frames.py::upload_seed_frames` - upload and row URL update
+- `Backend/koi/dev/frames.py::remove_seed_frames` - temporary check cleanup
+- `Backend/koi/dev/__main__.py::main` - Supabase-profile integration
+- `Backend/koi/settings.py::Settings.dev_supabase_public_url` - optional phone-reachable URL base
+- `Backend/tests/dev/test_dev_frames.py` - ratio and upload behavior
+
+## Breaks or needs follow-up
+None.
+
+## Problem and constraints
+Seeded image URLs used the reserved `example.invalid` domain. The change is local-development-only; the camera upload contract and non-local deployments are unaffected. Bucket selection comes from the existing `POND_IMAGE_BUCKET` setting.
+
+## Alternatives considered
+- Commit JPEG fixtures: reproducible, but adds a large opaque binary set and duplicates the ratio metadata.
+- Serve frames from the backend: would require a new image-serving path and would not exercise the configured Supabase bucket used by the app.
+
+## Trade-offs
+The generated images are simple colour fields. They are useful as visible app frames and as green-ratio fixtures, but do not resemble pond photographs.
+
+## Key parameters
+- Frame dimensions are 1280×240 in `Backend/koi/dev/frames.py::synthetic_frame`; the wide frame makes one vertical colour boundary represent the requested ratios with fine granularity.
+- JPEG quality is 82 in `Backend/koi/dev/frames.py::synthetic_frame`; compression keeps seeded objects compact, and a test checks decoded ratios against their row values.
+
+## Assumptions
+The existing local `imageAnalysisBucket` is public as configured by the project's existing bucket setup. When the app runs on a physical device, `KOI_DEV_SUPABASE_PUBLIC_URL` must name a host-reachable local API base; otherwise the default URL points at the backend's loopback host and the phone cannot fetch it.
+
+## Edge cases
+- Handled: reseeding uses upsert at deterministic paths; temporary `--check` seeds remove their uploaded objects.
+- Not handled: storage upload failure aborts seeding with the storage error, before database rows are seeded.
+
+## Not verified
+No live local Supabase stack was available for an end-to-end object upload in this environment.
+
+## Changes outside the scope
+None.
+
+## How it was verified
+See the result block for the focused test and repository check outcomes.
+
+## To change this
+To make frames more photographic, replace `Backend/koi/dev/frames.py::synthetic_frame` with a generated scene while preserving the green coverage check; larger or more detailed JPEGs cost more storage and upload time.
+
+## Rollback
+Remove the upload and URL update from `Backend/koi/dev/__main__.py::main` and the frame helper. Existing rows can be reseeded; stale `local-dev/` objects can be removed from the local bucket.
+
+<!-- verified-facts:begin (generated by integrity record; do not edit) -->
+## Verified facts
+
+Generated 2026-10-18 21:11 UTC for issue #102 attempt 31; compared HEAD..working tree (base 6a7c8a3). Records are claims to check against the code, not proof.
+
+**Change summary**
+
+- `Backend/koi/`: 3 file(s), 3 component(s), +58/-0 lines
+- plus 1 test file(s), 2 doc file(s)
+- new files: `Backend/koi/dev/frames.py`
+
+**Removed symbols**
+
+None.
+
+**Scope**
+
+No Scope line in the issue.
+
+**Supervisor checks passed**
+
+whitespace/conflict-marker check, apply pending migrations to the local Supabase stack, OutdoorKoi host test suites (layout-aware), scope check, dangling reference check
+
+**Evidence**
+
+4 checked by the tool, 0 tested in this run, 12 claimed only (of 16 claims). [checked] = the named code exists and changed, or the cited value matches; [tested] = the cited test exists and the test gate passed in this run; [claimed] = not verified.
+- Components: 4 checked, 0 tested, 2 claimed
+- Key parameters: 0 checked, 0 tested, 2 claimed
+- Edge cases: 0 checked, 0 tested, 1 claimed
+- How it was verified: 0 checked, 0 tested, 1 claimed
+- Traps: 0 checked, 0 tested, 3 claimed
+- Assumptions: 0 checked, 0 tested, 1 claimed
+- Trade-offs: 0 checked, 0 tested, 1 claimed
+- Not verified: 0 checked, 0 tested, 1 claimed
+  - [checked] Components: `Backend/koi/dev/frames.py::synthetic_frame` - deterministic JPEG construction (named code exists and changed)
+  - [checked] Components: `Backend/koi/dev/frames.py::upload_seed_frames` - upload and row URL update (named code exists and changed)
+  - [checked] Components: `Backend/koi/dev/frames.py::remove_seed_frames` - temporary check cleanup (named code exists and changed)
+  - [checked] Components: `Backend/koi/dev/__main__.py::main` - Supabase-profile integration (named code exists and changed)
+  - [claimed] Components: `Backend/koi/settings.py::Settings.dev_supabase_public_url` - optional phone-reachable... (`Backend/koi/settings.py::Settings.dev_supabase_public_url` not found)
+  - [claimed] Key parameters: Frame dimensions are 1280×240 in `Backend/koi/dev/frames.py::synthetic_frame`; the wide... (no cited constant with a matching value)
+  - [claimed] Edge cases: Handled: reseeding uses upsert at deterministic paths; temporary `--check` seeds remove... (names no code)
+  - [claimed] How it was verified: See the result block for the focused test and repository check outcomes. (no test named)
+  - [claimed] Components: `Backend/tests/dev/test_dev_frames.py` - ratio and upload behavior (names no code)
+  - [claimed] Key parameters: JPEG quality is 82 in `Backend/koi/dev/frames.py::synthetic_frame`; compression keeps s... (no cited constant with a matching value)
+  - full per-claim list (16) in the JSON record
+
+**Consistency**
+
+0 error(s), 1 warning(s) between the rationale above and the change.
+- WARN: references something that doesn't exist: Backend/koi/settings.py::Settings.dev_supabase_public_url (no such component in the old or new version)
+
+**Commit**
+
+This record is committed with the change it describes; `git log -1 -- docs/decisions/0102-local-camera-frames.md` gives the commit.
+<!-- verified-facts:end -->

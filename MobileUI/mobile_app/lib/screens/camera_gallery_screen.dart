@@ -222,7 +222,7 @@ class _CameraGalleryScreenState extends ConsumerState<CameraGalleryScreen> {
     padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
     child: Text(
       '${_time(frame.capturedAt)} · '
-      'Green ratio: ${frame.greenRatio == null ? 'unknown' : '${(frame.greenRatio! * 100).toStringAsFixed(2)}%'}\n'
+      '${frame.gcc != null ? 'GCC' : 'Green ratio'}: ${(frame.gcc ?? frame.greenRatio) == null ? 'unknown' : '${((frame.gcc ?? frame.greenRatio)! * 100).toStringAsFixed(2)}%'}\n'
       'State: ${frame.state ?? 'unknown'} · Quality: ${frame.qualityStatus}'
       '${frame.qualityReasons.isEmpty ? '' : ' (${frame.qualityReasons.map((r) => r.replaceAll('_', ' ')).join(', ')})'}',
     ),
@@ -247,8 +247,10 @@ class _CameraGalleryScreenState extends ConsumerState<CameraGalleryScreen> {
               ? null
               : (value) => setState(() => _selected = value.round()),
         ),
-        const Text('Camera green ratio (%)'),
-        const Text('Frames with unknown green ratio have no chart point.'),
+        Text(
+          'Camera ${frames.any((f) => f.gcc != null) ? 'GCC' : 'green ratio'} (%)',
+        ),
+        const Text('Frames with an unknown value have no chart point.'),
         SizedBox(
           height: 220,
           child: CameraGreenRatioChart(
@@ -363,8 +365,8 @@ class CameraGreenRatioChart extends StatelessWidget {
             isCurved: false,
             spots: [
               for (var i = 0; i < frames.length; i++)
-                if (frames[i].greenRatio != null)
-                  FlSpot(_x(i), frames[i].greenRatio! * 100)
+                if (frames[i].gcc != null || frames[i].greenRatio != null)
+                  FlSpot(_x(i), (frames[i].gcc ?? frames[i].greenRatio)! * 100)
                 else
                   FlSpot.nullSpot,
             ],

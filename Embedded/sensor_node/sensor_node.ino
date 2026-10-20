@@ -33,6 +33,13 @@
  * token, so the payload carries no pond id; a direct insert into SensorData is
  * refused since migration 0026.
  *
+ * Battery (issue #42, koi_sensing/battery_monitor.h): when secrets.h defines
+ * the divider (KOI_BATTERY_*), the divider is switched on, read and switched
+ * off right after the Wi-Fi attempt, so a connected node reads its supply
+ * under radio load. Every row of the cycle carries battery_mv, and the
+ * battery_low flag (16) when it is below KOI_BATTERY_LOW_MV. Without the
+ * defines no battery_mv is sent, as before.
+ *
  * Cycle identity, sample clock and retries (koi_sensing/sample_cycle.h):
  *   - boot_id: NVS boot counter (high 32 bits) + hardware random (low 32),
  *     new on every cold boot; cycle_seq counts wakes within the boot in RTC
@@ -43,8 +50,14 @@
  *     millis()). Otherwise it is sent without sampled_at, flagged
  *     time_unsynced; no absolute time is made up.
  *   - A cycle whose upload fails for a reason that can pass (no connection,
- *     rate limit, server error) stays in RTC memory and is re-sent with the
- *     next cycle, up to 4 cycles; a power loss or reset loses them.
+ *     rate limit, server error) stays in RTC memory and is re-sent later
+ *     (issue #44, koi_sensing/store_forward.h). The RTC ring holds 24
+ *     cycles; when it is full the oldest moves to an NVS ring of 24 more
+ *     (namespace "koiq"), which survives power loss. Once online, the node
+ *     sends the backlog oldest first, NVS then RTC, each cycle with its own
+ *     boot_id, cycle_seq and sampled_at, in batches of up to 32 rows, at
+ *     most UPLOAD_BATCHES_PER_WAKE batches a wake. A power loss or reset
+ *     loses the RTC ring.
  *   - A failed numeric read (temperature, light) is left out of the upload,
  *     never sent as a sentinel.
  *
@@ -90,13 +103,6 @@ const int POWER_PINS[] = {TDS_PWR_PIN, PH_PWR_PIN, TSL_PWR_PIN, DS_PWR_PIN};
 #endif
 const int N_POWER_PINS = sizeof(POWER_PINS) / sizeof(POWER_PINS[0]);
 
-// Optional battery divider: define KOI_BATTERY_ADC_PIN (an ADC1 pin) and the
-// divider ratio to send battery_mv with every cycle. Not wired by default.
-// #define KOI_BATTERY_ADC_PIN 33
-#ifndef KOI_BATTERY_DIVIDER
-#define KOI_BATTERY_DIVIDER 2.0f
-#endif
-
 // ---- Timing ----
 const uint64_t SLEEP_S          = 15;
 const uint32_t TDS_SETTLE_MS    = 2000;
@@ -126,9 +132,28 @@ const uint32_t NTP_RESYNC_EVERY_CYCLES = 240;   // about once an hour at the 15 
 #error "sensor_node: secrets.h not found. Copy Embedded/sensor_node/secrets.h.example to secrets.h and fill in the values."
 #endif
 const char *INGEST_PATH = "/rest/v1/rpc/ingest_readings";
+
+// ---- Battery divider (issue #42): pins, resistors and threshold in secrets.h ----
+// Without KOI_BATTERY_ADC_PIN the node sends no battery_mv. The ADC pin must
+// be on ADC1 (GPIO 32-39): ADC2 cannot be read while Wi-Fi is on, and the
+// reading is taken with Wi-Fi up.
+#ifdef KOI_BATTERY_ADC_PIN
+#if !defined(KOI_BATTERY_EN_PIN) || !defined(KOI_BATTERY_R_TOP_OHM) || !defined(KOI_BATTERY_R_BOTTOM_OHM)
+#error "sensor_node: KOI_BATTERY_ADC_PIN needs KOI_BATTERY_EN_PIN, KOI_BATTERY_R_TOP_OHM and KOI_BATTERY_R_BOTTOM_OHM in secrets.h"
+#endif
+#endif
+#ifndef KOI_BATTERY_LOW_MV
+#define KOI_BATTERY_LOW_MV 4400   // linear regulator on 4 alkaline cells (report Section 3.2.8)
+#endif
+const int32_t  BATTERY_LOW_MV    = KOI_BATTERY_LOW_MV;
+const uint32_t BATTERY_SETTLE_MS = 20;   // divider and ADC input settle after switch-on
 const int   WIFI_MAX_ATTEMPTS         = 2;
 const unsigned long WIFI_ATTEMPT_TIMEOUT_MS = 12000;
 const unsigned long DEFAULT_SLEEP_ON_FAIL_S  = 1800;
+// Backlog batches per wake. ingest_readings allows 6 accepted calls a minute
+// per device (0028 c_window_batches); with the 15 s sleep a wake comes about
+// every 30 s, so 2 a wake stays under it. A 429 is kept for the next wake.
+const int   UPLOAD_BATCHES_PER_WAKE   = 2;
 
 // ---- State kept through deep sleep (lost on power loss or reset) ----
 RTC_DATA_ATTR uint32_t      wifiFailStreak = 0;
@@ -141,6 +166,27 @@ RTC_DATA_ATTR PendingCycles pending;
 
 Preferences prefs;
 OneWire ow(DS_DATA_PIN);
+
+// ---- Store-and-forward spill (issue #44): one NVS blob per cycle ----
+class NvsSpillStorage : public SpillStorage {
+ public:
+  bool read(const char *key, void *out, size_t len) override {
+    Preferences p;
+    if (!p.begin("koiq", true)) return false;   // namespace not created yet
+    bool ok = p.isKey(key) && p.getBytesLength(key) == len && p.getBytes(key, out, len) == len;
+    p.end();
+    return ok;
+  }
+  bool write(const char *key, const void *data, size_t len) override {
+    Preferences p;
+    if (!p.begin("koiq", false)) return false;
+    bool ok = p.putBytes(key, data, len) == len;
+    p.end();
+    return ok;
+  }
+};
+NvsSpillStorage spillStore;
+SpillMeta spill;   // read from NVS every wake (setup)
 
 void allPowerOff() { for (int i = 0; i < N_POWER_PINS; i++) digitalWrite(POWER_PINS[i], LOW); }
 
@@ -176,6 +222,8 @@ void startBoot() {
   char id[17]; formatBootId(bootId, id);
   Serial.printf("\nCold boot (%s): boot %lu, boot_id %s\n",
                 resetReasonName(bootResetReason), (unsigned long)boots, id);
+  SpillMeta kept = spillLoad(spillStore);
+  if (kept.count > 0) Serial.printf("%u unsent cycle(s) kept in flash from before\n", kept.count);
 }
 
 // ---- Sensor reads ----
@@ -297,12 +345,21 @@ bool readLux(float &luxOut, bool &saturated) {
   return got;
 }
 
+// Battery millivolts through the switched divider, or -1 without one.
 int32_t readBatteryMv() {
 #ifdef KOI_BATTERY_ADC_PIN
-  return (int32_t)(readMedianMv(KOI_BATTERY_ADC_PIN) * KOI_BATTERY_DIVIDER);
+  digitalWrite(KOI_BATTERY_EN_PIN, HIGH); delay(BATTERY_SETTLE_MS);
+  float mv = readMedianMv(KOI_BATTERY_ADC_PIN);
+  digitalWrite(KOI_BATTERY_EN_PIN, LOW);
+  return batteryMvFromAdc(mv, KOI_BATTERY_R_TOP_OHM, KOI_BATTERY_R_BOTTOM_OHM);
 #else
   return -1;
 #endif
+}
+
+void reportBattery(int32_t mv) {
+  if (mv < 0) { Serial.println("battery: not measured"); return; }
+  Serial.printf("battery: %ld mV%s\n", (long)mv, batteryIsLow(mv, BATTERY_LOW_MV) ? " (LOW)" : "");
 }
 
 // One read cycle into a queued cycle. Failed numeric reads are left out.
@@ -312,6 +369,7 @@ PendingCycle readCycle(int64_t sampledEpochMs) {
   cycle.cycleSeq = cycleSeq;
   cycle.sampledEpochMs = sampledEpochMs;
   cycle.resetReason = bootResetReason;
+  cycle.batteryMv = -1;   // read later, under Wi-Fi load (setup)
 
   // ---- Read cycle (same power-multiplexing order as FullSketch, and why) ----
   allPowerOff();
@@ -328,7 +386,6 @@ PendingCycle readCycle(int64_t sampledEpochMs) {
   // the temp_fallback flag instead.
   float compensationTempC = tempOk ? measuredTempC : 25.0f;
   float phMv = measurePhMv();
-  cycle.batteryMv = readBatteryMv();
 
   float ph  = mvToPh(phFit, phMv, compensationTempC);
   float tds = tdsCalibratedPpm(tdsMv, compensationTempC, tdsK);
@@ -399,15 +456,14 @@ bool connectWifi() {
   return false;
 }
 
-// Every queued cycle in one ingest_readings call. Clears the queue when the
-// batch was stored or cannot be stored by retrying.
-void uploadPending() {
+// One batch as one ingest_readings call.
+BatchOutcome uploadBatch(const UploadBatch &b) {
+  if (b.rows == 0) return BatchOutcome::Stored;
   JsonDocument doc;
   doc["device_token"] = SENSOR_DEVICE_TOKEN;
   JsonArray rows = doc["rows"].to<JsonArray>();
-  int nRows = 0;
-  for (int i = 0; i < pending.count; i++) {
-    const PendingCycle &c = pendingAt(pending, i);
+  for (int i = 0; i < b.nCycles; i++) {
+    const PendingCycle &c = b.cycles[i];
     char id[17]; formatBootId(c.bootId, id);
     char iso[25];
     bool timed = c.sampledEpochMs >= 0 && formatUtcIso8601(c.sampledEpochMs, iso, sizeof iso);
@@ -420,34 +476,66 @@ void uploadPending() {
       row["data1"] = r.value;
       row["boot_id"] = id;
       row["cycle_seq"] = c.cycleSeq;
-      row["flags"] = (uint8_t)(r.flags | (timed ? 0 : SAMPLE_FLAG_TIME_UNSYNCED));
+      row["flags"] = uploadRowFlags(r.flags, timed, c.batteryMv, BATTERY_LOW_MV);
       row["reset_reason"] = resetReasonName(c.resetReason);
       if (timed) row["sampled_at"] = iso;
       if (c.batteryMv >= 0) row["battery_mv"] = c.batteryMv;
-      nRows++;
     }
   }
-  if (nRows == 0) { pendingClear(pending); return; }
 
   String json; serializeJson(doc, json);
   int code = -1;
   String reply = postIngest(json, code);
   int accepted = 0;
-  if (ingestAccepted(code, reply.c_str(), accepted)) {
-    Serial.printf("ingest_readings -> %d accepted of %d %s\n", accepted, nRows, reply.c_str());
-    pendingClear(pending);
-  } else if (ingestShouldRetry(code)) {
-    Serial.printf("ingest_readings -> HTTP %d: %s; keeping %u cycle(s) to re-send\n",
-                  code, ingestStatusText(code), pending.count);
+  bool stored = ingestAccepted(code, reply.c_str(), accepted);
+  BatchOutcome outcome = batchOutcome(stored, code);
+  if (outcome == BatchOutcome::Stored) {
+    Serial.printf("ingest_readings -> %d accepted of %d %s\n", accepted, b.rows, reply.c_str());
+  } else if (outcome == BatchOutcome::Retry) {
+    Serial.printf("ingest_readings -> HTTP %d: %s; keeping %d cycle(s) to re-send\n",
+                  code, ingestStatusText(code), bufferedCycles(pending, spill));
   } else {
-    Serial.printf("ingest_readings -> HTTP %d: %s %s; dropping %u cycle(s)\n",
-                  code, ingestStatusText(code), reply.c_str(), pending.count);
-    pendingClear(pending);
+    Serial.printf("ingest_readings -> HTTP %d: %s %s; dropping %d cycle(s)\n",
+                  code, ingestStatusText(code), reply.c_str(), b.nCycles);
+  }
+  return outcome;
+}
+
+// The backlog oldest first (NVS spill, then RTC), batch by batch. A batch
+// is removed once stored, or refused for a reason a retry cannot fix.
+void uploadPending() {
+  static UploadBatch batch;   // about 1.3 KB: kept off the stack
+  for (int n = 0; n < UPLOAD_BATCHES_PER_WAKE; n++) {
+    batchPlan(pending, spillStore, spill, batch);
+    if (batchEmpty(batch)) return;
+    BatchOutcome outcome = uploadBatch(batch);
+    if (outcome == BatchOutcome::Retry) return;
+    if (!batchCommit(pending, spillStore, spill, batch))
+      Serial.println("NOTE: flash write failed - those cycles will be sent again");
+    if (outcome == BatchOutcome::Refused) return;
+  }
+  int left = bufferedCycles(pending, spill);
+  if (left > 0) Serial.printf("%d cycle(s) still to send, next wake\n", left);
+}
+
+// Queues this cycle, moving the oldest to flash when RTC memory is full.
+void bufferCycle(const PendingCycle &cycle) {
+  switch (bufferPush(pending, spillStore, spill, cycle)) {
+    case BufferPush::Kept: break;
+    case BufferPush::Spilled:
+      Serial.printf("RTC queue full - oldest cycle moved to flash (%u there)\n", spill.count); break;
+    case BufferPush::SpilledDroppedOldest:
+      Serial.println("NOTE: flash queue full - oldest unsent cycle dropped"); break;
+    case BufferPush::DroppedOldest:
+      Serial.println("NOTE: flash write failed - oldest unsent cycle dropped"); break;
   }
 }
 
 void goToSleep(unsigned long seconds) {
   allPowerOff();
+#ifdef KOI_BATTERY_ADC_PIN
+  digitalWrite(KOI_BATTERY_EN_PIN, LOW);
+#endif
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   Serial.printf("Sleeping %lu s\n", seconds);
@@ -467,6 +555,7 @@ void goToSleep(unsigned long seconds) {
 //   settle ph | tds     : 30 s millivolt log after power-on, to choose settle times
 //   scan                : I2C scan of the TSL2591 and GY-33 buses
 //   sample              : one read cycle printed, not uploaded
+//   battery             : read the battery divider now, to compare with a multimeter
 //   run                 : leave service mode and resume the sleep cycle
 // =====================================================================
 bool serviceMode = false;
@@ -575,7 +664,7 @@ void scanBuses() {
 
 void printHelp() {
   Serial.println("Commands: cal1 cal9 cal7 cal6, show, clear, tdscal X, temp,");
-  Serial.println("          settle ph, settle tds, scan, sample, run");
+  Serial.println("          settle ph, settle tds, scan, sample, battery, run");
 }
 
 void handleCommand(String cmd) {
@@ -629,6 +718,8 @@ void handleCommand(String cmd) {
     scanBuses();
   } else if (cmd == "sample") {
     readCycle(-1);   // printed only: not queued, not uploaded
+  } else if (cmd == "battery") {
+    reportBattery(readBatteryMv());
   } else if (cmd == "run") {
     Serial.println("Leaving service mode.");
     goToSleep(serviceSleepSec);
@@ -640,6 +731,9 @@ void handleCommand(String cmd) {
 
 void setup() {
   for (int i = 0; i < N_POWER_PINS; i++) { pinMode(POWER_PINS[i], OUTPUT); digitalWrite(POWER_PINS[i], LOW); }
+#ifdef KOI_BATTERY_ADC_PIN
+  pinMode(KOI_BATTERY_EN_PIN, OUTPUT); digitalWrite(KOI_BATTERY_EN_PIN, LOW);
+#endif
   Serial.begin(115200);
   delay(100);
 
@@ -648,7 +742,11 @@ void setup() {
   analogReadResolution(12);
   analogSetPinAttenuation(PH_ADC_PIN, ADC_11db);
   analogSetPinAttenuation(TDS_ADC_PIN, ADC_11db);
+#ifdef KOI_BATTERY_ADC_PIN
+  analogSetPinAttenuation(KOI_BATTERY_ADC_PIN, ADC_11db);
+#endif
   loadCalibration();
+  spill = spillLoad(spillStore);
 
   // ---- This cycle's identity and sample time ----
   cycleSeq++;
@@ -659,7 +757,12 @@ void setup() {
 
   // ---- Upload: bounded Wi-Fi, SNTP when needed, one ingest_readings call ----
   unsigned long sleepSec = wifiFailSleepSeconds(wifiFailStreak, DEFAULT_SLEEP_ON_FAIL_S);
-  if (connectWifi()) {
+  bool online = connectWifi();
+  // Battery under load: with Wi-Fi connected the radio is on. After a failed
+  // attempt the radio is already off, so that reading is at rest (higher).
+  cycle.batteryMv = readBatteryMv();
+  reportBattery(cycle.batteryMv);
+  if (online) {
     wifiFailStreak = 0;
     if (!clockSynced || cycleSeq - lastSyncCycle >= NTP_RESYNC_EVERY_CYCLES) {
       if (syncClock()) {
@@ -675,14 +778,14 @@ void setup() {
     if (cycle.sampledEpochMs < 0 && clockSynced && clockLooksSet(clockEpochMs() / 1000)) {
       cycle.sampledEpochMs = sampleEpochMs(clockEpochMs(), millis(), sampleMillis);
     }
-    if (pendingPush(pending, cycle)) Serial.println("NOTE: retry queue full - oldest unsent cycle dropped");
+    bufferCycle(cycle);
     uploadPending();
     sleepSec = SLEEP_S;   // normal cadence resumes once the network is healthy
   } else {
-    if (pendingPush(pending, cycle)) Serial.println("NOTE: retry queue full - oldest unsent cycle dropped");
+    bufferCycle(cycle);
     wifiFailStreak++;
-    Serial.printf("Wi-Fi failed %u time(s) in a row -> %u cycle(s) kept, sleeping %lu s\n",
-                  wifiFailStreak, pending.count, sleepSec);
+    Serial.printf("Wi-Fi failed %u time(s) in a row -> %d cycle(s) kept, sleeping %lu s\n",
+                  wifiFailStreak, bufferedCycles(pending, spill), sleepSec);
   }
 
 #ifdef KOI_SERVICE_MODE
