@@ -104,9 +104,12 @@ DEFAULT_STATE = "base"
 
 # --- CONFIGURATION PARAMETERS ---
 # HSV Color Bounds for Green/Algae Isolation
-# OpenCV Hue ranges 0-180, so 35-85 degrees maps to roughly 18-42.
-LOWER_GREEN = np.array([18, 40, 40], dtype=np.uint8)
-UPPER_GREEN = np.array([42, 255, 255], dtype=np.uint8)
+# OpenCV hue is degrees / 2. The band is 70-170 degrees (35-85): green to
+# blue-green. The old band, 18-42 (36-84 degrees), was centred on yellow
+# (60 degrees), so a warm white balance read a white card as up to 100%
+# "green" (Experiment 4, run/ frames: card hue 14-21, 0% after the change).
+LOWER_GREEN = np.array([35, 40, 40], dtype=np.uint8)
+UPPER_GREEN = np.array([85, 255, 255], dtype=np.uint8)
 
 # Smoothing & Anomaly Thresholds
 ALPHA = 0.2                       # Low-pass filter smoothing factor (EMA)

@@ -12,7 +12,7 @@ def synthetic_frame(green_ratio: float) -> bytes:
     height, width = 240, 1280
     green_columns = max(0, round(max(0.0, min(1.0, float(green_ratio))) * width) - 1)
     image = np.full((height, width, 3), (150, 150, 150), dtype=np.uint8)
-    image[:, :green_columns] = (0, 165, 140)  # BGR hue is within hsvEngine's green range.
+    image[:, :green_columns] = (40, 170, 90)  # BGR hue ~97 degrees: inside hsvEngine's green range.
     ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 82])
     if not ok:
         raise RuntimeError("could not encode synthetic camera frame")

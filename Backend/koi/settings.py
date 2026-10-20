@@ -122,7 +122,7 @@ class Settings(BaseSettings):
         default=0.30, ge=0, le=1, allow_inf_nan=False,
         validation_alias=AliasChoices("CAMERA_GCC_MIN", "camera_gcc_min"))
     camera_gcc_max: float = Field(
-        default=0.45, ge=0, le=1, allow_inf_nan=False,
+        default=0.50, ge=0, le=1, allow_inf_nan=False,
         validation_alias=AliasChoices("CAMERA_GCC_MAX", "camera_gcc_max"))
     camera_s_mean_min: float = Field(
         default=0.0, ge=0, le=255, allow_inf_nan=False,

@@ -16,7 +16,7 @@ ENV_NAMES += ["CAMERA_COLOUR_GRID_ROWS", "CAMERA_COLOUR_GRID_COLS", "CAMERA_GCC_
 def test_camera_colour_settings_defaults_and_environment(clean_env):
     s = Settings(_env_file=None)
     assert (s.camera_colour_grid_rows, s.camera_colour_grid_cols) == (3, 3)
-    assert (s.camera_gcc_min, s.camera_gcc_max) == (0.30, 0.45)
+    assert (s.camera_gcc_min, s.camera_gcc_max) == (0.30, 0.50)
     assert (s.camera_s_mean_min, s.camera_s_mean_max) == (0, 200)
     for name, value in {"CAMERA_COLOUR_GRID_ROWS": "2", "CAMERA_COLOUR_GRID_COLS": "4",
                         "CAMERA_GCC_MIN": "0.2", "CAMERA_GCC_MAX": "0.6",

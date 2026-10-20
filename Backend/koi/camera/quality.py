@@ -25,10 +25,13 @@ A frame fails, with one reason code per rule it breaks, when:
   blurred      blur_judged and laplacian_var < BLUR_LAPLACIAN_MIN
   colour_cast  unclipped mean GCC or mean HSV saturation outside its band
 
-The thresholds are starting values chosen against synthetic frames, not
-yet checked against real ESP32-CAM frames from the pond; the measured
-metrics and the thresholds in force are stored with every result so they
-can be re-judged later.
+V_MEAN_MIN and BLUR_LAPLACIAN_MIN were set against 75 real frames (the
+2-5 Oct pond series and Experiment 4, 14-19 Oct): every frame below mean
+V 100 was dusk, dawn or night and read green from low light alone, and
+sharp underwater frames measure a Laplacian variance of 2-5. The other
+thresholds are still the starting values chosen against synthetic
+frames. The measured metrics and the thresholds in force are stored with
+every result so they can be re-judged later.
 
 The stored result (imageTable.quality, jsonb) is versioned:
 
@@ -66,15 +69,15 @@ COLOUR_CAST = "colour_cast"
 REASONS = (TOO_DARK, TOO_BRIGHT, CLIPPED, BLURRED, COLOUR_CAST)
 
 # Thresholds (V is 0..255)
-V_MEAN_MIN = 40.0
+V_MEAN_MIN = 100.0
 V_MEAN_MAX = 220.0
 CLIP_LOW_V = 5
 CLIP_HIGH_V = 250
 CLIPPED_FRACTION_MAX = 0.25
 DETAIL_MIN_V_STD = 8.0
-BLUR_LAPLACIAN_MIN = 5.0
+BLUR_LAPLACIAN_MIN = 1.5
 GCC_MIN = 0.30
-GCC_MAX = 0.45
+GCC_MAX = 0.50
 S_MEAN_MIN = 0.0
 S_MEAN_MAX = 200.0
 
