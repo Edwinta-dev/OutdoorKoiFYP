@@ -1,4 +1,4 @@
-# Model constant changes
+﻿# Model constant changes
 
 Every change to a model's numeric constants (rates, thresholds, weights,
 intervals): the old value, the new value and why. Newest first.
@@ -203,12 +203,12 @@ frames have been reviewed.
 
 | Constant | Value | Rule |
 |---|---|---|
-| `V_MEAN_MIN` | 40 (V, 0..255) | Mean V below this: `too_dark`. |
+| `V_MEAN_MIN` | 100 (V, 0..255) | Mean V below this: `too_dark`. |
 | `V_MEAN_MAX` | 220 | Mean V above this: `too_bright`. |
 | `CLIP_LOW_V`, `CLIP_HIGH_V` | 5, 250 | A pixel at or below / at or above these counts as clipped. |
 | `CLIPPED_FRACTION_MAX` | 0.25 | More clipped pixels than this: `clipped`. A sun-glare patch over about 15% of the frame still passes. |
 | `DETAIL_MIN_V_STD` | 8 | Below this V spread the frame is featureless and is not judged for blur (a calm, evenly lit pond). |
-| `BLUR_LAPLACIAN_MIN` | 5.0 | Variance of the Laplacian below this, on a frame with detail: `blurred`. Low on purpose: a single sharp edge between water and algae scores about 8 to 20. |
+| `BLUR_LAPLACIAN_MIN` | 1.5 | Variance of the Laplacian below this, on a frame with detail: `blurred`. Low on purpose: sharp underwater ESP32-CAM frames score 2 to 5, and a single sharp edge between water and algae about 8 to 20. |
 | `QUALITY_RETRY_SEC` | 30 min | Wake after a failed frame in daylight, when the state's own wake is later. At night the night schedule stands. |
 | `THUMBNAIL_WIDTH`, `THUMBNAIL_JPEG_QUALITY` | 320 px, 80 | Thumbnail stored beside each frame. |
 
@@ -264,7 +264,7 @@ trusted state and remain excluded from the algae fit.
 | Setting / new default | Starting value | Stored threshold |
 |---|---|---|
 | `CAMERA_GCC_MIN` / `GCC_MIN` | 0.30 | `gcc_min` |
-| `CAMERA_GCC_MAX` / `GCC_MAX` | 0.45 | `gcc_max` |
+| `CAMERA_GCC_MAX` / `GCC_MAX` | 0.50 | `gcc_max` |
 | `CAMERA_S_MEAN_MIN` / `S_MEAN_MIN` | 0 (0..255 scale) | `s_mean_min` |
 | `CAMERA_S_MEAN_MAX` / `S_MEAN_MAX` | 200 | `s_mean_max` |
 
