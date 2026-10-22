@@ -1,0 +1,4 @@
+art,n,ph_ok,ph_rejected,ph_suspect_rate,temp_ok,temp_suspect_rate,temp_suspect_stale
+pH=0,499,0,499,0,403,0,96
+pH=0&temp=0,17,0,17,0,0,14,3
+temp=0,93,48,0,45,0,7,86

@@ -1,0 +1,6 @@
+gate,both,none,pH_jump_>1,pH_out_of_range,All
+ok,0,55332,33,0,55365
+rejected,18,0,0,498,516
+suspect_rate,3,4159,16,21,4199
+suspect_stale,0,12407,4,1,12412
+All,21,71898,53,520,72492

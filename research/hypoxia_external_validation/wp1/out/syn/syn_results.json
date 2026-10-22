@@ -1,0 +1,329 @@
+[
+ {
+  "test": "ledger_events_arrive_after_all_sensors_any_order",
+  "ok": true,
+  "forward": {
+   "equal_to_inorder_oracle": true,
+   "max_rel_diff_or_msg": 0.0,
+   "statuses": [
+    "applied",
+    "applied",
+    "applied",
+    "applied",
+    "applied"
+   ],
+   "replayed": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ],
+   "placed_late": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "reverse": {
+   "equal_to_inorder_oracle": true,
+   "max_rel_diff_or_msg": 0.0,
+   "statuses": [
+    "applied",
+    "applied",
+    "applied",
+    "applied",
+    "applied"
+   ],
+   "replayed": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ],
+   "placed_late": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "shuffled": {
+   "equal_to_inorder_oracle": true,
+   "max_rel_diff_or_msg": 0.0,
+   "statuses": [
+    "applied",
+    "applied",
+    "applied",
+    "applied",
+    "applied"
+   ],
+   "replayed": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ],
+   "placed_late": [
+    false,
+    false,
+    false,
+    false,
+    false
+   ]
+  }
+ },
+ {
+  "test": "ledger_events_recorded_before_the_sensors_they_precede",
+  "ok": true,
+  "max_rel_diff": 0.0
+ },
+ {
+  "test": "ledger_interleaved_daily_arrival_equals_oracle",
+  "ok": true,
+  "max_rel_diff": 0.0
+ },
+ {
+  "test": "ledger_duplicate_event_ids_are_noops",
+  "ok": true,
+  "duplicate_posts": 10,
+  "state_hash_unchanged": true
+ },
+ {
+  "test": "ledger_same_event_id_in_two_ponds_is_independent",
+  "ok": true
+ },
+ {
+  "test": "ledger_reconcile_rows_equal_oracle_and_are_idempotent",
+  "ok": true,
+  "applied_first": 5,
+  "applied_second": 0,
+  "replayed_first": true
+ },
+ {
+  "test": "ledger_edit_delete_restore_equal_oracle",
+  "ok": true,
+  "edit_equal": true,
+  "delete_equal": true,
+  "restore_equal": true,
+  "tombstone_noop": true
+ },
+ {
+  "test": "ledger_legacy_event_without_id_is_claimed_not_doubled",
+  "ok": true,
+  "claimed": [
+   "00000000-0000-0000-0000-0000000003e9"
+  ]
+ },
+ {
+  "test": "ledger_no_future_event_is_applied_before_it_is_visible",
+  "ok": true,
+  "state_changed_by_future_event": true
+ },
+ {
+  "test": "ledger_event_older_than_replay_window_is_placed_late_not_replayed",
+  "ok": true,
+  "placed_late": true,
+  "model_time_shift_days": 41,
+  "equals_inorder_oracle": false,
+  "note": "documented behaviour; state differs from in-order by construction"
+ },
+ {
+  "test": "ledger_checkpoints_bounded_and_sensor_replay_equals_inorder_over_45_days",
+  "ok": true,
+  "checkpoints": 31,
+  "older_than_window_kept": 1
+ },
+ {
+  "test": "ledger_out_of_window_rows_can_be_reapplied_by_a_later_replay_F3",
+  "ok": true,
+  "late_rows": 36,
+  "inputs_unplaced_on_arrival": 12,
+  "old_checkpoint": "2026-01-15T15:45:00+00:00",
+  "replayed": true,
+  "replayed_from": "2026-01-15T15:45:00+00:00",
+  "late_inputs_read_back_by_replay": 12,
+  "reapplied": true
+ },
+ {
+  "test": "profile_volume_change_midway_does_not_touch_earlier_events",
+  "ok": true,
+  "state_day6_identical_with_future_profile_known": true,
+  "twin_equals_manual_profile_oracle": true,
+  "oracle_diff": 0.0,
+  "twin_volume_after_all": 1000.0,
+  "event1_pct_expected_of_700": 0.14285714285714285,
+  "events_recorded": 2
+ },
+ {
+  "test": "local_time_midnight_boundaries_and_dst_and_halfhour_zones",
+  "ok": true,
+  "sweep_instants_per_zone": 1031,
+  "zones": 4
+ },
+ {
+  "test": "sensor_inputs_grouping_ordering_and_dispositions",
+  "ok": true,
+  "dispositions": {
+   "2": "superseded",
+   "3": "applied",
+   "4": "unusable",
+   "5": "superseded",
+   "6": "unusable",
+   "9": "applied",
+   "8": "applied"
+  }
+ },
+ {
+  "test": "sensor_inputs_v2_cycle_identity_groups_across_sample_times",
+  "ok": true
+ },
+ {
+  "test": "sensor_inputs_merge_and_complete_groups_and_freshness",
+  "ok": true
+ },
+ {
+  "test": "gate_basic_verdicts_range_rate_stale_missing",
+  "ok": true,
+  "stale_after_identical_readings": 4
+ },
+ {
+  "test": "gate_rate_limit_latches_on_a_sustained_step_without_a_logged_event",
+  "ok": true,
+  "readings_after_step": 288,
+  "suspect_rate_after_step_no_event": 288,
+  "suspect_rate_after_step_with_event": 0,
+  "last_trusted_no_event": 7.02
+ },
+ {
+  "test": "gate_rate_limit_scales_with_dt_to_last_sample_not_to_last_trusted",
+  "ok": true,
+  "noise_sd": 0.03,
+  "frac_ok_at_1min": 0.3,
+  "frac_ok_at_15min": 0.9983333333333333
+ },
+ {
+  "test": "gate_snapshot_restore_is_exact",
+  "ok": true
+ },
+ {
+  "test": "tds_steps_detect_injected_salt_and_water_change_with_expected_magnitude",
+  "ok": true,
+  "predicted_salt_step": 71.42857142857143,
+  "predicted_water_change_step": -102.42857142857144,
+  "detected_deltas": [
+   71.69550000000004,
+   -102.56900000000002
+  ],
+  "errors_ppm": [
+   0.2669285714286076,
+   -0.140428571428572
+  ],
+  "first_flag_after_true_step_min": [
+   0.0,
+   0.0
+  ]
+ },
+ {
+  "test": "tds_steps_noise_only_series_gives_no_flag_and_one_spike_is_not_a_step",
+  "ok": true,
+  "days": 30
+ },
+ {
+  "test": "tds_prompts_step_prompt_stability_cooldown_event_suppression_persistence",
+  "ok": true,
+  "prompt": {
+   "detection": "step",
+   "baseline_ppm": 301.09000000000003,
+   "level_ppm": 372.775,
+   "confidence": 0.9851154355862453
+  },
+  "delay_h_from_true_step": 0.25
+ },
+ {
+  "test": "tds_prompts_late_reading_is_dropped_by_watermark",
+  "ok": true,
+  "late_readings": 4,
+  "state_equal_to_in_order": false,
+  "baseline_len_inorder": 12,
+  "baseline_len_late": 12,
+  "recent_equal": false
+ },
+ {
+  "test": "tds_prompts_cycle_split_across_polls_uses_first_row_while_sensor_inputs_uses_highest_id_F4b",
+  "ok": true,
+  "single_poll_recent": [
+   [
+    "2026-01-01T00:00:00+00:00",
+    400.0
+   ]
+  ],
+  "two_polls_recent": [
+   [
+    "2026-01-01T00:00:00+00:00",
+    300.0
+   ]
+  ],
+  "prompt_state_differs": true,
+  "twin_sensor_channel_tds_after_two_polls": 400.0
+ },
+ {
+  "test": "device_health_missed_cycles_known_answers_and_confidence_levels",
+  "ok": true,
+  "hole_missed": 7
+ },
+ {
+  "test": "chemistry_step_pools_conserve_mass_without_uptake_and_never_go_negative",
+  "ok": true,
+  "samples": 40000,
+  "worst_relative_mass_error_no_uptake": 3.44329191472466e-16,
+  "min_pool_value": 0.0
+ },
+ {
+  "test": "chemistry_events_mass_balance_and_nonnegativity_under_random_sequences",
+  "ok": true,
+  "events_checked": {
+   "feeding": 480,
+   "water_change": 510,
+   "top_up": 477,
+   "salt": 479
+  },
+  "worst_feeding_relative_error": 4.7975879048624025e-15,
+  "final_pools_mg": [
+   1883.3573809936195,
+   467.45407695349786,
+   4192.786045082425
+  ]
+ },
+ {
+  "test": "chemistry_water_change_percent_bounds_and_salt_validation",
+  "ok": true
+ },
+ {
+  "test": "chemistry_stored_pools_survive_snapshot_exactly_and_replay_is_deterministic",
+  "ok": true,
+  "snapshot_max_rel_diff": 0.0,
+  "rerun_bit_identical": true
+ },
+ {
+  "test": "snapshot_from_snapshot_prunes_daily_against_wall_clock_F1",
+  "ok": true,
+  "daily_buckets_in_snapshot": 6,
+  "after_load_real_clock": 0,
+  "after_load_clock_at_data_time": 6,
+  "wall_clock_utc_year": 2026
+ },
+ {
+  "test": "pond_twin_snapshot_roundtrip_all_versions_load",
+  "ok": true,
+  "v6_roundtrip_identical": true,
+  "v1_legacy_loads": true,
+  "v3_loads_empty_ledger_entries": 0,
+  "v3_checkpoints": 1
+ }
+]

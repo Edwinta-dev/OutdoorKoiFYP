@@ -1,0 +1,233 @@
+[
+ {
+  "run": "fwi:ara2_0677080b:zeros-keep",
+  "inputs": 3042,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_0f143c64:zeros-keep",
+  "inputs": 4470,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_148f1633:zeros-keep",
+  "inputs": 2298,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_176528d3:zeros-keep",
+  "inputs": 4149,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_29660d32:zeros-keep",
+  "inputs": 5592,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_3b2f3973:zeros-keep",
+  "inputs": 4930,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_3eab831e:zeros-keep",
+  "inputs": 5584,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_3ed4df8e:zeros-keep",
+  "inputs": 4441,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_45e1cde5:zeros-keep",
+  "inputs": 4414,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_4f79fc8d:zeros-keep",
+  "inputs": 4436,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_573a2826:zeros-keep",
+  "inputs": 4480,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_6ca69422:zeros-keep",
+  "inputs": 3742,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_858b914c:zeros-keep",
+  "inputs": 2338,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_b3d128ac:zeros-keep",
+  "inputs": 4435,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_c9cdacda:zeros-keep",
+  "inputs": 5477,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_ca187575:zeros-keep",
+  "inputs": 4206,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "fwi:ara2_d52ddb31:zeros-keep",
+  "inputs": 4458,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "oman:tank:5min+events(10: 6 feeding without quantity, 4 water changes)",
+  "inputs": 2279,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 30.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "oman:open:5min",
+  "inputs": 904,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 0.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "idn_t:clean:tz-jakarta:thin15min",
+  "inputs": 1738,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 376.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ },
+ {
+  "run": "idn_t:raw:tz-jakarta:thin15min",
+  "inputs": 3933,
+  "tan_mg": 0.0,
+  "no2_mg": 0.0,
+  "no3_mg": 0.0,
+  "last_tds_ppm": 376.0,
+  "all_nonneg": true,
+  "nitrogen_pools_exactly_zero": true,
+  "exceptions": 0
+ }
+]

@@ -1,0 +1,326 @@
+{
+ "fwi_gate_vs_qc": {
+  "inputs": 72492,
+  "qc_flagged_pH": 594,
+  "gate_bad_pH": 4715,
+  "both": 556,
+  "qc_only": 38,
+  "gate_only": 4159,
+  "gate_stale_pH": 12412,
+  "P_gate_bad_given_qc": 0.936026936026936,
+  "P_qc_given_gate_bad": 0.11792152704135737,
+  "pH_zero_rows": 516,
+  "pH_in_[4,6)_rows": 25
+ },
+ "gaps": {
+  "rows": 72492,
+  "pairs": 72475,
+  "qc_flag_placement": {
+   "flagged_rows": 3116,
+   "flagged_post_gap_only": 1471,
+   "flagged_pre_gap_only": 1471,
+   "flagged_both_sides": 174,
+   "flagged_not_adjacent_to_gt20min_gap": 0,
+   "unflagged_adjacent_to_gt20min_gap": 0
+  },
+  "pairs_gap_gt20min": 1645,
+  "qc_pair_vs_timestamps": {
+   "pair_both_flagged_and_gap_gt20": 1645,
+   "pair_both_flagged_but_gap_le20": 74,
+   "gap_gt20_but_not_both_flagged": 0
+  },
+  "device_health_vs_qc_gap_pairs": {
+   "both": 1645,
+   "device_health_only": 0,
+   "gap_gt20_not_detected": 0,
+   "neither": 70830
+  },
+  "gap_s_percentiles": {
+   "50": 900.0,
+   "90": 900.0,
+   "99": 1800.0,
+   "99.9": 6300.0
+  },
+  "device_health_missed_cycles_total": 6499,
+  "missed_cycles_closed_form_matches": true,
+  "pairs_with_gap_between_15_and_22.5min(threshold zone)": 0,
+  "gap_hist_s": {
+   "<=900+60": 70830,
+   "960-1200": 0,
+   "1200-1350": 0,
+   ">1350": 1645
+  }
+ },
+ "stale_vs_do": {
+  "ph": {
+   "episodes": 4131,
+   "inputs_in_episodes": 12412,
+   "episodes_with_DO_change_ge_0.05": 4084,
+   "episodes_with_DO_flat(<0.005)": 11,
+   "share_with_DO_change": 0.9886226095376422
+  },
+  "temp": {
+   "episodes": 6107,
+   "inputs_in_episodes": 16649,
+   "episodes_with_DO_change_ge_0.05": 6035,
+   "episodes_with_DO_flat(<0.005)": 20,
+   "share_with_DO_change": 0.9882102505321761
+  }
+ },
+ "idn": {
+  "raw_rows": 505730,
+  "clean_rows": 118286,
+  "clean_ids_subset_of_raw": true,
+  "ph_P(gate_not_ok|removed)": 0.98421182468547,
+  "ph_P(gate_not_ok|kept)": 0.9913778237627177,
+  "tds_P(gate_not_ok|removed)": 0.6005536825370721,
+  "tds_P(gate_not_ok|kept)": 0.4526642524573202,
+  "temp_P(gate_not_ok|removed)": 0.6973110763917441,
+  "temp_P(gate_not_ok|kept)": 0.7061562338334195,
+  "thin15_ph_P(gate_not_ok|removed)": 0.81438127090301,
+  "thin15_ph_P(gate_not_ok|kept)": 0.7953340402969247,
+  "thin15_tds_P(gate_not_ok|removed)": 0.1528428093645485,
+  "thin15_tds_P(gate_not_ok|kept)": 0.10922587486744433,
+  "thin15_temp_P(gate_not_ok|removed)": 0.14481605351170568,
+  "thin15_temp_P(gate_not_ok|kept)": 0.1569459172852598,
+  "thin15_minutes": 3933,
+  "thin15_removed": 2990,
+  "winning_rows_removed_by_cleaning": 36483,
+  "minutes": 48081,
+  "clean_ranges": {
+   "pH": [
+    6.5,
+    8.5
+   ],
+   "TDS": [
+    241.0,
+    498.0
+   ],
+   "temp": [
+    24.0,
+    26.19
+   ]
+  },
+  "raw_ranges": {
+   "pH": [
+    5.51,
+    15.78
+   ],
+   "TDS": [
+    200.0,
+    1813.0
+   ],
+   "temp": [
+    21.63,
+    27.19
+   ]
+  },
+  "component_sensitivity": {
+   "idn_t_raw_tz-jakarta": {
+    "inputs": 48081,
+    "rows": 1517190,
+    "superseded_rows": 1372947,
+    "ph_trusted_of_present": 0.014059607745263202,
+    "tds_trusted_of_present": 0.43511990183232463,
+    "temp_trusted_of_present": 0.3005553129094653,
+    "tds_steps": {
+     "trusted_tds_readings": 20921,
+     "steps_floor10": 40,
+     "steps_floor20": 16,
+     "steps_floor40": 12,
+     "thinned_15min_readings": 3009,
+     "steps_thinned15_floor10": 34,
+     "steps_thinned15_floor20": 15,
+     "steps_thinned15_floor40": 11
+    },
+    "prompts": 39,
+    "local_days": 55,
+    "contacts": 48081,
+    "missed_pairs": 134,
+    "gap_max_h": 44.083333333333336,
+    "confidence_chemistry": {
+     "high": 195,
+     "reduced": 574
+    }
+   },
+   "idn_t_clean_tz-jakarta": {
+    "inputs": 19509,
+    "rows": 354858,
+    "superseded_rows": 296331,
+    "ph_trusted_of_present": 0.044287252037521145,
+    "tds_trusted_of_present": 0.6522630580757599,
+    "temp_trusted_of_present": 0.29504331334255984,
+    "tds_steps": {
+     "trusted_tds_readings": 12725,
+     "steps_floor10": 18,
+     "steps_floor20": 9,
+     "steps_floor40": 6,
+     "thinned_15min_readings": 1672,
+     "steps_thinned15_floor10": 16,
+     "steps_thinned15_floor20": 9,
+     "steps_thinned15_floor40": 7
+    },
+    "prompts": 4,
+    "local_days": 39,
+    "contacts": 19509,
+    "missed_pairs": 95,
+    "gap_max_h": 180.3,
+    "confidence_chemistry": {
+     "reduced": 131,
+     "high": 48
+    }
+   },
+   "idn_t_raw_tz-utc": {
+    "inputs": 48081,
+    "rows": 1517190,
+    "superseded_rows": 1372947,
+    "ph_trusted_of_present": 0.014059607745263202,
+    "tds_trusted_of_present": 0.43511990183232463,
+    "temp_trusted_of_present": 0.3005553129094653,
+    "tds_steps": {
+     "trusted_tds_readings": 20921,
+     "steps_floor10": 40,
+     "steps_floor20": 16,
+     "steps_floor40": 12,
+     "thinned_15min_readings": 3009,
+     "steps_thinned15_floor10": 34,
+     "steps_thinned15_floor20": 15,
+     "steps_thinned15_floor40": 11
+    },
+    "prompts": 39,
+    "local_days": 55,
+    "contacts": 48081,
+    "missed_pairs": 134,
+    "gap_max_h": 44.083333333333336,
+    "confidence_chemistry": {
+     "high": 195,
+     "reduced": 574
+    }
+   },
+   "idn_t_clean_tz-utc": {
+    "inputs": 19509,
+    "rows": 354858,
+    "superseded_rows": 296331,
+    "ph_trusted_of_present": 0.044287252037521145,
+    "tds_trusted_of_present": 0.6522630580757599,
+    "temp_trusted_of_present": 0.29504331334255984,
+    "tds_steps": {
+     "trusted_tds_readings": 12725,
+     "steps_floor10": 18,
+     "steps_floor20": 9,
+     "steps_floor40": 6,
+     "thinned_15min_readings": 1672,
+     "steps_thinned15_floor10": 16,
+     "steps_thinned15_floor20": 9,
+     "steps_thinned15_floor40": 7
+    },
+    "prompts": 4,
+    "local_days": 39,
+    "contacts": 19509,
+    "missed_pairs": 95,
+    "gap_max_h": 180.3,
+    "confidence_chemistry": {
+     "reduced": 131,
+     "high": 48
+    }
+   },
+   "idn_t_raw_tz-jakarta_thin15min": {
+    "inputs": 3933,
+    "rows": 103962,
+    "superseded_rows": 92163,
+    "ph_trusted_of_present": 0.19018560894991102,
+    "tds_trusted_of_present": 0.8576150521230613,
+    "temp_trusted_of_present": 0.852275616577676,
+    "tds_steps": {
+     "trusted_tds_readings": 3373,
+     "steps_floor10": 53,
+     "steps_floor20": 21,
+     "steps_floor40": 10,
+     "thinned_15min_readings": 3373,
+     "steps_thinned15_floor10": 53,
+     "steps_thinned15_floor20": 21,
+     "steps_thinned15_floor40": 10
+    },
+    "prompts": 15,
+    "local_days": 55,
+    "contacts": 3933,
+    "missed_pairs": 195,
+    "gap_max_h": 44.083333333333336,
+    "confidence_chemistry": {
+     "high": 45,
+     "reduced": 8
+    }
+   },
+   "idn_t_clean_tz-jakarta_thin15min": {
+    "inputs": 1738,
+    "rows": 25317,
+    "superseded_rows": 20103,
+    "ph_trusted_of_present": 0.5466052934407365,
+    "tds_trusted_of_present": 0.9579976985040276,
+    "temp_trusted_of_present": 0.836018411967779,
+    "tds_steps": {
+     "trusted_tds_readings": 1665,
+     "steps_floor10": 18,
+     "steps_floor20": 9,
+     "steps_floor40": 6,
+     "thinned_15min_readings": 1665,
+     "steps_thinned15_floor10": 18,
+     "steps_thinned15_floor20": 9,
+     "steps_thinned15_floor40": 6
+    },
+    "prompts": 4,
+    "local_days": 39,
+    "contacts": 1738,
+    "missed_pairs": 133,
+    "gap_max_h": 180.43333333333334,
+    "confidence_chemistry": {
+     "high": 12,
+     "reduced": 1
+    }
+   }
+  },
+  "tz_sensitivity": {
+   "verdicts_identical_jakarta_vs_utc": true,
+   "utc_minus_jakarta_time_shift_h": [
+    7.0
+   ],
+   "local_days_jakarta": 55,
+   "local_days_utc": 55
+  }
+ },
+ "oman_events": {
+  "events_mapped": 10,
+  "ledger_entries_final": 10,
+  "future_events_in_ledger_at_any_batch": 0,
+  "event_times_equal_model_times": true,
+  "types": {
+   "feeding": 6,
+   "water_change": 4
+  },
+  "food_grams_all_None": true,
+  "exceptions": {},
+  "events_report": {
+   "events_total": 40,
+   "events_in_tank_window": 14,
+   "kinds_in_window": {
+    "Feeding": 6,
+    "Water Change": 4,
+    "Other": 2,
+    "Actuator": 2
+   },
+   "mapped_to_production_types": 10,
+   "mapped_by_type": {
+    "FEEDING": 6,
+    "WATER_CHANGE": 4
+   }
+  },
+  "tank5min_ph_trusted_of_present": {
+   "no_events": 0.32426502852128125,
+   "with_events": 0.9052215884159719
+  },
+  "tank5min_temp_trusted_of_present": {
+   "no_events": 0.4449319877139096,
+   "with_events": 0.7086441421676174
+  }
+ }
+}

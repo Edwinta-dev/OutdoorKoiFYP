@@ -232,7 +232,7 @@ class Timer:
 
 def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=True, snapshot_daily=True,
                restart_at_batch=None, health=True, stats=True, volume_l_override=None, keep_twin=True,
-               max_exceptions=5, freeze_clock=True):
+               max_exceptions=5, freeze_clock=True, on_batch=None):
     """Poll-style replay of `table` delivered as `batches` (index arrays).
     Returns a dict of counters plus the final twin."""
     twin = make_twin(spec, volume_l_override)
@@ -270,6 +270,8 @@ def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=Tr
     events = events or []
     batch_times = []
     out_of_order_inputs = 0
+    unplaced_ids: set = set()
+    unplaced_ns: set = set()
     max_input_time = None
     cadence = timedelta(seconds=spec.cadence_s)
     n_batches = 0
@@ -290,9 +292,12 @@ def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=Tr
         rows_in += len(rows)
         bmax = max(r["created_at"] for r in rows) if rows else now
         now = bmax if now is None else max(now, bmax)
+        fc = frozen_clock(now) if freeze_clock else _null()  # production passes wall-clock `now`; so does the replay
+        fc.__enter__()
         with tm("sensor_inputs.group_rows"):
             disc = guard("sensor_inputs.group_rows", group_rows, rows)
         if disc is None:
+            fc.__exit__(None, None, None)
             continue
         unknown_rows += len(rows) - len(disc.ledger)
         n_inputs += len(disc.inputs)
@@ -333,6 +338,8 @@ def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=Tr
         if res is not None:
             provenance, _warn = res
             unplaced = {rid for p in provenance if p.get("placed") is False for rid in p["row_ids"].values()}
+            unplaced_ids |= unplaced
+            unplaced_ns |= {pd.Timestamp(p["time"]).value for p in provenance if p.get("placed") is False}
             for p in provenance:
                 prov["late"] += bool(p.get("late"))
                 prov["replayed"] += bool(p.get("replayed"))
@@ -372,6 +379,9 @@ def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=Tr
                             json.loads(canon(snap)), json.loads(canon(again.to_snapshot())))[:8] if again else "load failed"})
                     snaps.append({"day": day, "bytes": size})
             last_day = day
+        if on_batch is not None:
+            on_batch(bi, twin, now)
+        fc.__exit__(None, None, None)
         if restart_at_batch is not None and bi == restart_at_batch:
             with tm("pond_twin.restart"):
                 snapshot = json.loads(json.dumps(twin.to_snapshot(), default=str))
@@ -406,6 +416,8 @@ def run_replay(spec, table, batches, *, events=None, prompts=True, history_on=Tr
     if health:
         result["confidence_levels"] = {d: dict(c) for d, c in conf.items()}
     result["_verdicts"] = {k: np.asarray(v, dtype=np.int64 if k == "t" else np.int8) for k, v in vlog.items()}
+    result["_unplaced_ids"] = unplaced_ids
+    result["_unplaced_ns"] = unplaced_ns
     result["_tds_series"] = tds_series
     result["_received"] = all_received
     result["_twin"] = twin if keep_twin else None

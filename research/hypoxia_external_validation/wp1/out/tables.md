@@ -1,0 +1,434 @@
+## Step 2: per-source replay (single pass through the poll loop; batch 2000 rows, complete_groups)
+
+
+#### S2-A rows, dispositions, exceptions, snapshot round-trips
+
+| run | runs | rows in | inputs | superseded rows | unusable rows | exceptions | snap roundtrip ok | dayKey mismatches | gate==twin gate | wall s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| FWI, 17 ponds, as published (zeros kept) | 17 | 145,500 | 72,492 | 516 | 0 | 0 | 81/81 | 0 | 17/17 | 12.550 |
+| FWI, 17 ponds, zeros -> absent | 17 | 144,873 | 72,475 | 515 | 0 | 0 | 80/80 | 0 | 17/17 | 12.400 |
+| Oman open pond, native 5-7 s | 1 | 83,326 | 41,122 | 1,082 | 0 | 0 | 8/8 | 0 | 1/1 | 6.730 |
+| Oman open pond, 5-min grid | 1 | 1,808 | 904 | 0 | 0 | 0 | 1/1 | 0 | 1/1 | 0.140 |
+| Oman open pond, 15-min | 1 | 626 | 307 | 12 | 0 | 0 | 1/1 | 0 | 1/1 | 0.060 |
+| Oman 180 L tank, native 5-7 s | 1 | 205,340 | 102,670 | 0 | 0 | 0 | 9/9 | 0 | 1/1 | 17.970 |
+| Oman tank native + 10 logged events | 1 | 205,340 | 102,670 | 0 | 0 | 0 | 9/9 | 0 | 1/1 | 23.480 |
+| Oman tank, 5-min grid | 1 | 4,558 | 2,279 | 0 | 0 | 0 | 3/3 | 0 | 1/1 | 0.390 |
+| Oman tank 5-min + 10 logged events | 1 | 4,558 | 2,279 | 0 | 0 | 0 | 3/3 | 0 | 1/1 | 0.400 |
+| Oman tank, 15-min | 1 | 1,522 | 761 | 0 | 0 | 0 | 1/1 | 0 | 1/1 | 0.140 |
+| IDN-T raw, Asia/Jakarta (assumed) | 1 | 1,517,190 | 48,081 | 1,372,947 | 0 | 0 | 52/52 | 0 | 1/1 | 42.190 |
+| IDN-T raw, UTC (sensitivity) | 1 | 1,517,190 | 48,081 | 1,372,947 | 0 | 0 | 52/52 | 0 | 1/1 | 37.870 |
+| IDN-T cleaned, Asia/Jakarta | 1 | 354,858 | 19,509 | 296,331 | 0 | 0 | 33/33 | 0 | 1/1 | 16.440 |
+| IDN-T cleaned, UTC | 1 | 354,858 | 19,509 | 296,331 | 0 | 0 | 33/33 | 0 | 1/1 | 18.220 |
+| IDN-T raw, thinned to 15-min | 1 | 103,962 | 3,933 | 92,163 | 0 | 0 | 33/33 | 0 | 1/1 | 3.370 |
+| IDN-T cleaned, thinned to 15-min | 1 | 25,317 | 1,738 | 20,103 | 0 | 0 | 13/13 | 0 | 1/1 | 0.950 |
+
+
+#### S2-B usable-channel fraction and SensorGate verdicts (inputs; 'ok|present' = trusted share of inputs that carried the channel)
+
+| run | ph present | ph ok|present | ph stale | ph rate | ph range+rej | temp present | temp ok|present | temp stale | temp rate | tds present | tds ok|present | tds stale | tds rate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| FWI, 17 ponds, as published (zeros kept) | 1.000 | 0.764 | 12,412 | 4,199 | 516 | 1.000 | 0.756 | 16,649 | 1,061 | 0.000 |  | 0 | 0 |
+| FWI, 17 ponds, zeros -> absent | 0.993 | 0.768 | 12,412 | 4,259 | 0 | 0.999 | 0.757 | 16,561 | 1,040 | 0.000 |  | 0 | 0 |
+| Oman open pond, native 5-7 s | 1.000 | 0.015 | 38 | 39,714 | 742 | 1.000 | 0.037 | 23,713 | 15,900 | 0.000 |  | 0 | 0 |
+| Oman open pond, 5-min grid | 1.000 | 0.866 | 0 | 103 | 18 | 1.000 | 0.692 | 231 | 47 | 0.000 |  | 0 | 0 |
+| Oman open pond, 15-min | 1.000 | 0.899 | 0 | 24 | 7 | 1.000 | 0.795 | 47 | 16 | 0.000 |  | 0 | 0 |
+| Oman 180 L tank, native 5-7 s | 1.000 | 0.001 | 1 | 102,613 | 0 | 1.000 | 0.003 | 58,233 | 44,139 | 0.000 |  | 0 | 0 |
+| Oman tank native + 10 logged events | 1.000 | 0.138 | 1 | 88,509 | 0 | 1.000 | 0.063 | 58,233 | 37,955 | 0.000 |  | 0 | 0 |
+| Oman tank, 5-min grid | 1.000 | 0.324 | 0 | 1,540 | 0 | 1.000 | 0.445 | 664 | 601 | 0.000 |  | 0 | 0 |
+| Oman tank 5-min + 10 logged events | 1.000 | 0.905 | 0 | 216 | 0 | 1.000 | 0.709 | 664 | 0 | 0.000 |  | 0 | 0 |
+| Oman tank, 15-min | 1.000 | 0.581 | 0 | 319 | 0 | 1.000 | 0.807 | 68 | 79 | 0.000 |  | 0 | 0 |
+| IDN-T raw, Asia/Jakarta (assumed) | 1.000 | 0.014 | 7 | 42,083 | 5,315 | 1.000 | 0.301 | 33,621 | 9 | 1.000 | 0.435 | 1,633 | 25,527 |
+| IDN-T raw, UTC (sensitivity) | 1.000 | 0.014 | 7 | 42,083 | 5,315 | 1.000 | 0.301 | 33,621 | 9 | 1.000 | 0.435 | 1,633 | 25,527 |
+| IDN-T cleaned, Asia/Jakarta | 1.000 | 0.044 | 8 | 18,637 | 0 | 1.000 | 0.295 | 13,751 | 2 | 1.000 | 0.652 | 1,226 | 5,558 |
+| IDN-T cleaned, UTC | 1.000 | 0.044 | 8 | 18,637 | 0 | 1.000 | 0.295 | 13,751 | 2 | 1.000 | 0.652 | 1,226 | 5,558 |
+| IDN-T raw, thinned to 15-min | 1.000 | 0.190 | 0 | 2,668 | 517 | 1.000 | 0.852 | 581 | 0 | 1.000 | 0.858 | 87 | 473 |
+| IDN-T cleaned, thinned to 15-min | 1.000 | 0.547 | 2 | 786 | 0 | 1.000 | 0.836 | 285 | 0 | 1.000 | 0.958 | 65 | 8 |
+
+
+#### S2-C runtime per component (seconds, total over the run; 'inputs' = sensor inputs processed)
+
+| source | sensor_inputs.group_rows | engine.SensorGate(standalone) | pond_twin.ingest_sensor_inputs | tds_prompts.observe | device_health.assess_confidence | pond_twin.snapshot | inputs |
+|---|---|---|---|---|---|---|---|
+| FWI (17 ponds) | 1.815 | 1.490 | 4.526 | 0.027 | 0.005 | 0.641 | 72,492 |
+| Oman tank native | 2.863 | 2.710 | 6.776 | 0.036 | 0.011 | 0.029 | 102,670 |
+| IDN-T raw (Jakarta) | 16.906 | 1.710 | 4.408 | 6.279 | 0.087 | 3.954 | 48,081 |
+| IDN-T cleaned (Jakarta) | 5.285 | 0.784 | 2.065 | 3.175 | 0.026 | 2.067 | 19,509 |
+
+
+#### S2-D device_health on the replays (production missed_cycles over every consecutive contact pair)
+
+| run | contacts | pairs with >=1 missed cycle | missed cycles | pairwise sum == whole window | median gap s | p99 gap s | max gap h | confidence chemistry (chunks) |
+|---|---|---|---|---|---|---|---|---|
+| FWI, 17 ponds (900 s) | 72,492 | 1,645 | 6,499 | 1 | 900.000 | 1,800 | 233.750 |  |
+| Oman tank native (interval 6 s) | 102,670 | 702 | 13,121 | 1 | 6.557 | 7.987 | 20.009 | {"high": 39, "reduced": 64} |
+| Oman tank 5-min (300 s) | 2,279 | 1 | 240 | 1 | 298.099 | 304.795 | 20.084 | {"reduced": 2, "high": 1} |
+| Oman open native (6 s) | 41,122 | 607 | 418,340 | 1 | 6.748 | 10.074 | 433.682 | {"reduced": 25, "high": 17} |
+| IDN-T raw (assumed 900 s) | 48,081 | 134 | 1,378 | 1 | 60.000 | 360.000 | 44.083 | {"high": 195, "reduced": 574} |
+| IDN-T cleaned (assumed 900 s) | 19,509 | 95 | 3,567 | 1 | 60.000 | 660.000 | 180.300 | {"reduced": 131, "high": 48} |
+
+
+#### S2-E local_time.local_day_key vs independent pandas conversion on every distinct sample instant
+
+| tz | runs | instants | mismatches |
+|---|---|---|---|
+| Asia/Jakarta | 2 | 67,590 | 0 |
+| Asia/Kolkata | 17 | 72,492 | 0 |
+| Asia/Muscat | 2 | 143,792 | 0 |
+| UTC | 1 | 48,081 | 0 |
+
+
+#### S2-F tds_steps / tds_prompts on IDN-T (no logged action exists; every step is 'unlabelled', not an intervention)
+
+| run | gate-trusted TDS readings | steps floor 10 | floor 20 | floor 40 | 15-min readings | steps@15min floor 10 | floor 20  | floor 40  | prompts (enabled) | by kind |
+|---|---|---|---|---|---|---|---|---|---|---|
+| idn_t:clean:tz-jakarta | 12,725 | 18 | 9 | 6 | 1,672 | 16 | 9 | 7 | 4 | {"step": 2, "slope": 2} |
+| idn_t:raw:tz-jakarta | 20,921 | 40 | 16 | 12 | 3,009 | 34 | 15 | 11 | 39 | {"step": 39} |
+| idn_t:clean:tz-jakarta:thin15min | 1,665 | 18 | 9 | 6 | 1,665 | 18 | 9 | 6 | 4 | {"step": 2, "slope": 2} |
+| idn_t:raw:tz-jakarta:thin15min | 3,373 | 53 | 21 | 10 | 3,373 | 53 | 21 | 10 | 15 | {"step": 12, "slope": 3} |
+
+
+## SYN fixtures (D-tier)
+
+
+#### SYN tests
+
+| test | result |
+|---|---|
+| ledger_events_arrive_after_all_sensors_any_order | PASS |
+| ledger_events_recorded_before_the_sensors_they_precede | PASS |
+| ledger_interleaved_daily_arrival_equals_oracle | PASS |
+| ledger_duplicate_event_ids_are_noops | PASS |
+| ledger_same_event_id_in_two_ponds_is_independent | PASS |
+| ledger_reconcile_rows_equal_oracle_and_are_idempotent | PASS |
+| ledger_edit_delete_restore_equal_oracle | PASS |
+| ledger_legacy_event_without_id_is_claimed_not_doubled | PASS |
+| ledger_no_future_event_is_applied_before_it_is_visible | PASS |
+| ledger_event_older_than_replay_window_is_placed_late_not_replayed | PASS |
+| ledger_checkpoints_bounded_and_sensor_replay_equals_inorder_over_45_days | PASS |
+| ledger_out_of_window_rows_can_be_reapplied_by_a_later_replay_F3 | PASS |
+| profile_volume_change_midway_does_not_touch_earlier_events | PASS |
+| local_time_midnight_boundaries_and_dst_and_halfhour_zones | PASS |
+| sensor_inputs_grouping_ordering_and_dispositions | PASS |
+| sensor_inputs_v2_cycle_identity_groups_across_sample_times | PASS |
+| sensor_inputs_merge_and_complete_groups_and_freshness | PASS |
+| gate_basic_verdicts_range_rate_stale_missing | PASS |
+| gate_rate_limit_latches_on_a_sustained_step_without_a_logged_event | PASS |
+| gate_rate_limit_scales_with_dt_to_last_sample_not_to_last_trusted | PASS |
+| gate_snapshot_restore_is_exact | PASS |
+| tds_steps_detect_injected_salt_and_water_change_with_expected_magnitude | PASS |
+| tds_steps_noise_only_series_gives_no_flag_and_one_spike_is_not_a_step | PASS |
+| tds_prompts_step_prompt_stability_cooldown_event_suppression_persistence | PASS |
+| tds_prompts_late_reading_is_dropped_by_watermark | PASS |
+| tds_prompts_cycle_split_across_polls_uses_first_row_while_sensor_inputs_uses_highest_id_F4b | PASS |
+| device_health_missed_cycles_known_answers_and_confidence_levels | PASS |
+| chemistry_step_pools_conserve_mass_without_uptake_and_never_go_negative | PASS |
+| chemistry_events_mass_balance_and_nonnegativity_under_random_sequences | PASS |
+| chemistry_water_change_percent_bounds_and_salt_validation | PASS |
+| chemistry_stored_pools_survive_snapshot_exactly_and_replay_is_deterministic | PASS |
+| snapshot_from_snapshot_prunes_daily_against_wall_clock_F1 | PASS |
+| pond_twin_snapshot_roundtrip_all_versions_load | PASS |
+
+
+## Step 4 (B-tier agreement; not ground truth)
+
+
+#### S4-A FWI pH: SensorGate verdict (rows) x FWI QC_Flag_pH (cols), 72,492 distinct sample instants over 17 ponds
+
+| gate | both | none | pH_jump_>1 | pH_out_of_range | All |
+|---|---|---|---|---|---|
+| ok | 0 | 55,332 | 33 | 0 | 55,365 |
+| rejected | 18 | 0 | 0 | 498 | 516 |
+| suspect_rate | 3 | 4,159 | 16 | 21 | 4,199 |
+| suspect_stale | 0 | 12,407 | 4 | 1 | 12,412 |
+| All | 21 | 71,898 | 53 | 520 | 72,492 |
+
+
+#### S4-B FWI documented zero artefacts (README) x gate verdict
+
+| art | n | ph_ok | ph_rejected | ph_suspect_rate | temp_ok | temp_suspect_rate | temp_suspect_stale |
+|---|---|---|---|---|---|---|---|
+| pH=0 | 499 | 0 | 499 | 0 | 403 | 0 | 96 |
+| pH=0&temp=0 | 17 | 0 | 17 | 0 | 0 | 14 | 3 |
+| temp=0 | 93 | 48 | 0 | 45 | 0 | 7 | 86 |
+
+
+#### S4-C same rows x FWI QC flag
+
+| art | both | none | pH_jump_>1 | pH_out_of_range |
+|---|---|---|---|---|
+| pH=0 | 4 | 0 | 0 | 495 |
+| pH=0&temp=0 | 14 | 0 | 0 | 3 |
+| temp=0 | 0 | 91 | 2 | 0 |
+
+
+#### S4-D gate vs QC per pond (pH)
+
+| pond | n | qc_flagged | gate_bad | both | qc_only | gate_only | gate_stale |
+|---|---|---|---|---|---|---|---|
+| ara2_0677080b | 3,042 | 3 | 1 | 1 | 2 | 0 | 473 |
+| ara2_0f143c64 | 4,470 | 5 | 3 | 2 | 3 | 1 | 685 |
+| ara2_148f1633 | 2,298 | 3 | 40 | 1 | 2 | 39 | 44 |
+| ara2_176528d3 | 4,149 | 5 | 21 | 2 | 3 | 19 | 1,589 |
+| ara2_29660d32 | 5,592 | 15 | 102 | 13 | 2 | 89 | 900 |
+| ara2_3b2f3973 | 4,930 | 8 | 90 | 6 | 2 | 84 | 393 |
+| ara2_3eab831e | 5,584 | 7 | 6 | 3 | 4 | 3 | 1,827 |
+| ara2_3ed4df8e | 4,441 | 25 | 1,801 | 20 | 5 | 1,781 | 473 |
+| ara2_45e1cde5 | 4,414 | 2 | 1 | 1 | 1 | 0 | 1,107 |
+| ara2_4f79fc8d | 4,436 | 3 | 1 | 1 | 2 | 0 | 606 |
+| ara2_573a2826 | 4,480 | 0 | 1 | 0 | 0 | 1 | 1,141 |
+| ara2_6ca69422 | 3,742 | 7 | 2,038 | 5 | 2 | 2,033 | 89 |
+| ara2_858b914c | 2,338 | 4 | 83 | 2 | 2 | 81 | 123 |
+| ara2_b3d128ac | 4,435 | 3 | 8 | 1 | 2 | 7 | 1,821 |
+| ara2_c9cdacda | 5,477 | 0 | 20 | 0 | 0 | 20 | 557 |
+| ara2_ca187575 | 4,206 | 495 | 495 | 495 | 0 | 0 | 316 |
+| ara2_d52ddb31 | 4,458 | 9 | 4 | 3 | 6 | 1 | 268 |
+
+
+#### S4-E device_health gap detection vs FWI QC time_gap
+
+```json
+{
+ "rows": 72492,
+ "pairs": 72475,
+ "qc_flag_placement": {
+  "flagged_rows": 3116,
+  "flagged_post_gap_only": 1471,
+  "flagged_pre_gap_only": 1471,
+  "flagged_both_sides": 174,
+  "flagged_not_adjacent_to_gt20min_gap": 0,
+  "unflagged_adjacent_to_gt20min_gap": 0
+ },
+ "pairs_gap_gt20min": 1645,
+ "qc_pair_vs_timestamps": {
+  "pair_both_flagged_and_gap_gt20": 1645,
+  "pair_both_flagged_but_gap_le20": 74,
+  "gap_gt20_but_not_both_flagged": 0
+ },
+ "device_health_vs_qc_gap_pairs": {
+  "both": 1645,
+  "device_health_only": 0,
+  "gap_gt20_not_detected": 0,
+  "neither": 70830
+ },
+ "gap_s_percentiles": {
+  "50": 900.0,
+  "90": 900.0,
+  "99": 1800.0,
+  "99.9": 6300.0
+ },
+ "device_health_missed_cycles_total": 6499,
+ "missed_cycles_closed_form_matches": true,
+ "pairs_with_gap_between_15_and_22.5min(threshold zone)": 0,
+ "gap_hist_s": {
+  "<=900+60": 70830,
+  "960-1200": 0,
+  "1200-1350": 0,
+  ">1350": 1645
+ }
+}
+```
+
+
+#### S4-F IDN-T raw vs cleaned file
+
+```json
+{
+ "raw_rows": 505730,
+ "clean_rows": 118286,
+ "clean_ids_subset_of_raw": true,
+ "ph_P(gate_not_ok|removed)": 0.98421182468547,
+ "ph_P(gate_not_ok|kept)": 0.9913778237627177,
+ "tds_P(gate_not_ok|removed)": 0.6005536825370721,
+ "tds_P(gate_not_ok|kept)": 0.4526642524573202,
+ "temp_P(gate_not_ok|removed)": 0.6973110763917441,
+ "temp_P(gate_not_ok|kept)": 0.7061562338334195,
+ "thin15_ph_P(gate_not_ok|removed)": 0.81438127090301,
+ "thin15_ph_P(gate_not_ok|kept)": 0.7953340402969247,
+ "thin15_tds_P(gate_not_ok|removed)": 0.1528428093645485,
+ "thin15_tds_P(gate_not_ok|kept)": 0.10922587486744433,
+ "thin15_temp_P(gate_not_ok|removed)": 0.14481605351170568,
+ "thin15_temp_P(gate_not_ok|kept)": 0.1569459172852598,
+ "thin15_minutes": 3933,
+ "thin15_removed": 2990,
+ "winning_rows_removed_by_cleaning": 36483,
+ "minutes": 48081,
+ "clean_ranges": {
+  "pH": [
+   6.5,
+   8.5
+  ],
+  "TDS": [
+   241.0,
+   498.0
+  ],
+  "temp": [
+   24.0,
+   26.19
+  ]
+ },
+ "raw_ranges": {
+  "pH": [
+   5.51,
+   15.78
+  ],
+  "TDS": [
+   200.0,
+   1813.0
+  ],
+  "temp": [
+   21.63,
+   27.19
+  ]
+ },
+ "tz_sensitivity": {
+  "verdicts_identical_jakarta_vs_utc": true,
+  "utc_minus_jakarta_time_shift_h": [
+   7.0
+  ],
+  "local_days_jakarta": 55,
+  "local_days_utc": 55
+ }
+}
+```
+
+
+#### S4-G IDN-T component sensitivity (raw vs cleaned, Jakarta vs UTC, full vs 15-min)
+
+| run | inputs | rows | superseded_rows | ph_trusted_of_present | tds_trusted_of_present | temp_trusted_of_present | tds_steps | prompts | local_days | contacts | missed_pairs | gap_max_h | confidence_chemistry |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| idn_t_raw_tz-jakarta | 48,081 | 1,517,190 | 1,372,947 | 0.014 | 0.435 | 0.301 | 16@1min/15@15min | 39 | 55 | 48,081 | 134 | 44.083 | {"high": 195, "reduced": 574} |
+| idn_t_clean_tz-jakarta | 19,509 | 354,858 | 296,331 | 0.044 | 0.652 | 0.295 | 9@1min/9@15min | 4 | 39 | 19,509 | 95 | 180.300 | {"reduced": 131, "high": 48} |
+| idn_t_raw_tz-utc | 48,081 | 1,517,190 | 1,372,947 | 0.014 | 0.435 | 0.301 | 16@1min/15@15min | 39 | 55 | 48,081 | 134 | 44.083 | {"high": 195, "reduced": 574} |
+| idn_t_clean_tz-utc | 19,509 | 354,858 | 296,331 | 0.044 | 0.652 | 0.295 | 9@1min/9@15min | 4 | 39 | 19,509 | 95 | 180.300 | {"reduced": 131, "high": 48} |
+| idn_t_raw_tz-jakarta_thin15min | 3,933 | 103,962 | 92,163 | 0.190 | 0.858 | 0.852 | 21@1min/21@15min | 15 | 55 | 3,933 | 195 | 44.083 | {"high": 45, "reduced": 8} |
+| idn_t_clean_tz-jakarta_thin15min | 1,738 | 25,317 | 20,103 | 0.547 | 0.958 | 0.836 | 9@1min/9@15min | 4 | 39 | 1,738 | 133 | 180.433 | {"high": 12, "reduced": 1} |
+
+
+#### S4-H longest SensorGate suspect_rate runs, pH (a run that never releases is the F2 latch)
+
+| run | runs | longest_h | longest_inputs | frac_inputs | frac_inputs_in_runs_ge24h | runs_ge24h |
+|---|---|---|---|---|---|---|
+| idn_t_raw_tz-jakarta_thin15min | 446 | 99.150 | 384 | 0.678 | 0.214 | 4 |
+| idn_t_raw_tz-jakarta | 1,882 | 84.483 | 4,050 | 0.875 | 0.324 | 6 |
+| idn_t_raw_tz-utc | 1,882 | 84.483 | 4,050 | 0.875 | 0.324 | 6 |
+| oman_tank_5min | 7 | 79.000 | 949 | 0.676 | 0.664 | 2 |
+| oman_tank_native_thin5min | 7 | 79.000 | 949 | 0.676 | 0.664 | 2 |
+| oman_tank_native | 55 | 47.612 | 25,746 | 0.999 | 0.662 | 3 |
+| oman_tank_native_thin15min | 6 | 46.750 | 188 | 0.419 | 0.247 | 1 |
+| fwi_ara2_3ed4df8e_zeros-keep | 452 | 35.746 | 143 | 0.405 | 0.032 | 1 |
+| fwi_ara2_3ed4df8e_zeros-absent | 452 | 35.746 | 143 | 0.405 | 0.032 | 1 |
+| idn_t_clean_tz-jakarta | 681 | 17.800 | 1,027 | 0.955 | 0.000 | 0 |
+| idn_t_clean_tz-utc | 681 | 17.800 | 1,027 | 0.955 | 0.000 | 0 |
+| oman_tank_native+events | 551 | 17.374 | 9,368 | 0.862 | 0.000 | 0 |
+| fwi_ara2_6ca69422_zeros-absent | 686 | 15.500 | 62 | 0.545 | 0.000 | 0 |
+| fwi_ara2_6ca69422_zeros-keep | 687 | 15.500 | 62 | 0.544 | 0.000 | 0 |
+
+
+#### S4-I SensorGate suspect_stale share of inputs (mean over runs in group)
+
+| group | channel | runs | mean_frac_inputs_stale | longest_h |
+|---|---|---|---|---|
+| fwi_ara2_*_zeros-keep | ph | 4,131 | 0.162 | 12.000 |
+| fwi_ara2_*_zeros-keep | temp | 6,107 | 0.229 | 22.250 |
+| idn_t_clean_tz-jakarta | ph | 5 | 0.000 | 0.017 |
+| idn_t_clean_tz-jakarta | temp | 949 | 0.705 | 109.367 |
+| idn_t_clean_tz-jakarta_thin15min | ph | 2 | 0.001 | 0.000 |
+| idn_t_clean_tz-jakarta_thin15min | temp | 110 | 0.164 | 108.683 |
+| idn_t_clean_tz-utc | ph | 5 | 0.000 | 0.017 |
+| idn_t_clean_tz-utc | temp | 949 | 0.705 | 109.367 |
+| idn_t_raw_tz-jakarta | ph | 6 | 0.000 | 0.017 |
+| idn_t_raw_tz-jakarta | temp | 2,328 | 0.699 | 3.917 |
+| idn_t_raw_tz-jakarta_thin15min | ph | 0 | 0.000 | 0.000 |
+| idn_t_raw_tz-jakarta_thin15min | temp | 234 | 0.148 | 4.250 |
+| idn_t_raw_tz-utc | ph | 6 | 0.000 | 0.017 |
+| idn_t_raw_tz-utc | temp | 2,328 | 0.699 | 3.917 |
+| oman_open_5min | ph | 0 | 0.000 | 0.000 |
+| oman_open_5min | temp | 66 | 0.256 | 2.000 |
+| oman_open_native | ph | 35 | 0.001 | 0.005 |
+| oman_open_native | temp | 2,343 | 0.577 | 0.211 |
+| oman_open_native_thin15min | ph | 0 | 0.000 | 0.000 |
+| oman_open_native_thin15min | temp | 10 | 0.153 | 3.250 |
+| oman_open_native_thin5min | ph | 0 | 0.000 | 0.000 |
+| oman_open_native_thin5min | temp | 66 | 0.256 | 2.000 |
+| oman_tank_5min | ph | 0 | 0.000 | 0.000 |
+| oman_tank_5min | temp | 196 | 0.291 | 1.250 |
+| oman_tank_5min+events | ph | 0 | 0.000 | 0.000 |
+| oman_tank_5min+events | temp | 196 | 0.291 | 1.250 |
+| oman_tank_native | ph | 1 | 0.000 | 0.000 |
+| oman_tank_native | temp | 6,138 | 0.567 | 0.251 |
+| oman_tank_native+events | ph | 1 | 0.000 | 0.000 |
+| oman_tank_native+events | temp | 6,138 | 0.567 | 0.251 |
+| oman_tank_native_thin15min | ph | 0 | 0.000 | 0.000 |
+| oman_tank_native_thin15min | temp | 34 | 0.089 | 1.001 |
+| oman_tank_native_thin5min | ph | 0 | 0.000 | 0.000 |
+| oman_tank_native_thin5min | temp | 196 | 0.291 | 1.250 |
+
+
+#### S4-J Oman events
+```json
+{
+ "events_mapped": 10,
+ "ledger_entries_final": 10,
+ "future_events_in_ledger_at_any_batch": 0,
+ "event_times_equal_model_times": true,
+ "types": {
+  "feeding": 6,
+  "water_change": 4
+ },
+ "food_grams_all_None": true,
+ "exceptions": {},
+ "events_report": {
+  "events_total": 40,
+  "events_in_tank_window": 14,
+  "kinds_in_window": {
+   "Feeding": 6,
+   "Water Change": 4,
+   "Other": 2,
+   "Actuator": 2
+  },
+  "mapped_to_production_types": 10,
+  "mapped_by_type": {
+   "FEEDING": 6,
+   "WATER_CHANGE": 4
+  }
+ },
+ "tank5min_ph_trusted_of_present": {
+  "no_events": 0.32426502852128125,
+  "with_events": 0.9052215884159719
+ },
+ "tank5min_temp_trusted_of_present": {
+  "no_events": 0.4449319877139096,
+  "with_events": 0.7086441421676174
+ }
+}
+```
+
+
+## Step 5: chemistry invariants on external replays
+
+
+#### S5-A external replays: pools and non-negativity (no feeding quantity exists, so pools must be 0)
+
+| run | inputs | tan_mg | no2_mg | no3_mg | last_tds_ppm | all_nonneg | pools_zero |
+|---|---|---|---|---|---|---|---|
+| fwi:ara2_0677080b:zeros-keep | 3,042 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_0f143c64:zeros-keep | 4,470 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_148f1633:zeros-keep | 2,298 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_176528d3:zeros-keep | 4,149 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_29660d32:zeros-keep | 5,592 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_3b2f3973:zeros-keep | 4,930 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_3eab831e:zeros-keep | 5,584 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_3ed4df8e:zeros-keep | 4,441 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_45e1cde5:zeros-keep | 4,414 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_4f79fc8d:zeros-keep | 4,436 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_573a2826:zeros-keep | 4,480 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_6ca69422:zeros-keep | 3,742 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_858b914c:zeros-keep | 2,338 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_b3d128ac:zeros-keep | 4,435 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_c9cdacda:zeros-keep | 5,477 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_ca187575:zeros-keep | 4,206 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| fwi:ara2_d52ddb31:zeros-keep | 4,458 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| oman:tank:5min+events(10: 6 feeding without quantity, 4 water changes) | 2,279 | 0.000 | 0.000 | 0.000 | 30.000 | 1 | 1 |
+| oman:open:5min | 904 | 0.000 | 0.000 | 0.000 | 0.000 | 1 | 1 |
+| idn_t:clean:tz-jakarta:thin15min | 1,738 | 0.000 | 0.000 | 0.000 | 376.000 | 1 | 1 |
+| idn_t:raw:tz-jakarta:thin15min | 3,933 | 0.000 | 0.000 | 0.000 | 376.000 | 1 | 1 |

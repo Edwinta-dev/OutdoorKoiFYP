@@ -1,0 +1,12 @@
+== F1  from_snapshot prunes daily buckets against the WALL CLOCK (data time is irrelevant)
+   buckets before: 3  after from_snapshot(snapshot of Jan-2026 data): 0   (machine clock: 2026-10-22 )
+== F2  rate check compares with the last TRUSTED value, which never updates: a sustained step latches
+   3 days at pH 7.60 after one 0.58 step (limit 0.25 per 15 min): {'suspect_rate': 288, 'ok': 3}  last trusted: {<SensorChannel.PH: 'ph'>: 7.02}
+   same series with a logged water change within 6 h: {'ok': 291}
+== F2b the limit scales with the time since the last SAMPLE, so dense data is almost all rejected
+   noise sd 0.03 pH, one reading per  1 min: ok fraction 0.300
+   noise sd 0.03 pH, one reading per 15 min: ok fraction 0.998
+== F4/F4b TdsPrompts.observe drops any reading with time <= last_reading_at
+   one poll with both rows -> [['2026-01-01T00:00:00+00:00', 400.0]] ; two polls -> [['2026-01-01T00:00:00+00:00', 300.0]] (PondTwin.sensor_channels uses the highest id: 400)
+== gate: 0 C is inside the temperature range, so a zeroed probe is only caught by the rate or stale rules
+   26.0 26.1 0 0 0 0 0 26.2 -> ['ok', 'ok', 'suspect_rate', 'suspect_rate', 'suspect_rate', 'suspect_stale', 'suspect_stale', 'ok']
