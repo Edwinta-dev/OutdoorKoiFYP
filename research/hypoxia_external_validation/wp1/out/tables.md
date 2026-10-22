@@ -87,6 +87,81 @@
 | idn_t:raw:tz-jakarta:thin15min | 3,373 | 53 | 21 | 10 | 3,373 | 53 | 21 | 10 | 15 | {"step": 12, "slope": 3} |
 
 
+## Step 3: metamorphic delivery tests
+
+
+#### S3-A verdict per subject family x delivery variant
+
+| family | chunk137 | chunk2000 | daily | delayed1 | delayed3 | delayed_beyond_window | dup_new_ids | dup_same_ids | restart | shuffle_chunks | shuffle_within |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| fwi:ara2_* | PASS x17 | PASS x17 | PASS x17 | PASS x17 | PASS x17 | PASS x17 | PASS x14, PASS(row_id identity only) x3 | PASS x17 | PASS x17 | PASS x17 | PASS x17 |
+| idn_t:clean:tz-jakarta:first120k | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS(row_id identity only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 |
+| idn_t:clean:tz-jakarta:thin15min | PASS x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | F4(tds_prompts only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | PASS x1 |
+| idn_t:raw:tz-jakarta:thin15min | F4(tds_prompts only) x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | F4(tds_prompts only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | PASS x1 |
+| idn_t:raw:tz-utc:thin15min | F4(tds_prompts only) x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | F4(tds_prompts only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | F4(tds_prompts only) x1 | PASS x1 |
+| oman:open:5min | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS(row_id identity only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 |
+| oman:tank:5min | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 |
+| oman:tank:5min+events | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 |
+| oman:tank:native:first30k | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 | PASS(row_id identity only) x1 | PASS x1 | PASS x1 | PASS x1 | PASS x1 |
+
+
+#### S3-B all subjects: verdict counts per variant
+
+| variant | F4(tds_prompts only) | PASS | PASS(row_id identity only) |
+|---|---|---|---|
+| chunk137 | 2 | 23 | 0 |
+| chunk2000 | 0 | 25 | 0 |
+| daily | 0 | 25 | 0 |
+| delayed1 | 3 | 22 | 0 |
+| delayed3 | 3 | 22 | 0 |
+| delayed_beyond_window | 0 | 25 | 0 |
+| dup_new_ids | 0 | 19 | 6 |
+| dup_same_ids | 0 | 25 | 0 |
+| restart | 0 | 25 | 0 |
+| shuffle_chunks | 3 | 22 | 0 |
+| shuffle_within | 0 | 25 | 0 |
+
+
+#### S3-C exposure per variant (summed over subjects)
+
+| variant | subjects | late | replayed | unplaced | exceptions | event_ids_equal | eff_times_equal |
+|---|---|---|---|---|---|---|---|
+| chunk137 | 25 | 0 | 63,494 | 0 | 0 | 1 | 1 |
+| chunk2000 | 25 | 0 | 2,279 | 0 | 0 | 1 | 1 |
+| daily | 25 | 0 | 1,650 | 0 | 0 | 1 | 1 |
+| delayed1 | 25 | 9,905 | 90,179 | 0 | 0 | 1 | 1 |
+| delayed3 | 25 | 9,919 | 56,184 | 1,024 | 0 | 1 | 1 |
+| delayed_beyond_window | 25 | 3,252 | 3,120 | 2,343 | 0 | 1 | 1 |
+| dup_new_ids | 25 | 27,651 | 54,155 | 343 | 0 | 1 | 1 |
+| dup_same_ids | 25 | 25,091 | 27,276 | 94 | 0 | 1 | 1 |
+| restart | 25 | 0 | 2,279 | 0 | 0 | 1 | 1 |
+| shuffle_chunks | 25 | 78,777 | 51,471 | 29,585 | 0 | 1 | 1 |
+| shuffle_within | 25 | 0 | 2,279 | 0 | 0 | 1 | 1 |
+
+
+Checked extra checkpoints (variant-only): 36; all validated equal to the in-order prefix state: True; checkpoints present in the reference but missing in a variant: 0; common checkpoints with different content: 0.
+
+
+MISMATCH rows (anything other than PASS / row_id identity / tds_prompts only): 0
+
+
+#### S3-E rows whose only difference is tds_prompts state
+
+| subject | variant | late_inputs | replayed_inputs | n_diff_paths_core |
+|---|---|---|---|---|
+| idn_t:clean:tz-jakarta:thin15min | shuffle_chunks | 1,323 | 338 | 24 |
+| idn_t:clean:tz-jakarta:thin15min | delayed1 | 156 | 1,573 | 8 |
+| idn_t:clean:tz-jakarta:thin15min | delayed3 | 157 | 1,397 | 8 |
+| idn_t:raw:tz-jakarta:thin15min | chunk137 | 0 | 4,310 | 107 |
+| idn_t:raw:tz-jakarta:thin15min | shuffle_chunks | 3,375 | 1,616 | 45 |
+| idn_t:raw:tz-jakarta:thin15min | delayed1 | 384 | 3,817 | 106 |
+| idn_t:raw:tz-jakarta:thin15min | delayed3 | 387 | 3,667 | 106 |
+| idn_t:raw:tz-utc:thin15min | chunk137 | 0 | 4,310 | 107 |
+| idn_t:raw:tz-utc:thin15min | shuffle_chunks | 3,375 | 1,616 | 45 |
+| idn_t:raw:tz-utc:thin15min | delayed1 | 384 | 3,817 | 106 |
+| idn_t:raw:tz-utc:thin15min | delayed3 | 387 | 3,667 | 106 |
+
+
 ## SYN fixtures (D-tier)
 
 
