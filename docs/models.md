@@ -176,6 +176,22 @@ sensor node and the last wake the camera was given. A channel flagged by
 the sensor gate's existing stale-run rule (`_STALE_RUN_LENGTH`, 4 equal
 values) also reduces confidence.
 
+## Sensor rate gate recovery (issue #127)
+
+`Backend/koi/models/engine.py::SensorGate` measures a rate-limited channel's
+allowed change from the timestamp of its last trusted value. A rejected
+suspect does not move that timestamp, so the allowance grows while a sustained
+new level is observed. The pH rate remains 1.0 pH/hour
+(`Backend/koi/models/engine.py::_BOUNDS`); no model constant changed. With
+15-minute samples, a sustained 0.58 pH step that starts just after a trusted
+sample is accepted within 45 minutes of the step (at most three sample
+intervals), rather than remaining latched. A single reading at that new level
+is still suspect. Logged water-change/top-up exemptions remain in place.
+
+Snapshots store per-channel trusted timestamps under `last_trusted_time`.
+Older snapshots lack those timestamps and use the previous sample-interval
+calculation until a channel next becomes trusted.
+
 ## Camera obstruction off-ramp (issue #80)
 
 Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/camera.py`.

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from koi.models import algae_engine, forecast_utils
 from koi.models import evaporation_engine as ev
+from koi.models.engine import RawSample, SampleVerdict, SensorGate
 
 PAYLOAD = json.loads("""
 {
@@ -66,6 +67,50 @@ AENV = [
 ]
 
 T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+
+def gate_sample(gate, time, ph):
+    return gate.validate(RawSample(time, ph, None, None, None)).ph.verdict
+
+
+def test_sensor_gate_rate_latch_recovers_after_sustained_step():
+    gate = SensorGate(lambda _: False)
+    for i, ph in enumerate((7.02, 7.03, 7.01, 7.02)):
+        assert gate_sample(gate, T0 + timedelta(minutes=15 * i), ph) == SampleVerdict.OK
+
+    first_step = T0 + timedelta(minutes=60)
+    assert gate_sample(gate, first_step, 7.60) == SampleVerdict.SUSPECT_RATE
+    recovered = None
+    # At 1.0 pH/hour, the 0.58 change is allowed after 34.8 minutes.
+    for minute in range(15, 24 * 60 * 3 + 1, 15):
+        verdict = gate_sample(gate, first_step + timedelta(minutes=minute), 7.60)
+        if verdict == SampleVerdict.OK:
+            recovered = minute
+            break
+    assert recovered == 30
+
+
+def test_sensor_gate_keeps_single_sample_spike_suspect():
+    gate = SensorGate(lambda _: False)
+    assert gate_sample(gate, T0, 7.02) == SampleVerdict.OK
+    assert gate_sample(gate, T0 + timedelta(minutes=15), 7.60) == SampleVerdict.SUSPECT_RATE
+    assert gate_sample(gate, T0 + timedelta(minutes=30), 7.02) == SampleVerdict.OK
+
+
+def test_sensor_gate_logged_event_exemption_and_snapshot_compatibility():
+    event_gate = SensorGate(lambda _: True)
+    assert gate_sample(event_gate, T0, 7.02) == SampleVerdict.OK
+    assert gate_sample(event_gate, T0 + timedelta(minutes=15), 7.60) == SampleVerdict.OK
+
+    snapshot = event_gate.to_snapshot()
+    restored = SensorGate.from_snapshot(snapshot, lambda _: False)
+    assert restored.to_snapshot() == snapshot
+    legacy_gate = SensorGate(lambda _: False)
+    assert gate_sample(legacy_gate, T0, 7.02) == SampleVerdict.OK
+    legacy = legacy_gate.to_snapshot()
+    legacy.pop("last_trusted_time")
+    restored_legacy = SensorGate.from_snapshot(legacy, lambda _: False)
+    assert gate_sample(restored_legacy, T0 + timedelta(minutes=15), 7.60) == SampleVerdict.SUSPECT_RATE
 # True doubling every ~3.5 days -> mu = ln(2)/3.5 = 0.198/day
 TRUE_MU = 0.198
 BLOOM = [

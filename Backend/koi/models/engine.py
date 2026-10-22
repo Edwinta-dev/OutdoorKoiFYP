@@ -119,6 +119,7 @@ class SensorGate:
     def __init__(self, has_volume_event_nearby: Callable[[datetime], bool]):
         self.has_volume_event_nearby = has_volume_event_nearby
         self._last_trusted: dict = {}
+        self._last_trusted_time: dict = {}
         self._last_raw_seen: dict = {}
         self._run_length: dict = {}
         self._last_sample_time: Optional[datetime] = None
@@ -187,7 +188,11 @@ class SensorGate:
             prior = self._last_trusted.get(channel)
             if prior is not None:
                 delta = abs(value - prior)
-                allowed_delta = max_rate * hours
+                trusted_time = self._last_trusted_time.get(channel)
+                elapsed_hours = hours
+                if trusted_time is not None:
+                    elapsed_hours = (time - trusted_time).total_seconds() / 3600.0
+                allowed_delta = max_rate * elapsed_hours
                 if delta > allowed_delta and not self.has_volume_event_nearby(time):
                     return ChannelReading(
                         prior, value, SampleVerdict.SUSPECT_RATE,
@@ -197,12 +202,14 @@ class SensorGate:
                     )
 
         self._last_trusted[channel] = value
+        self._last_trusted_time[channel] = time
         return ChannelReading(value, value, SampleVerdict.OK)
 
     # --- serialization for durability across process restarts ---
     def to_snapshot(self) -> dict:
         return {
             "last_trusted": {k.value: v for k, v in self._last_trusted.items()},
+            "last_trusted_time": {k.value: v.isoformat() for k, v in self._last_trusted_time.items()},
             "last_raw_seen": {k.value: v for k, v in self._last_raw_seen.items()},
             "run_length": {k.value: v for k, v in self._run_length.items()},
             "last_sample_time": self._last_sample_time.isoformat() if self._last_sample_time else None,
@@ -212,6 +219,10 @@ class SensorGate:
     def from_snapshot(cls, snapshot: dict, has_volume_event_nearby) -> "SensorGate":
         gate = cls(has_volume_event_nearby)
         gate._last_trusted = {SensorChannel(k): v for k, v in snapshot.get("last_trusted", {}).items()}
+        gate._last_trusted_time = {
+            SensorChannel(k): datetime.fromisoformat(v)
+            for k, v in snapshot.get("last_trusted_time", {}).items()
+        }
         gate._last_raw_seen = {SensorChannel(k): v for k, v in snapshot.get("last_raw_seen", {}).items()}
         gate._run_length = {SensorChannel(k): v for k, v in snapshot.get("run_length", {}).items()}
         ts = snapshot.get("last_sample_time")
