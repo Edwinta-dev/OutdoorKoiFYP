@@ -1,0 +1,6 @@
+date,run,reason,note
+2018-12-31,5,21 rows missing air temp; 20 rows missing RH,drop still usable as persistence input
+2019-01-01,5,20 rows missing air temp; 19 rows missing RH,drop still usable as persistence input
+2019-01-07,6,22 rows missing air temp; 22 rows missing RH,drop still usable as persistence input
+2019-01-08,6,18 rows missing air temp; 18 rows missing RH,drop still usable as persistence input
+2019-01-09,6,22 rows missing air temp; 22 rows missing RH,drop still usable as persistence input

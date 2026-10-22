@@ -1,0 +1,13 @@
+run,hours,status,reason,lag,offset,n_eval,rmse,bias,persist,default,train_from,eval_from,eval_to
+1,48,Blocked,"not_enough_overlap (usable_hours=36, required_hours=72)",,,,,,,,,,
+2,216,fitted,,2.0,0.2429,62,1.2414,0.6269,3.4927,2.1142,2016-12-11 12:00:00,2016-12-17 10:00:00,2016-12-20 00:00:00
+3,48,Blocked,"not_enough_overlap (usable_hours=36, required_hours=72)",,,,,,,,,,
+4,96,fitted,,1.0,0.6669,26,0.8171,0.5231,0.4337,1.3278,2017-06-07 12:00:00,2017-06-09 22:00:00,2017-06-11 00:00:00
+5,48,Blocked,"not_enough_overlap (usable_hours=12, required_hours=72)",,,,,,,,,,
+6,72,Blocked,"not_enough_overlap (usable_hours=20, required_hours=72)",,,,,,,,,,
+7,72,Blocked,"not_enough_overlap (usable_hours=60, required_hours=72)",,,,,,,,,,
+8,144,fitted,,2.0,-0.1465,40,2.2138,-0.4203,1.1917,2.864,2019-01-22 12:00:00,2019-01-26 08:00:00,2019-01-28 00:00:00
+9,96,fitted,,3.0,0.5603,26,0.8646,-0.2749,1.9696,2.2638,2019-02-07 12:00:00,2019-02-09 22:00:00,2019-02-11 00:00:00
+10,48,Blocked,"not_enough_overlap (usable_hours=36, required_hours=72)",,,,,,,,,,
+11,48,Blocked,"not_enough_overlap (usable_hours=36, required_hours=72)",,,,,,,,,,
+12,24,Blocked,"not_enough_overlap (usable_hours=12, required_hours=72)",,,,,,,,,,
