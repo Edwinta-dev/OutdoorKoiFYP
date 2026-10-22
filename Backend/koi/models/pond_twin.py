@@ -71,6 +71,7 @@ from koi.models import algae_engine as ae
 from koi.models import evaporation_engine as ev
 from koi.models import event_ledger as el
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine, salt_tds_step
+from koi.models.hypoxia_state import HypoxiaState
 from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
 from koi.models.sensor_inputs import SensorInput, merge_inputs, parse_timestamp
@@ -78,7 +79,7 @@ from koi.models.tds_prompts import TdsPrompts
 
 log = logging.getLogger(__name__)
 
-SNAPSHOT_VERSION = 6
+SNAPSHOT_VERSION = 7
 
 # Ledgered sensor inputs with a time in (after, until], oldest first
 # (EngineRegistry.sensor_history): what a replay reads back.
@@ -117,6 +118,7 @@ class PondTwin:
         # (event_ledger.py). A new twin has a genesis checkpoint.
         self.ledger = el.EventLedger()
         self.tds_prompts = TdsPrompts()
+        self.hypoxia_state = HypoxiaState()
         self.ledger.add_checkpoint(el.Checkpoint(None, self._chemistry_checkpoint(None)))
 
     # ----------------------------------------------------------
@@ -705,6 +707,7 @@ class PondTwin:
             },
             "event_ledger": self.ledger.to_dict(),
             "tds_prompts": self.tds_prompts.to_dict(),
+            "hypoxia_state": self.hypoxia_state.to_dict(),
         }
 
     @classmethod
@@ -715,6 +718,7 @@ class PondTwin:
     ) -> "PondTwin":
         """Rehydrates a twin, tolerating these shapes:
 
+          v7  - adds bounded hypoxia feature history; v6 and older load empty
           v6  - the algae engine keeps GCC frames, its last baseline reset
                 and its GCC tuning (issue #92); AlgaeGrowthEngine.from_snapshot
                 loads an algae block without them
@@ -780,6 +784,8 @@ class PondTwin:
         twin.last_input_at = parse_timestamp(last) if last else None
         twin._load_ledger(snapshot)
         twin.tds_prompts = TdsPrompts.from_dict(snapshot.get("tds_prompts") or {})
+        twin.hypoxia_state = HypoxiaState.from_dict(
+            snapshot.get("hypoxia_state") if snapshot.get("version", 0) >= 7 else None)
         return twin
 
     def _load_ledger(self, snapshot: dict) -> None:

@@ -276,7 +276,7 @@ def test_old_snapshots_load_and_save_as_the_new_version():
     twin = PondTwin.from_snapshot({**PondTwin.create(_twin_config()).to_snapshot(), "version": 5,
                                    "algae": algae_v5})
     assert twin.algae.green_ratio == .04
-    assert twin.to_snapshot()["version"] == SNAPSHOT_VERSION == 6
+    assert twin.to_snapshot()["version"] == SNAPSHOT_VERSION == 7
 
 
 def test_snapshot_round_trip_keeps_gcc_frames_reset_and_config():

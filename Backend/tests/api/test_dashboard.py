@@ -257,8 +257,27 @@ def test_dashboard_read_has_no_side_effects(scenario_app, clock):
     app, storage, client = scenario_app
     before = {table: storage.rows(table) for table in storage._tables}
     assert client.get("/v1/ponds/9101/dashboard").status_code == 200
+    assert client.get("/v1/ponds/9101/assessments").get_json()["hypoxia"]["level"] == "unknown"
     assert {table: storage.rows(table) for table in storage._tables} == before
     assert storage.fetch_snapshot_version(9101) == 0
+    assert client.get("/v1/ponds/9101/dashboard").get_json()["assessments"]["hypoxia"]["level"] == "unknown"
+
+
+def test_hypoxia_api_reads_snapshot_history_like_worker(scenario_app, clock):
+    from koi.models.hypoxia import assess_hypoxia
+    from koi.models.hypoxia_state import HypoxiaState
+
+    _, storage, client = scenario_app
+    state = HypoxiaState()
+    state.add(NOW - timedelta(hours=24), 7.5, 29.5)
+    storage.save_engine_snapshot(9101, {"version": 7, "hypoxia_state": state.to_dict()})
+
+    expected = assess_hypoxia(now=NOW, ph=7.5, water_temp_c=29.5,
+                              history_hours=state.history_hours(NOW)).to_dict()
+    dashboard = client.get("/v1/ponds/9101/dashboard").get_json()["assessments"]["hypoxia"]
+    combined = client.get("/v1/ponds/9101/assessments").get_json()["hypoxia"]
+    assert dashboard == expected
+    assert combined == expected
 
 
 def test_dashboard_other_pond_is_forbidden(scenario_app, clock):

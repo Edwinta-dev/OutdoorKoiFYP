@@ -346,10 +346,18 @@ windowed trend forward (`projection_method: windowed_gcc_trend`, with
 `SCRUB_REMOVAL_EFFICIENCY` (0.70, unchanged) of the excess over the quiet
 level. The legacy path reports `projection_method: logistic`.
 
-**Snapshot.** Twin snapshot version 6 (`pond_twin.py::SNAPSHOT_VERSION`)
+**Snapshot.** Twin snapshot version 7 (`pond_twin.py::SNAPSHOT_VERSION`)
 adds `gcc_frames`, `baseline_reset` and `signal_config` to the algae block.
 Older algae blocks load with none of them: the green_ratio path runs until
 GCC frames arrive, and the next batch's newest reset restarts the engine.
+
+The same v7 snapshot carries `hypoxia_state`: first accepted fresh pH and
+water-temperature time plus one latest sample per one-hour bin, capped at
+14 days (336 samples; `hypoxia_state.py::HISTORY_SPAN_DAYS`,
+`HISTORY_BIN_HOURS`, `HISTORY_SAMPLE_CAP`). Samples older than the retained
+span are discarded first. v6 and older snapshots start with empty hypoxia
+history, so the overnight advisory stays unknown until 24 hours of fresh
+readings accrue (`hypoxia.py::WARMUP_HOURS`).
 
 **Camera state machine.** Unchanged: the dynamic / obstruction states still
 run on green_ratio. No stored pond 455 frames are available to this

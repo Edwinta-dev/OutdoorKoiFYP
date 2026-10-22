@@ -314,7 +314,8 @@ def build_forecast(forecasts: list[dict], stations: dict[str, Optional[str]], no
 # ---------------------------------------------------------------------
 def build_dashboard(*, pond_id: int, sources: dict, chemistry: Optional[dict], evaporation: Optional[dict],
                     algae: Optional[dict], aeration: Optional[bool], hypoxia_thresholds: Any,
-                    now: datetime, next_actions: Optional[list[dict[str, Any]]] = None) -> r.Dashboard:
+                    now: datetime, next_actions: Optional[list[dict[str, Any]]] = None,
+                    history_hours: float = 0) -> r.Dashboard:
     stations = _stations(sources.get("stations"))
     readings = build_readings(list(sources.get("readings") or []), now)
     telemetry = list(sources.get("telemetry") or [])
@@ -324,7 +325,7 @@ def build_dashboard(*, pond_id: int, sources: dict, chemistry: Optional[dict], e
         return reading.value if reading.status == "ok" else None
 
     hypoxia = assess_hypoxia(now=now, ph=fresh(readings.ph), water_temp_c=fresh(readings.water_temp),
-                             history_hours=0).to_dict()
+                             history_hours=history_hours).to_dict()
     return r.Dashboard(
         pond_id=pond_id,
         stations=r.StationAssignment(**stations),

@@ -175,7 +175,7 @@ def test_twin_snapshot_keeps_channel_readings_and_v2_loads_without_them():
     twin = PondTwin.create(_config())
     twin.ingest_sensor_inputs(group_rows(upload(1, T0, pH=7.6, temp=29.0)).inputs)
     snap = json.loads(json.dumps(twin.to_snapshot()))
-    assert snap["version"] == SNAPSHOT_VERSION == 6
+    assert snap["version"] == SNAPSHOT_VERSION == 7
     again = PondTwin.from_snapshot(snap)
     assert again.sensor_channels == twin.sensor_channels and again.last_input_at == T0
     assert again.sensor_channels["ph"] == {"value": 7.6, "reading_at": T0.isoformat(), "time_basis": "ingestion",
@@ -185,7 +185,21 @@ def test_twin_snapshot_keeps_channel_readings_and_v2_loads_without_them():
     assert old["version"] == 2 and "sensor_inputs" not in old
     loaded = PondTwin.from_snapshot(old)
     assert loaded.sensor_channels == {} and loaded.last_input_at is None
+    assert loaded.hypoxia_state.first_seen_at is None
     assert loaded.to_snapshot()["sensor_inputs"] == {"channels": {}, "last_input_at": None}
+
+
+def test_hypoxia_state_round_trips_and_legacy_snapshots_start_empty():
+    twin = PondTwin.create(_config())
+    twin.ingest_sensor_inputs(group_rows(upload(1, T0, pH=7.6, temp=29.0)).inputs)
+    snap = json.loads(json.dumps(twin.to_snapshot()))
+    loaded = PondTwin.from_snapshot(snap)
+    assert loaded.hypoxia_state.to_dict() == twin.hypoxia_state.to_dict()
+    snap["version"] = 6
+    snap.pop("hypoxia_state")
+    assert PondTwin.from_snapshot(snap).hypoxia_state.first_seen_at is None
+    bare = json.loads(OLD_SNAPSHOT.read_text(encoding="utf-8"))
+    assert PondTwin.from_snapshot(bare).hypoxia_state.first_seen_at is None
 
 
 def test_a_late_input_is_applied_at_the_last_input_time_and_marked():

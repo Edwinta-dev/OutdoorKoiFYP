@@ -439,7 +439,12 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         # temperature stands in for the algae and nitrate terms, and
         # evaporation and the hypoxia flag get no measured value.
         freshness = channel_freshness(twin.sensor_channels, now, cadence)
+        fresh_ph = fresh_value(freshness, "ph")
         water_temp = fresh_value(freshness, "temp")
+        if fresh_ph is not None and water_temp is not None:
+            ph_at = parse_timestamp(twin.sensor_channels["ph"]["reading_at"])
+            temp_at = parse_timestamp(twin.sensor_channels["temp"]["reading_at"])
+            twin.hypoxia_state.add(max(ph_at, temp_at), fresh_ph, water_temp, now=now)
         model_temp = water_temp if water_temp is not None else float(air_temp)
         light = fresh_value(freshness, "lux")
         lux_now = _first_not_none(now_conditions.get("lux"), light, 10000.0)
@@ -527,8 +532,8 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         # Overnight hypoxia advisory from the pond's fresh pH and water
         # temperature; unknown while either is stale or history is warming up.
         outcome["hypoxia"] = assess_hypoxia(
-            now=now, ph=fresh_value(freshness, "ph"),
-            water_temp_c=fresh_value(freshness, "temp"), history_hours=0,
+            now=now, ph=fresh_ph,
+            water_temp_c=water_temp, history_hours=twin.hypoxia_state.history_hours(now),
         )
 
         outcome["events"] = events

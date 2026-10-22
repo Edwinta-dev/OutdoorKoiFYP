@@ -78,6 +78,7 @@ from koi.models import device_health, forecast_utils, ladder, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
 from koi.models.hypoxia import assess_hypoxia
+from koi.models.hypoxia_state import HypoxiaState
 from koi.models.local_time import local_date
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
@@ -834,13 +835,15 @@ def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
     latest fresh pH and water temperature readings, with the same freshness
     rule as /dashboard. A missing or stale reading gives level "unknown"
     rather than an error."""
-    now = datetime.now(timezone.utc)
+    now = schemas.utc_now()
     sources = fail_soft(lambda: _storage().fetch_dashboard_sources(user_id), None) or {}
+    snapshot = fail_soft(lambda: _storage().load_engine_snapshot(user_id), None)
     readings = build_readings(list(sources.get("readings") or []), now)
     def fresh(reading):
         return reading.value if reading.status == "ok" else None
     return assess_hypoxia(
-        now=now, ph=fresh(readings.ph), water_temp_c=fresh(readings.water_temp), history_hours=0,
+        now=now, ph=fresh(readings.ph), water_temp_c=fresh(readings.water_temp),
+        history_hours=HypoxiaState.from_dict(snapshot.get("hypoxia_state") if snapshot else None).history_hours(now),
     ).to_dict()
 
 
@@ -1074,6 +1077,8 @@ def get_dashboard(user_id):
         "algae": fail_soft(lambda: _storage().fetch_latest_algae_evaluation(user_id), None),
     }
     _with_confidence(user_id, assessments, now=now)
+    snapshot = fail_soft(lambda: _storage().load_engine_snapshot(user_id), None)
+    history_hours = HypoxiaState.from_dict(snapshot.get("hypoxia_state") if snapshot else None).history_hours(now)
     dashboard = build_dashboard(
         pond_id=user_id,
         sources=sources,
@@ -1081,6 +1086,7 @@ def get_dashboard(user_id):
         aeration=profiles.at(now).aeration if profiles is not None else None,
         hypoxia_thresholds=_registry().hypoxia_thresholds,
         now=now,
+        history_hours=history_hours,
         next_actions=action_payload["actions"],
     )
     return jsonify(dashboard.model_dump(mode="json")), 200
