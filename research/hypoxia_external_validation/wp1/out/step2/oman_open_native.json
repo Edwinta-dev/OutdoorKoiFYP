@@ -1,0 +1,154 @@
+{
+ "name": "oman:open:native",
+ "batches": 42,
+ "rows_in": 83326,
+ "rows_unknown_type": 0,
+ "inputs": 41122,
+ "dispositions": {
+  "applied": 82244,
+  "superseded": 1082
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 41122
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 1.117,
+  "engine.SensorGate(standalone)": 0.988,
+  "pond_twin.ingest_sensor_inputs": 2.489,
+  "tds_prompts.observe": 0.012,
+  "device_health.assess_confidence": 0.004,
+  "pond_twin.snapshot": 0.021
+ },
+ "snapshots": {
+  "count": 8,
+  "max_bytes": 13946,
+  "roundtrip_identical": 8,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-04-27T18:15:35.227306+00:00",
+ "gate": {
+  "ph": {
+   "present": 41122,
+   "verdicts": {
+    "ok": 628,
+    "suspect_rate": 39714,
+    "suspect_stale": 38,
+    "rejected": 742
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 41122
+   }
+  },
+  "temp": {
+   "present": 41122,
+   "verdicts": {
+    "ok": 1509,
+    "suspect_stale": 23713,
+    "suspect_rate": 15900
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 41122
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.015271630757258889,
+   "trusted_fraction_of_present": 0.015271630757258889
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.03669568600748991,
+   "trusted_fraction_of_present": 0.03669568600748991
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "reduced": 25,
+   "high": 17
+  },
+  "evaporation": {
+   "reduced": 25,
+   "high": 17
+  },
+  "algae": {
+   "reduced": 25,
+   "high": 17
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Muscat",
+  "tz_status": "documented (GMT+4)",
+  "volume_l": null,
+  "volume_source": "unknown (open pond)",
+  "cadence_s_assumed": 6,
+  "which": "open",
+  "grid": "native",
+  "source_rows": 41663,
+  "rows_after_grid": 41663,
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false
+ },
+ "local_time": {
+  "unique_instants": 41122,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 10,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 6,
+  "contacts": 41122,
+  "pairs_with_missed": 607,
+  "missed_total_pairwise": 418340,
+  "missed_total_whole_window": 418340,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 6.747838,
+  "gap_s_p99": 10.07371520000004,
+  "gap_s_max": 1561254.706926
+ },
+ "final_state": {
+  "hash": "427837ff9f49aad5",
+  "hash_state": "427837ff9f49aad5",
+  "bytes": 13946,
+  "channels": {
+   "ph": "2026-04-27T18:15:35.227306+00:00",
+   "temp": "2026-04-27T18:15:35.227306+00:00"
+  },
+  "checkpoints": 10,
+  "gate_run_length": {
+   "ph": 1,
+   "temp": 6
+  }
+ },
+ "wall_s": 6.73
+}

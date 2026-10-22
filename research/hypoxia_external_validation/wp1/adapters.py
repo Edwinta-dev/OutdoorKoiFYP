@@ -25,6 +25,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,10 +35,22 @@ UTC = timezone.utc
 FWI_ZERO_POLICIES = ("keep", "absent")
 
 
+def thinned(spec: "SourceSpec", seconds: int) -> "SourceSpec":
+    """Same source, delivered at a coarser cadence (real rows only). Named assumption
+    for cadence-mismatch sensitivity; cadence_s is set to `seconds`."""
+    import copy
+    s2 = copy.copy(spec)
+    s2.rows = spec.rows.thin(seconds)
+    s2.name = spec.name + f":thin{seconds // 60}min"
+    s2.cadence_s = seconds
+    s2.meta = {**spec.meta, "thinned_to_s": seconds, "rows_after_thin": len(s2.rows)}
+    return s2
+
+
 @dataclass
 class SourceSpec:
     name: str
-    rows: list
+    rows: "RowTable"
     time_zone: str                 # IANA zone used to interpret the source's local clock
     tz_status: str                 # documented | ASSUMED | UNKNOWN-assumed
     cadence_s: int                 # expected seconds between uploads (device_health interval)
@@ -46,31 +59,85 @@ class SourceSpec:
     meta: dict = field(default_factory=dict)
 
 
-def _row(i: int, sensor_type: str, value: float, t) -> dict:
-    return {"id": int(i), "sensor_type": sensor_type, "value": float(value), "created_at": t, "sampled_at": t,
-            "flags": None, "device_id": None, "boot_id": None, "cycle_seq": None}
+TYPES = ("pH", "temp", "TDS")  # sensor_type spellings emitted (production spellings)
 
 
-def _utc_pydt(local_naive: pd.Series, tz: str):
-    """Naive local timestamps -> aware UTC python datetimes."""
-    aware = pd.DatetimeIndex(local_naive).tz_localize(tz).tz_convert("UTC")
-    return list(aware.to_pydatetime())
+class RowTable:
+    """Columnar store of SensorData-shaped rows (memory: the full IDN-T raw file is
+    ~1.5 M rows, too many dicts for this machine). Rows materialise as dicts only
+    when sliced/iterated: {id, sensor_type, value, created_at, sampled_at, flags,
+    device_id, boot_id, cycle_seq}."""
+
+    def __init__(self, ids, tcode, vals, tns):
+        self.ids = np.asarray(ids, dtype=np.int64)
+        self.tcode = np.asarray(tcode, dtype=np.int8)
+        self.vals = np.asarray(vals, dtype=np.float64)
+        self.tns = np.asarray(tns, dtype=np.int64)  # UTC epoch nanoseconds
+
+    def __len__(self):
+        return len(self.ids)
+
+    def take(self, idx) -> list:
+        idx = np.asarray(idx, dtype=np.int64)
+        if len(idx) == 0:
+            return []
+        times = list(pd.to_datetime(self.tns[idx], unit="ns", utc=True).to_pydatetime())
+        ids, tc, vals = self.ids[idx].tolist(), self.tcode[idx].tolist(), self.vals[idx].tolist()
+        return [{"id": ids[j], "sensor_type": TYPES[tc[j]], "value": vals[j], "created_at": times[j],
+                 "sampled_at": times[j], "flags": None, "device_id": None, "boot_id": None, "cycle_seq": None}
+                for j in range(len(ids))]
+
+    def __getitem__(self, k):
+        if isinstance(k, slice):
+            return self.take(np.arange(len(self))[k])
+        return self.take([k % len(self)])[0]
+
+    def __iter__(self):
+        for a in range(0, len(self), 50000):
+            yield from self.take(np.arange(a, min(a + 50000, len(self))))
+
+    def subset(self, idx) -> "RowTable":
+        idx = np.asarray(idx)
+        return RowTable(self.ids[idx], self.tcode[idx], self.vals[idx], self.tns[idx])
+
+    def sorted_by_time(self) -> "RowTable":
+        """Scan order of the poller: (created_at, id)."""
+        return self.subset(np.lexsort((self.ids, self.tns)))
+
+    def thin(self, seconds: int) -> "RowTable":
+        """Keep, per `seconds`-bin of the clock, only the rows of the bin's LAST
+        distinct sample instant (existing rows, nothing averaged). Gives the
+        production-like 15-minute cadence from minute/second-rate sources."""
+        inst = np.unique(self.tns)
+        b = inst // (seconds * 10**9)
+        last = np.r_[b[1:] != b[:-1], True]
+        return self.subset(np.nonzero(np.isin(self.tns, inst[last]))[0])
+
+    def concat(self, other: "RowTable") -> "RowTable":
+        return RowTable(*(np.concatenate([a, b]) for a, b in
+                          ((self.ids, other.ids), (self.tcode, other.tcode), (self.vals, other.vals), (self.tns, other.tns))))
 
 
-def build_rows(times_utc: list, base_ids, channels: dict[str, pd.Series]) -> list[dict]:
+def _utc_index(local_naive, tz: str) -> pd.DatetimeIndex:
+    """Naive local timestamps -> tz-aware UTC DatetimeIndex."""
+    return pd.DatetimeIndex(local_naive).tz_localize(tz).tz_convert("UTC")
+
+
+def build_rows(times_utc: pd.DatetimeIndex, base_ids, channels: dict) -> RowTable:
     """channels: sensor_type -> float Series aligned to times_utc; NaN -> no row.
-    The k-th channel of source row i gets id base_ids[i]*4 + k (k in 0..3), so
-    ids are unique and ordered by source row."""
-    rows: list[dict] = []
-    for k, (stype, series) in enumerate(channels.items()):
+    The channel of source row i gets id base_ids[i]*4 + TYPES.index(type), so ids are
+    unique and ordered by source row. Result is in id order."""
+    tns = times_utc.as_unit("ns").asi8
+    base = np.asarray(base_ids, dtype=np.int64)
+    parts = []
+    for stype, series in channels.items():
+        k = TYPES.index(stype)
         vals = series.to_numpy(dtype=float)
-        for i in range(len(times_utc)):
-            v = vals[i]
-            if v != v:  # NaN
-                continue
-            rows.append(_row(int(base_ids[i]) * 4 + k, stype, v, times_utc[i]))
-    rows.sort(key=lambda r: r["id"])
-    return rows
+        keep = ~np.isnan(vals)
+        parts.append((base[keep] * 4 + k, np.full(int(keep.sum()), k), vals[keep], tns[keep]))
+    ids, tc, vals, t = (np.concatenate([p[j] for p in parts]) for j in range(4))
+    order = np.argsort(ids, kind="stable")
+    return RowTable(ids[order], tc[order], vals[order], t[order])
 
 
 # ----------------------------------------------------------------------
@@ -101,7 +168,7 @@ def fwi_source(pond: str, zero_policy: str = "keep", frame: Optional[pd.DataFram
     if zero_policy == "absent":
         ph[ph == 0] = float("nan")
         temp[temp == 0] = float("nan")
-    times = _utc_pydt(d["t_local"], "Asia/Kolkata")
+    times = _utc_index(d["t_local"], "Asia/Kolkata")
     rows = build_rows(times, d["src_index"].to_numpy(), {"pH": ph, "temp": temp})
     return SourceSpec(
         name=f"fwi:{pond}:zeros-{zero_policy}", rows=rows, time_zone="Asia/Kolkata", tz_status="documented (IST)",
@@ -136,7 +203,7 @@ def oman_source(which: str, grid: str = "native", frame: Optional[pd.DataFrame] 
         d = d.groupby(d["t_local"].dt.floor("5min"), sort=True).tail(1).sort_values("src_index")
     elif grid != "native":
         raise ValueError(grid)
-    times = _utc_pydt(d["t_local"], OMAN_TZ)
+    times = _utc_index(d["t_local"], OMAN_TZ)
     rows = build_rows(times, d["src_index"].to_numpy(),
                       {"pH": d["ph"].astype(float), "temp": d["temp_c"].astype(float)})
     tank = which == "tank"
@@ -219,7 +286,7 @@ def idn_source(which: str = "raw", tz_assumption: str = "jakarta", frame: Option
     channel collide in one sensor_inputs group (highest id wins, rest superseded)."""
     d = frame if frame is not None else load_idn_frame(which)
     tz = IDN_TZ_ASSUMPTIONS[tz_assumption]
-    times = _utc_pydt(d["t_local"], tz)
+    times = _utc_index(d["t_local"], tz)
     rows = build_rows(times, d["id"].to_numpy(),
                       {"pH": d["water_pH"].astype(float), "TDS": d["TDS"].astype(float),
                        "temp": d["water_temp"].astype(float)})

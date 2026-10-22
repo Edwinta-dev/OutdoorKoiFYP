@@ -1,0 +1,176 @@
+{
+ "name": "idn_t:clean:tz-jakarta:thin15min",
+ "batches": 13,
+ "rows_in": 25317,
+ "rows_unknown_type": 0,
+ "inputs": 1738,
+ "dispositions": {
+  "applied": 5214,
+  "superseded": 20103
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 1738
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 0.242,
+  "engine.SensorGate(standalone)": 0.049,
+  "pond_twin.ingest_sensor_inputs": 0.132,
+  "tds_prompts.observe": 0.192,
+  "device_health.assess_confidence": 0.001,
+  "pond_twin.snapshot": 0.127
+ },
+ "snapshots": {
+  "count": 13,
+  "max_bytes": 52998,
+  "roundtrip_identical": 13,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2023-03-22T10:53:00+00:00",
+ "gate": {
+  "ph": {
+   "present": 1738,
+   "verdicts": {
+    "ok": 950,
+    "suspect_rate": 786,
+    "suspect_stale": 2
+   }
+  },
+  "tds": {
+   "present": 1738,
+   "verdicts": {
+    "ok": 1665,
+    "suspect_stale": 65,
+    "suspect_rate": 8
+   }
+  },
+  "temp": {
+   "present": 1738,
+   "verdicts": {
+    "ok": 1453,
+    "suspect_stale": 285
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 1738
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.5466052934407365,
+   "trusted_fraction_of_present": 0.5466052934407365
+  },
+  "tds": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.9579976985040276,
+   "trusted_fraction_of_present": 0.9579976985040276
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.836018411967779,
+   "trusted_fraction_of_present": 0.836018411967779
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "high": 12,
+   "reduced": 1
+  },
+  "evaporation": {
+   "high": 12,
+   "reduced": 1
+  },
+  "algae": {
+   "high": 12,
+   "reduced": 1
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Jakarta",
+  "tz_status": "UNKNOWN in dataset; ASSUMED Asia/Jakarta",
+  "volume_l": 700.0,
+  "volume_source": "matrix section 2/4: ~700 L documented (methods paper)",
+  "cadence_s_assumed": 900,
+  "which": "clean",
+  "tz_assumption": "jakarta",
+  "source_rows": 118286,
+  "channels": [
+   "pH",
+   "TDS",
+   "temp"
+  ],
+  "DO_fed": false,
+  "thinned_to_s": 900,
+  "rows_after_thin": 25317
+ },
+ "local_time": {
+  "unique_instants": 1738,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 39,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 900,
+  "contacts": 1738,
+  "pairs_with_missed": 133,
+  "missed_total_pairwise": 3626,
+  "missed_total_whole_window": 3626,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 900.0,
+  "gap_s_p99": 30717.59999999951,
+  "gap_s_max": 649560.0
+ },
+ "tds_steps": {
+  "trusted_tds_readings": 1665,
+  "steps_floor10": 18,
+  "steps_floor20": 9,
+  "steps_floor40": 6,
+  "thinned_15min_readings": 1665,
+  "steps_thinned15_floor10": 18,
+  "steps_thinned15_floor20": 9,
+  "steps_thinned15_floor40": 6
+ },
+ "tds_prompts": {
+  "prompts": 4,
+  "by_detection": {
+   "step": 2,
+   "slope": 2
+  },
+  "ids_unique": true
+ },
+ "final_state": {
+  "hash": "5ea1c1f46f2decda",
+  "hash_state": "5ea1c1f46f2decda",
+  "bytes": 35330,
+  "channels": {
+   "ph": "2023-03-22T10:53:00+00:00",
+   "tds": "2023-03-22T10:53:00+00:00",
+   "temp": "2023-03-22T10:53:00+00:00"
+  },
+  "checkpoints": 18,
+  "gate_run_length": {
+   "ph": 1,
+   "temp": 1,
+   "tds": 1
+  }
+ },
+ "wall_s": 0.95
+}

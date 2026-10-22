@@ -1,0 +1,151 @@
+{
+ "name": "fwi:ara2_4f79fc8d:zeros-absent",
+ "batches": 5,
+ "rows_in": 8870,
+ "rows_unknown_type": 0,
+ "inputs": 4435,
+ "dispositions": {
+  "applied": 8870
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 4435
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 0.107,
+  "engine.SensorGate(standalone)": 0.089,
+  "pond_twin.ingest_sensor_inputs": 0.29,
+  "tds_prompts.observe": 0.001,
+  "device_health.assess_confidence": 0.0,
+  "pond_twin.snapshot": 0.039
+ },
+ "snapshots": {
+  "count": 5,
+  "max_bytes": 40024,
+  "roundtrip_identical": 5,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-01-30T18:15:00+00:00",
+ "gate": {
+  "ph": {
+   "present": 4435,
+   "verdicts": {
+    "ok": 3829,
+    "suspect_stale": 606
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 4435
+   }
+  },
+  "temp": {
+   "present": 4435,
+   "verdicts": {
+    "ok": 3508,
+    "suspect_stale": 927
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 4435
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.8633596392333709,
+   "trusted_fraction_of_present": 0.8633596392333709
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.7909808342728297,
+   "trusted_fraction_of_present": 0.7909808342728297
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "reduced": 1,
+   "high": 4
+  },
+  "evaporation": {
+   "high": 5
+  },
+  "algae": {
+   "high": 5
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Kolkata",
+  "tz_status": "documented (IST)",
+  "volume_l": null,
+  "volume_source": "unknown (FWI does not publish pond volume)",
+  "cadence_s_assumed": 900,
+  "pond": "ara2_4f79fc8d",
+  "source_rows": 4436,
+  "zero_values_in_source": {
+   "ph": 1,
+   "temp": 1
+  },
+  "zero_policy": "absent",
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false
+ },
+ "local_time": {
+  "unique_instants": 4435,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 48,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 900,
+  "contacts": 4435,
+  "pairs_with_missed": 107,
+  "missed_total_pairwise": 167,
+  "missed_total_whole_window": 167,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 900.0,
+  "gap_s_p99": 1800.0,
+  "gap_s_max": 26100.0
+ },
+ "final_state": {
+  "hash": "bc37c3a4fe22ae16",
+  "hash_state": "bc37c3a4fe22ae16",
+  "bytes": 40017,
+  "channels": {
+   "ph": "2026-01-30T18:15:00+00:00",
+   "temp": "2026-01-30T18:15:00+00:00"
+  },
+  "checkpoints": 31,
+  "gate_run_length": {
+   "ph": 3,
+   "temp": 1
+  }
+ },
+ "wall_s": 0.77
+}

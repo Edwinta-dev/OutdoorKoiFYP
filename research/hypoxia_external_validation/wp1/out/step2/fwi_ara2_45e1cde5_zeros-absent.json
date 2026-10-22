@@ -1,0 +1,152 @@
+{
+ "name": "fwi:ara2_45e1cde5:zeros-absent",
+ "batches": 5,
+ "rows_in": 8826,
+ "rows_unknown_type": 0,
+ "inputs": 4413,
+ "dispositions": {
+  "applied": 8826
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 4413
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 0.108,
+  "engine.SensorGate(standalone)": 0.086,
+  "pond_twin.ingest_sensor_inputs": 0.266,
+  "tds_prompts.observe": 0.002,
+  "device_health.assess_confidence": 0.0,
+  "pond_twin.snapshot": 0.042
+ },
+ "snapshots": {
+  "count": 5,
+  "max_bytes": 40021,
+  "roundtrip_identical": 5,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-01-30T18:15:00+00:00",
+ "gate": {
+  "ph": {
+   "present": 4413,
+   "verdicts": {
+    "ok": 3306,
+    "suspect_stale": 1107
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 4413
+   }
+  },
+  "temp": {
+   "present": 4413,
+   "verdicts": {
+    "ok": 3128,
+    "suspect_stale": 1256,
+    "suspect_rate": 29
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 4413
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.7491502379333786,
+   "trusted_fraction_of_present": 0.7491502379333786
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.7088148651710854,
+   "trusted_fraction_of_present": 0.7088148651710854
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "reduced": 3,
+   "high": 2
+  },
+  "evaporation": {
+   "high": 5
+  },
+  "algae": {
+   "high": 5
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Kolkata",
+  "tz_status": "documented (IST)",
+  "volume_l": null,
+  "volume_source": "unknown (FWI does not publish pond volume)",
+  "cadence_s_assumed": 900,
+  "pond": "ara2_45e1cde5",
+  "source_rows": 4414,
+  "zero_values_in_source": {
+   "ph": 1,
+   "temp": 1
+  },
+  "zero_policy": "absent",
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false
+ },
+ "local_time": {
+  "unique_instants": 4413,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 48,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 900,
+  "contacts": 4413,
+  "pairs_with_missed": 134,
+  "missed_total_pairwise": 189,
+  "missed_total_whole_window": 189,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 900.0,
+  "gap_s_p99": 1800.0,
+  "gap_s_max": 26100.0
+ },
+ "final_state": {
+  "hash": "88697b73e4bc684d",
+  "hash_state": "88697b73e4bc684d",
+  "bytes": 40021,
+  "channels": {
+   "ph": "2026-01-30T18:15:00+00:00",
+   "temp": "2026-01-30T18:15:00+00:00"
+  },
+  "checkpoints": 31,
+  "gate_run_length": {
+   "ph": 4,
+   "temp": 3
+  }
+ },
+ "wall_s": 0.74
+}

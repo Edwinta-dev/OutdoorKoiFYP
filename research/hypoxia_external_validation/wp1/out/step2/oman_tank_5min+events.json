@@ -1,0 +1,195 @@
+{
+ "name": "oman:tank:5min",
+ "batches": 3,
+ "rows_in": 4558,
+ "rows_unknown_type": 0,
+ "inputs": 2279,
+ "dispositions": {
+  "applied": 4558
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 2279,
+  "unplaced": 0,
+  "inputs": 2279
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 0.055,
+  "pond_twin.reconcile_events": 0.002,
+  "engine.SensorGate(standalone)": 0.052,
+  "pond_twin.ingest_sensor_inputs": 0.141,
+  "tds_prompts.observe": 0.001,
+  "device_health.assess_confidence": 0.0,
+  "pond_twin.snapshot": 0.015
+ },
+ "snapshots": {
+  "count": 3,
+  "max_bytes": 24460,
+  "roundtrip_identical": 3,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [
+  {
+   "applied": [
+    "7288fd4e-b784-0b40-a318-1629ff8cbf50",
+    "ab227365-a8b0-7bd4-c0ba-1c41289f5b7d",
+    "c6aad0a4-b2d2-70ac-114f-eec6745daee3",
+    "fc4bbb49-2acb-9598-67b2-4069a37eb84a",
+    "55ed8839-52a5-7f67-1b90-e1ba1fafb818"
+   ],
+   "claimed": [],
+   "revised": [],
+   "deleted": [],
+   "restored": [],
+   "not_replayable": [],
+   "skipped": [],
+   "replayed": false
+  },
+  {
+   "applied": [
+    "971c5318-3af2-9e84-f8b2-ede847e3039a",
+    "659e0b8b-2af0-4462-d674-92ffb637296a",
+    "a369de0f-54cf-11f6-2094-7de1f9ec2161"
+   ],
+   "claimed": [],
+   "revised": [],
+   "deleted": [],
+   "restored": [],
+   "not_replayable": [],
+   "skipped": [],
+   "replayed": false
+  },
+  {
+   "applied": [
+    "384217fb-8a4b-52ba-200a-d86b55aad729",
+    "6ce8db10-4758-7e49-94de-2a83935049ef"
+   ],
+   "claimed": [],
+   "revised": [],
+   "deleted": [],
+   "restored": [],
+   "not_replayable": [],
+   "skipped": [],
+   "replayed": false
+  }
+ ],
+ "events_reports_n": 3,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-04-10T03:49:34.631639+00:00",
+ "gate": {
+  "ph": {
+   "present": 2279,
+   "verdicts": {
+    "ok": 2063,
+    "suspect_rate": 216
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 2279
+   }
+  },
+  "temp": {
+   "present": 2279,
+   "verdicts": {
+    "ok": 1615,
+    "suspect_stale": 664
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 2279
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.9052215884159719,
+   "trusted_fraction_of_present": 0.9052215884159719
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.7086441421676174,
+   "trusted_fraction_of_present": 0.7086441421676174
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "reduced": 2,
+   "high": 1
+  },
+  "evaporation": {
+   "reduced": 2,
+   "high": 1
+  },
+  "algae": {
+   "reduced": 2,
+   "high": 1
+  }
+ },
+ "tag": "+events",
+ "source": {
+  "time_zone": "Asia/Muscat",
+  "tz_status": "documented (GMT+4)",
+  "volume_l": 180.0,
+  "volume_source": "data_dictionary: controlled 180 L tank",
+  "cadence_s_assumed": 300,
+  "which": "tank",
+  "grid": "5min",
+  "source_rows": 102670,
+  "rows_after_grid": 2279,
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false
+ },
+ "local_time": {
+  "unique_instants": 2279,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 10,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 300,
+  "contacts": 2279,
+  "pairs_with_missed": 1,
+  "missed_total_pairwise": 240,
+  "missed_total_whole_window": 240,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 298.0989285,
+  "gap_s_p99": 304.7946973,
+  "gap_s_max": 72301.903698
+ },
+ "final_state": {
+  "hash": "1f3716cd1c98199a",
+  "hash_state": "de7ae1c581e855c1",
+  "bytes": 24460,
+  "channels": {
+   "ph": "2026-04-10T03:49:34.631639+00:00",
+   "temp": "2026-04-10T03:49:34.631639+00:00"
+  },
+  "checkpoints": 11,
+  "gate_run_length": {
+   "ph": 1,
+   "temp": 3
+  }
+ },
+ "wall_s": 0.4
+}

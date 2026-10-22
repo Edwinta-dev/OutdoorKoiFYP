@@ -1,0 +1,152 @@
+{
+ "name": "oman:open:native:thin15min",
+ "batches": 1,
+ "rows_in": 626,
+ "rows_unknown_type": 0,
+ "inputs": 307,
+ "dispositions": {
+  "applied": 614,
+  "superseded": 12
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 307
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 0.008,
+  "engine.SensorGate(standalone)": 0.006,
+  "pond_twin.ingest_sensor_inputs": 0.017,
+  "tds_prompts.observe": 0.0,
+  "device_health.assess_confidence": 0.0,
+  "pond_twin.snapshot": 0.005
+ },
+ "snapshots": {
+  "count": 1,
+  "max_bytes": 13948,
+  "roundtrip_identical": 1,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-04-27T18:15:35.227306+00:00",
+ "gate": {
+  "ph": {
+   "present": 307,
+   "verdicts": {
+    "ok": 276,
+    "suspect_rate": 24,
+    "rejected": 7
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 307
+   }
+  },
+  "temp": {
+   "present": 307,
+   "verdicts": {
+    "ok": 244,
+    "suspect_stale": 47,
+    "suspect_rate": 16
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 307
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.8990228013029316,
+   "trusted_fraction_of_present": 0.8990228013029316
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.7947882736156352,
+   "trusted_fraction_of_present": 0.7947882736156352
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "high": 1
+  },
+  "evaporation": {
+   "high": 1
+  },
+  "algae": {
+   "high": 1
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Muscat",
+  "tz_status": "documented (GMT+4)",
+  "volume_l": null,
+  "volume_source": "unknown (open pond)",
+  "cadence_s_assumed": 900,
+  "which": "open",
+  "grid": "native",
+  "source_rows": 41663,
+  "rows_after_grid": 41663,
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false,
+  "thinned_to_s": 900,
+  "rows_after_thin": 626
+ },
+ "local_time": {
+  "unique_instants": 307,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 10,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 900,
+  "contacts": 307,
+  "pairs_with_missed": 7,
+  "missed_total_pairwise": 2779,
+  "missed_total_whole_window": 2779,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 900.201005,
+  "gap_s_p99": 90865.21025509977,
+  "gap_s_max": 1561629.793518
+ },
+ "final_state": {
+  "hash": "6c5db5d5b8356dbf",
+  "hash_state": "6c5db5d5b8356dbf",
+  "bytes": 13948,
+  "channels": {
+   "ph": "2026-04-27T18:15:35.227306+00:00",
+   "temp": "2026-04-27T18:15:35.227306+00:00"
+  },
+  "checkpoints": 10,
+  "gate_run_length": {
+   "ph": 1,
+   "temp": 1
+  }
+ },
+ "wall_s": 0.06
+}

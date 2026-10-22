@@ -1,0 +1,152 @@
+{
+ "name": "oman:tank:native",
+ "batches": 103,
+ "rows_in": 205340,
+ "rows_unknown_type": 0,
+ "inputs": 102670,
+ "dispositions": {
+  "applied": 205340
+ },
+ "provenance": {
+  "late": 0,
+  "replayed": 0,
+  "unplaced": 0,
+  "inputs": 102670
+ },
+ "exceptions": {},
+ "exception_samples": [],
+ "runtime_s": {
+  "sensor_inputs.group_rows": 2.863,
+  "engine.SensorGate(standalone)": 2.71,
+  "pond_twin.ingest_sensor_inputs": 6.776,
+  "tds_prompts.observe": 0.036,
+  "device_health.assess_confidence": 0.011,
+  "pond_twin.snapshot": 0.029
+ },
+ "snapshots": {
+  "count": 9,
+  "max_bytes": 14746,
+  "roundtrip_identical": 9,
+  "roundtrip_mismatch": []
+ },
+ "events_reports": [],
+ "events_reports_n": 0,
+ "out_of_order_inputs_seen_by_standalone_gate": 0,
+ "final_now": "2026-04-10T03:49:34.631639+00:00",
+ "gate": {
+  "ph": {
+   "present": 102670,
+   "verdicts": {
+    "ok": 56,
+    "suspect_rate": 102613,
+    "suspect_stale": 1
+   }
+  },
+  "tds": {
+   "present": 0,
+   "verdicts": {
+    "missing": 102670
+   }
+  },
+  "temp": {
+   "present": 102670,
+   "verdicts": {
+    "ok": 298,
+    "suspect_stale": 58233,
+    "suspect_rate": 44139
+   }
+  },
+  "lux": {
+   "present": 0,
+   "verdicts": {
+    "missing": 102670
+   }
+  }
+ },
+ "usable": {
+  "ph": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.0005454368364663485,
+   "trusted_fraction_of_present": 0.0005454368364663485
+  },
+  "tds": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  },
+  "temp": {
+   "present_fraction": 1.0,
+   "trusted_fraction_of_inputs": 0.0029025031654816404,
+   "trusted_fraction_of_present": 0.0029025031654816404
+  },
+  "lux": {
+   "present_fraction": 0.0,
+   "trusted_fraction_of_inputs": 0.0,
+   "trusted_fraction_of_present": null
+  }
+ },
+ "gate_matches_twin_gate": true,
+ "confidence_levels": {
+  "chemistry": {
+   "high": 39,
+   "reduced": 64
+  },
+  "evaporation": {
+   "high": 39,
+   "reduced": 64
+  },
+  "algae": {
+   "high": 39,
+   "reduced": 64
+  }
+ },
+ "tag": "",
+ "source": {
+  "time_zone": "Asia/Muscat",
+  "tz_status": "documented (GMT+4)",
+  "volume_l": 180.0,
+  "volume_source": "data_dictionary: controlled 180 L tank",
+  "cadence_s_assumed": 6,
+  "which": "tank",
+  "grid": "native",
+  "source_rows": 102670,
+  "rows_after_grid": 102670,
+  "channels": [
+   "pH",
+   "temp"
+  ],
+  "DO_fed": false
+ },
+ "local_time": {
+  "unique_instants": 102670,
+  "local_day_key_mismatches_vs_pandas": 0,
+  "local_days": 10,
+  "monotone": true
+ },
+ "device_health": {
+  "interval_s": 6,
+  "contacts": 102670,
+  "pairs_with_missed": 702,
+  "missed_total_pairwise": 13121,
+  "missed_total_whole_window": 13121,
+  "pairwise_equals_whole": true,
+  "gap_s_median": 6.557289,
+  "gap_s_p99": 7.98726804,
+  "gap_s_max": 72031.769199
+ },
+ "final_state": {
+  "hash": "b8dc7916ad7d343a",
+  "hash_state": "b8dc7916ad7d343a",
+  "bytes": 14745,
+  "channels": {
+   "ph": "2026-04-10T03:49:34.631639+00:00",
+   "temp": "2026-04-10T03:49:34.631639+00:00"
+  },
+  "checkpoints": 10,
+  "gate_run_length": {
+   "ph": 1,
+   "temp": 5
+  }
+ },
+ "wall_s": 17.97
+}

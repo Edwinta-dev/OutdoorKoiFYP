@@ -34,7 +34,7 @@ class Synthetic(unittest.TestCase):
         d = pd.DataFrame({"ts": ["2025-12-14 08:00:00"], "do": [5.0], "ph": [8.5], "temp": [25.0],
                           "qc_dt": None, "qc_do": None, "qc_ph": None})
         d["t_local"] = pd.to_datetime(d["ts"]); d["src_index"] = range(1)
-        inp = group_rows(A.fwi_source("x", frame=d).rows).inputs
+        inp = group_rows(list(A.fwi_source("x", frame=d).rows)).inputs
         self.assertEqual(len(inp), 1)
         self.assertEqual(inp[0].time_basis, "sample")
         self.assertIsNone(inp[0].channels["lux"]); self.assertIsNone(inp[0].channels["tds"])
@@ -60,7 +60,7 @@ class Synthetic(unittest.TestCase):
         self.assertEqual(jk.rows[0]["created_at"], datetime(2023, 1, 26, 4, 24, tzinfo=UTC))
         self.assertEqual(ut.rows[0]["created_at"], datetime(2023, 1, 26, 11, 24, tzinfo=UTC))
         self.assertEqual(jk.volume_l, 700.0)
-        g = group_rows(jk.rows)
+        g = group_rows(list(jk.rows))
         self.assertEqual(len(g.inputs), 1)  # both source rows share the minute
         self.assertEqual(g.inputs[0].channels["ph"], 7.7)  # highest id wins
         self.assertEqual(sum(1 for l in g.ledger if l["disposition"] == "superseded"), 3)
