@@ -1,0 +1,5 @@
+nights 532 base 0.754 median first-low hours after 19:00 8.5
+y core pooledAUC 0.487 AP 0.786 base 0.754 median within-pond AUC 0.612 17
+y pondrel pooledAUC 0.59 AP 0.818 base 0.754 median within-pond AUC 0.643 17
+y2 core pooledAUC 0.47 AP 0.555 base 0.539 median within-pond AUC 0.551 17
+y2 pondrel pooledAUC 0.632 AP 0.655 base 0.539 median within-pond AUC 0.629 17

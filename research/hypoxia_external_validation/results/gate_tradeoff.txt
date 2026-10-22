@@ -1,0 +1,41 @@
+
+Onset logistic, core + pond-relative  (fixed threshold; 374 onsets, 596 pond-days)
+      gate warned    FA  FA/day warn lost FA removed lost per 10 FA removed
+      none     44   114   0.191         0          0                       
+     18-07     44   114   0.191         0          0                       
+     20-07     44   114   0.191         0          0                       
+     22-07     44   114   0.191         0          0                       
+     23-07     42   113   0.189         2          1                   20.0
+     22-06     44   114   0.191         0          0                       
+     23-06     42   113   0.189         2          1                   20.0
+     23-05     40   111   0.186         4          3                   13.3
+     00-05     36   107   0.179         8          7                   11.4
+     01-05     35    98   0.164         9         16                    5.6
+
+Low-DO@+60min booster, core + pond-relative  (fixed threshold; 374 onsets, 596 pond-days)
+      gate warned    FA  FA/day warn lost FA removed lost per 10 FA removed
+      none     48   114   0.191         0          0                       
+     18-07     48   104   0.174         0         10                    0.0
+     20-07     47   103   0.173         1         11                    0.9
+     22-07     48   102   0.171         0         12                    0.0
+     23-07     47   101   0.169         1         13                    0.8
+     22-06     44    93   0.156         4         21                    1.9
+     23-06     43    92   0.154         5         22                    2.3
+     23-05     34    70   0.117        14         44                    3.2
+     00-05     32    69   0.116        16         45                    3.6
+     01-05     31    69   0.116        17         45                    3.8
+
+Night-only rule  (fixed threshold; 374 onsets, 596 pond-days)
+      gate warned    FA  FA/day warn lost FA removed lost per 10 FA removed
+      none     48   648   1.086         0          0                       
+     18-07     48   648   1.086         0          0                       
+     20-07     53   618   1.036        -5         30                   -1.7
+     22-07     82   468   0.785       -34        180                   -1.9
+     23-07     73   426   0.714       -25        222                   -1.1
+     22-06     82   468   0.785       -34        180                   -1.9
+     23-06     73   426   0.714       -25        222                   -1.1
+     23-05     70   421   0.706       -22        227                   -1.0
+     00-05     80   364   0.610       -32        284                   -1.1
+     01-05     79   334   0.560       -31        314                   -1.0
+
+scored onsets by hour: [28, 31, 45, 48, 50, 35, 50, 21, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2, 6, 3, 9, 10, 32]
