@@ -1,0 +1,47 @@
+{
+ "description": "Frozen before robustness re-runs. Only the group-CV fold seed may change.",
+ "model": "Low-DO@+60min (4 bins) HistGradientBoosting, features=all core+pond-relative (harness.features)",
+ "hyperparameters": {
+  "max_depth": 3,
+  "learning_rate": 0.05,
+  "max_iter": 200,
+  "l2_regularization": 1.0,
+  "min_samples_leaf": 100,
+  "random_state": 20261022
+ },
+ "label_threshold_mgL": 3.0,
+ "gate": "22:00<=t<06:00 local hour (score set to 0 outside)",
+ "gate_hours": [
+  22,
+  6
+ ],
+ "selection_rule": {
+  "fa_max_per_pond_day": 0.177,
+  "occupancy_max": 0.25,
+  "objective": "max warned30 then min FA, on validation fold ponds"
+ },
+ "alert_rule": "2 consecutive positives confirm; first negative clears",
+ "round2_seed": 20261022,
+ "round2_fold_thresholds": [
+  0.5220660069768915,
+  0.44217848854363534,
+  0.8596476351365151,
+  0.5964873821675997,
+  0.6902414051351621
+ ],
+ "frozen_numeric_threshold_median": 0.5964873821675997,
+ "round2_gated_result": {
+  "model": "frozen22-06 seed22",
+  "events": 374,
+  "warned30": 52,
+  "warned60": 31,
+  "pct_warned30": 13.9,
+  "ci30": "8.8-19.9",
+  "fa_per_pond_day": 0.194,
+  "ci_fa": "0.082-0.325",
+  "occupancy": 0.062,
+  "pond_days": 596.4,
+  "ponds_with_any_warning": 13
+ },
+ "note": "nightgate.py gate zeroes NaN (ineligible) slots too, inflating pond-days (703-743 vs 596) and deflating FA/day; robust.py keeps NaN. nightgate.py gates are hour<7, not <6; the 11.8%/0.156 row is not produced by nightgate.py."
+}
