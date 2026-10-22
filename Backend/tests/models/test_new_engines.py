@@ -2,7 +2,10 @@
 REAL sample rows and the REAL NEA payload shape supplied by the user.
 Run from Backend/: python -m pytest tests/models/test_new_engines.py"""
 import json
+import math
 from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from koi.models import algae_engine, forecast_utils
 from koi.models import engine as chemistry_engine
@@ -171,9 +174,14 @@ def primed(samples, lux=18000.0, temp=29.0, no3=10.0):
 
 
 def test_penman_evaporation_physical_plausibility():
-    # Typical Singapore: water 29C, air 30C, RH 75%, wind 3 m/s (at 2m)
+    # Independent hPa calculation: Tetens kPa values are converted by 10;
+    # this call uses 3 m/s at 2 m and no shelter.
     e = ev.evaporation_mm_per_day(29.0, 30.0, 75.0, 3.0, wind_measured_at_10m=False, shelter_factor=1.0)
-    assert 3.0 <= e <= 6.0, f"tropical evaporation in accepted 3-6 mm/day band: {e:.2f}"
+    es_water_hpa = 0.6108 * math.exp(17.27 * 29.0 / (29.0 + 237.3)) * 10.0
+    es_air_hpa = 0.6108 * math.exp(17.27 * 30.0 / (30.0 + 237.3)) * 10.0
+    expected = 0.26 * (1.0 + 0.54 * 3.0) * (es_water_hpa - es_air_hpa * 0.75)
+    assert e == pytest.approx(expected, abs=1e-12)
+    assert e == pytest.approx(5.608856, abs=0.000001)
 
     # Saturated air must produce near-zero evaporation.
     e_sat = ev.evaporation_mm_per_day(29.0, 29.0, 100.0, 3.0, wind_measured_at_10m=False, shelter_factor=1.0)

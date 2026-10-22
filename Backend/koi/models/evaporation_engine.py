@@ -32,14 +32,13 @@ Penman (1948) aerodynamic/mass-transfer term for open water:
     E [mm/day] = f(u) * (es_water - ea_air)
 
     f(u)  = 0.26 * (1 + 0.54 * u2)      u2 = wind speed at 2 m, m/s
-    es, ea in mmHg
+    es, ea in hPa
     es_water = saturation vapour pressure at the WATER surface temperature
     ea_air   = actual vapour pressure of air = es(T_air) * RH/100
 
 Sanity check for typical Singapore conditions (water 29C, air 30C,
-RH 75%, wind 3 m/s) this yields ~4.2 mm/day, which sits in the accepted
-3.5-5 mm/day band for open water in the tropics. The constants 0.26 and
-0.54 are Penman's originals and are exposed as WIND_FN_A / WIND_FN_B so
+RH 75%, wind 3 m/s at 2 m, shelter 0.5) this yields ~3.9 mm/day.
+The constants 0.26 and 0.54 are Penman's originals and are exposed as WIND_FN_A / WIND_FN_B so
 they can be calibrated against this specific pond later (see the
 calibration note in the write-up).
 
@@ -82,7 +81,7 @@ _WIND_10M_TO_2M = 0.748
 # for the supplied 18 Aug payload, NEA's 4-day outlook bands work out to a
 # 15-knot midpoint (~7.7 m/s) while the live nea_telemetry anemometer that
 # same hour reported 6.9 KNOTS (~3.5 m/s) - a 2x discrepancy that flows
-# straight into evaporation as roughly +45%. 0.6 brings projected
+# straight into evaporation as roughly +45%. 0.5 brings projected
 # evaporation back into the 4-5 mm/day band that matches both the live
 # telemetry and published Singapore open-water evaporation figures.
 #
@@ -90,7 +89,7 @@ _WIND_10M_TO_2M = 0.748
 # log actual top-up volumes against elapsed days, fit this first.
 # fit_shelter_factor does that per pond (issue #32); this stays the default
 # for a pond without a fit.
-POND_SHELTER_FACTOR = 0.6
+POND_SHELTER_FACTOR = 0.5
 
 # NEA's 4-day outlook gives a forecast code/text but no rainfall depth.
 # These are coarse daily accumulations (mm) used to offset evaporation.
@@ -114,16 +113,9 @@ TOPUP_ACTION_LOSS_PCT = 10.0  # "do it now" - evaporative concentration of
 # Vapour pressure helpers
 # ============================================================
 
-_KPA_TO_MMHG = 7.50062
-
-
 def saturation_vapour_pressure_kpa(temp_c: float) -> float:
     """Tetens equation - saturation vapour pressure over water, kPa."""
     return 0.6108 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
-
-
-def saturation_vapour_pressure_mmhg(temp_c: float) -> float:
-    return saturation_vapour_pressure_kpa(temp_c) * _KPA_TO_MMHG
 
 
 def evaporation_mm_per_day(
@@ -143,12 +135,12 @@ def evaporation_mm_per_day(
     sheltered garden pond surface actually experiences - see
     POND_SHELTER_FACTOR. Pass 1.0 to disable."""
     u2 = wind_speed_ms * (_WIND_10M_TO_2M if wind_measured_at_10m else 1.0) * shelter_factor
-    es_water = saturation_vapour_pressure_mmhg(water_temp_c)
-    ea_air = saturation_vapour_pressure_mmhg(air_temp_c) * (
+    es_water_hpa = saturation_vapour_pressure_kpa(water_temp_c) * 10.0
+    ea_air_hpa = saturation_vapour_pressure_kpa(air_temp_c) * 10.0 * (
         min(max(relative_humidity_pct, 0.0), 100.0) / 100.0
     )
     wind_fn = WIND_FN_A * (1.0 + WIND_FN_B * max(u2, 0.0))
-    return max(wind_fn * (es_water - ea_air), 0.0)
+    return max(wind_fn * (es_water_hpa - ea_air_hpa), 0.0)
 
 
 # ============================================================

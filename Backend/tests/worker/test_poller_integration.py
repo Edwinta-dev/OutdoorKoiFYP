@@ -138,6 +138,8 @@ def test_second_cycle_advances_state_after_reload(store, registry):
 
 
 def test_environmental_change_moves_evaporation_state(store, registry):
+    if not evap_evals(store):
+        poll(store, registry)
     before_loss = evap_evals(store)[-1]["loss_litres"]
     for _ in range(6):
         rewind(registry, USER, 1)
