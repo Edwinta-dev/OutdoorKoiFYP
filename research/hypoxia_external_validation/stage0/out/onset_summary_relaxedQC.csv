@@ -1,0 +1,8 @@
+model,events,warned30,warned60,pct_warned30,ci30,fa_per_pond_day,ci_fa,occupancy,pond_days,ponds_with_any_warning
+"B5 tree booster, core features (prior-report style)",443,18,12,4.1,1.8-6.8,0.137,0.055-0.246,0.014,635.0,8
+"Onset logistic, core + pond-relative",443,61,41,13.8,8.8-18.7,0.257,0.132-0.397,0.078,635.0,14
+"Onset booster, core + pond-relative",443,46,35,10.4,6.2-14.9,0.194,0.104-0.281,0.024,635.0,14
+"Low-DO@+60min booster, core + pond-relative",443,50,36,11.3,6.1-17.2,0.222,0.098-0.360,0.116,635.0,11
+"Low-DO@+60min booster, clock + pond-relative only",443,43,24,9.7,6.2-13.3,0.175,0.078-0.311,0.09,635.0,14
+Night-only clock rule (18:00-06:00),443,62,49,14.0,9.7-18.0,1.265,1.190-1.345,0.486,635.0,14
+"Original hypoxia.py, clock-proxy lux",443,0,0,0.0,0.0-0.0,0.0,0.000-0.000,0.0,635.0,0
