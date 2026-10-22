@@ -48,3 +48,28 @@ def test_snapshot_round_trip():
     state = HypoxiaState()
     state.add(T0, 7.5, 28)
     assert HypoxiaState.from_dict(state.to_dict()).to_dict() == state.to_dict()
+
+
+def test_poller_logs_one_shadow_event_and_snapshots_latest(caplog):
+    from koi.registry import EngineRegistry
+    from koi.storage import MemoryStorage
+    from koi.worker.poller import _poll_user
+
+    pond = 8126
+    storage = MemoryStorage()
+    storage.add_rows("UserData", [{"userID": pond, "volume": 5000, "biomass": 8.0}])
+    at = T0
+    storage.add_rows("SensorData", [
+        {"userID": pond, "sensor_type": kind, "data1": value, "created_at": at.isoformat()}
+        for kind, value in (("pH", 7.5), ("temp", 29.0), ("TDS", 220.0), ("LUX", 20000.0))
+    ])
+    registry = EngineRegistry(storage)
+    config = next(row for row in storage.fetch_active_pond_configs() if row["user_id"] == pond)
+    with caplog.at_level("INFO", logger="koi.worker"):
+        _poll_user(registry, pond, config, now=at + timedelta(minutes=1))
+    events = [record for record in caplog.records
+              if getattr(record, "koi_event", None) == "hypoxia_shadow"]
+    assert len(events) == 1
+    assert events[0].koi_fields["n"] == 1
+    saved = HypoxiaState.from_dict(storage.load_engine_snapshot(pond)["hypoxia_state"])
+    assert saved.last_shadow == {"ph_z": None, "ph_below_own_range": None, "n": 1}

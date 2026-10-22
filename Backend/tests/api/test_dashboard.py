@@ -280,6 +280,17 @@ def test_hypoxia_api_reads_snapshot_history_like_worker(scenario_app, clock):
     assert combined == expected
 
 
+def test_shadow_hypoxia_fields_never_appear_in_api_or_openapi(scenario_app, clock):
+    _, _, client = scenario_app
+    dashboard = client.get("/v1/ponds/9101/dashboard").get_json()
+    combined = client.get("/v1/ponds/9101/assessments").get_json()
+    assert "ph_z" not in json.dumps(dashboard) and "shadow" not in json.dumps(dashboard)
+    assert "ph_z" not in json.dumps(combined) and "shadow" not in json.dumps(combined)
+    openapi = (Path(__file__).resolve().parents[3] / "docs" / "api" / "openapi.yaml").read_text()
+    schema = openapi.split("    HypoxiaFlag:", 1)[1].split("    ", 2)[0]
+    assert "ph_z" not in schema and "shadow" not in schema
+
+
 def test_dashboard_other_pond_is_forbidden(scenario_app, clock):
     _, _, client = scenario_app
     assert client.get("/v1/ponds/9106/dashboard").status_code == 403

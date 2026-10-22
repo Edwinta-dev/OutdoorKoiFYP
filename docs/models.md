@@ -492,3 +492,9 @@ same type and direction on this pond. `dismiss` closes only that question.
 The warm-up and window values are owner-approved issue parameters. Dissolved oxygen remains unmeasured; the explanation says so and advises overnight aeration. `KOI_HYPOXIA_WATCH_TEMP_C` and `KOI_HYPOXIA_HIGH_TEMP_C` remain readable but are deprecated and do not affect this result. Legacy response keys remain present and deprecated; values that no longer have meaning are null or empty.
 
 Retired hypoxia thresholds: `DEFAULT_WATCH_TEMP_C` was 30 C and `DEFAULT_HIGH_TEMP_C` was 32 C; both are now unused. Issue #124 replaces the temperature gate with a fixed time-window advisory because the owner-supplied handover said the former gate warned on 0% of observed onsets. The legacy environment settings remain readable and emit a deprecation warning.
+
+## Pond-relative pH shadow indicator (issue #126)
+
+`koi.models.hypoxia.shadow_ph_relative` compares the newest eligible fresh pH sample with the pond's own trailing 14-day pH distribution (`SHADOW_WINDOW_DAYS`). It requires 48 samples (`SHADOW_MIN_SAMPLES`); below that, `ph_z` and `ph_below_own_range` are `None`. The center is the median, the spread is median absolute deviation (MAD), and the robust z score is `0.6744897501960817 * (current - median) / MAD`; when MAD and the difference are both zero the score is zero, while a zero MAD with nonzero difference has no finite score. `ph_below_own_range` is true below median minus 3 MADs (`SHADOW_RANGE_MADS`).
+
+This is shadow only: it cannot affect advisory fields and is never returned by an API. The poller logs `hypoxia_shadow` once per poll with the score and sample count, and the snapshot keeps only the most recent result.

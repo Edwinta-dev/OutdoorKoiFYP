@@ -15,6 +15,7 @@ HISTORY_SAMPLE_CAP = HISTORY_SPAN_DAYS * 24 // HISTORY_BIN_HOURS
 class HypoxiaState:
     first_seen_at: datetime | None = None
     samples: list[tuple[datetime, float, float]] = field(default_factory=list)
+    last_shadow: dict | None = None
 
     def add(self, at: datetime, ph: float, water_temp_c: float, *, now: datetime | None = None) -> bool:
         at = parse_timestamp(at)
@@ -42,7 +43,8 @@ class HypoxiaState:
 
     def to_dict(self) -> dict:
         return {"first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
-                "samples": [[at.isoformat(), ph, temp] for at, ph, temp in self.samples]}
+                "samples": [[at.isoformat(), ph, temp] for at, ph, temp in self.samples],
+                "last_shadow": self.last_shadow}
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> "HypoxiaState":
@@ -55,6 +57,9 @@ class HypoxiaState:
             for row in raw.get("samples", []):
                 if isinstance(row, (list, tuple)) and len(row) == 3:
                     state.add(parse_timestamp(row[0]), float(row[1]), float(row[2]))
+            shadow = raw.get("last_shadow")
+            if isinstance(shadow, dict):
+                state.last_shadow = shadow
         except (TypeError, ValueError, KeyError):
             return cls()
         return state

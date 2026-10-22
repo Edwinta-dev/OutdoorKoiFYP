@@ -146,7 +146,7 @@ from koi.models import device_health, forecast_utils
 from koi.models import evaporation_engine as ev
 from koi.models.engine import WaterChemistryEngine
 from koi.models.event_ledger import WINDOW
-from koi.models.hypoxia import assess_hypoxia
+from koi.models.hypoxia import assess_hypoxia, shadow_ph_relative
 from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
 from koi.models.sensor_inputs import (
@@ -535,6 +535,9 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
             now=now, ph=fresh_ph,
             water_temp_c=water_temp, history_hours=twin.hypoxia_state.history_hours(now),
         )
+        shadow = shadow_ph_relative(twin.hypoxia_state, now)
+        twin.hypoxia_state.last_shadow = shadow
+        outcome["hypoxia_shadow"] = shadow
 
         outcome["events"] = events
         outcome["input_cutoff"] = twin.input_cutoff()
@@ -543,6 +546,8 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     chem, evap, algae, outcome = registry.with_twin(user_id, cycle, profiles=profiles,
                                                     ingest=lambda: commit.get("ingest"))
     hypoxia = outcome["hypoxia"]
+    shadow = outcome["hypoxia_shadow"]
+    log_event(log, "hypoxia_shadow", ph_z=shadow["ph_z"], n=shadow["n"])
     sensor = outcome["sensor"]
     _record_sensor_contacts(registry, user_id, commit.get("received") or [], now)
 

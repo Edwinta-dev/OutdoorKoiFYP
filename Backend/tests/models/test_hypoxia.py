@@ -3,7 +3,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from koi.models.hypoxia import assess_hypoxia
+from koi.models.hypoxia import assess_hypoxia, shadow_ph_relative
+from koi.models.hypoxia_state import HypoxiaState
 
 
 def assess(now, *, ph=7.5, temp=28.0, hours=24):
@@ -79,3 +80,43 @@ def test_hypoxia_output_contract_has_legacy_nulls_without_do():
     assert body["water_temp_c"] is None and body["algae_high"] is None
     assert body["watch_temp_c"] is None and body["high_temp_c"] is None
     assert body["night_lux_threshold"] is None and body["raised_by"] == []
+
+
+def test_shadow_ph_relative_hand_computed_mad():
+    from datetime import timedelta
+
+    state = HypoxiaState()
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i, ph in enumerate([7.0] * 24 + [8.0] * 23 + [6.0]):
+        state.add(start + timedelta(hours=i), ph, 28)
+    result = shadow_ph_relative(state, start + timedelta(hours=47))
+    assert result["n"] == 48
+    assert result["ph_z"] == pytest.approx(-1.3489795003921634)
+    assert result["ph_below_own_range"] is False
+
+
+def test_shadow_ph_relative_requires_minimum_and_ignores_future_samples():
+    from datetime import timedelta
+
+    state = HypoxiaState()
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(47):
+        state.add(start + timedelta(hours=i), 7.5, 28)
+    state.add(start + timedelta(hours=48), 1.0, 28)
+    result = shadow_ph_relative(state, start + timedelta(hours=46))
+    assert result == {"ph_z": None, "ph_below_own_range": None, "n": 47}
+
+
+def test_shadow_calculation_does_not_change_advisory():
+    import random
+    from datetime import timedelta
+
+    rng = random.Random(126)
+    now = datetime(2026, 1, 1, 14, tzinfo=timezone.utc)
+    baseline = assess(now).to_dict()
+    for _ in range(30):
+        state = HypoxiaState()
+        for i in range(60):
+            state.add(now - timedelta(hours=60 - i), rng.uniform(5.0, 10.0), 28)
+        shadow_ph_relative(state, now)
+        assert assess(now).to_dict() == baseline
