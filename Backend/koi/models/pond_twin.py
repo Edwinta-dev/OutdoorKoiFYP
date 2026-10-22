@@ -283,10 +283,15 @@ class PondTwin:
             if value is None:
                 continue
             current = self.sensor_channels.get(channel)
-            if current is None or parse_timestamp(current["reading_at"]) <= item.time:
+            current_time = parse_timestamp(current["reading_at"]) if current is not None else None
+            row_id = item.row_ids.get(channel)
+            current_id = current.get("row_id") if current is not None else None
+            if (current is None or (current_time is not None and current_time < item.time)
+                    or (current_time == item.time and row_id is not None
+                        and (current_id is None or row_id > current_id))):
                 self.sensor_channels[channel] = {
                     "value": value, "reading_at": item.time.isoformat(),
-                    "time_basis": item.time_basis, "row_id": item.row_ids.get(channel)}
+                    "time_basis": item.time_basis, "row_id": row_id}
 
     def _chemistry_sensor(self, item: SensorInput, model_time: datetime) -> list[str]:
         """One sensor input into the chemistry engine at model_time,

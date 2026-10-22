@@ -129,6 +129,50 @@ def test_prompt_snapshot_roundtrip_and_recorded_old_snapshot_loads():
     assert PondTwin.from_snapshot(old).tds_prompts.to_dict() == TdsPrompts().to_dict()
 
 
+def test_prompt_same_instant_winner_is_independent_of_poll_splitting():
+    single, split = TdsPrompts(), TdsPrompts()
+    same_time = AT + timedelta(minutes=15 * 12)
+    prefix = samples([200] * 12)
+    winner_rows = [SensorInput(same_time, "ingestion", {"tds": value}, {"tds": row_id})
+                   for row_id, value in [(1, 300), (2, 400)]]
+    single.observe(prefix + winner_rows, EventLedger(), ON)
+    split.observe(prefix + winner_rows[:1], EventLedger(), ON)
+    split.observe(winner_rows[1:], EventLedger(), ON)
+    assert split.to_dict() == single.to_dict()
+
+
+def test_prompt_late_higher_id_replaces_same_instant_winner():
+    split, single = TdsPrompts(), TdsPrompts()
+    same_time = AT + timedelta(minutes=15 * 12)
+    prefix = samples([200] * 12)
+    old = SensorInput(same_time, "ingestion", {"tds": 300}, {"tds": 1})
+    new = SensorInput(same_time, "ingestion", {"tds": 400}, {"tds": 2})
+    split.observe(prefix + [old], EventLedger(), ON)
+    split.observe([new], EventLedger(), ON)
+    single.observe(prefix + [new], EventLedger(), ON)
+    assert split.to_dict() == single.to_dict()
+
+
+def test_prompt_shuffled_chunks_rebuild_same_fixed_series():
+    ordered, shuffled = TdsPrompts(), TdsPrompts()
+    fixed = samples([200] * 12 + [250] * 3 + [250] * 9 + [300] * 3)
+    ordered.observe(fixed, EventLedger(), ON)
+    shuffled.observe(fixed[15:], EventLedger(), ON)
+    shuffled.observe(fixed[:15], EventLedger(), ON)
+    assert shuffled.to_dict() == ordered.to_dict()
+
+
+def test_prompt_legacy_state_seeds_replay_history_from_detector_windows():
+    state = observe(TdsPrompts(), [200] * 12 + [250])
+    snapshot = state.to_dict()
+    snapshot.pop("observed")
+    restored = TdsPrompts.from_dict(json.loads(json.dumps(snapshot)))
+    assert len(restored.observed) == len(state.baseline) + len(state.pending)
+    assert len(restored.baseline) == len(state.baseline)
+    observe(restored, [250], AT + timedelta(minutes=195))
+    assert len(restored.prompts) == 1 and restored.pending == []
+
+
 @pytest.mark.parametrize("field,value", [("tds_prompt_min_step_ppm", 0),
                                          ("tds_prompt_confidence_threshold", 1.1),
                                          ("tds_prompt_cooldown_hours", -1),

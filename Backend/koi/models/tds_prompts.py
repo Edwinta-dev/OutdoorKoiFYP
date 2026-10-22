@@ -33,18 +33,55 @@ class TdsPrompts:
     last_prompt_at: str | None = None
     prompts: list[dict] = field(default_factory=list)
     rejected: list[str] = field(default_factory=list)
+    observed: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {"version": 1, **asdict(self)}
 
     @classmethod
     def from_dict(cls, value: dict) -> TdsPrompts:
-        return cls(**{key: value[key] for key in cls.__dataclass_fields__ if key in value})
+        state = cls(**{key: value[key] for key in cls.__dataclass_fields__ if key in value})
+        if "observed" not in value:
+            # Older snapshots retained detector windows but not their source
+            # rows. Seed the replayable history from those windows so loading
+            # one does not discard its accumulated detector state.
+            points = {point[0]: point[1] for window in (state.baseline, state.pending, state.recent)
+                      for point in window}
+            state.observed = [{"time": timestamp, "time_basis": "ingestion",
+                               "channels": {"tds": ppm}, "row_ids": {"tds": 0}}
+                              for timestamp, ppm in sorted(points.items(), key=lambda item: parse_timestamp(item[0]))]
+        return state
 
     def observe(self, inputs: list[SensorInput], ledger: EventLedger, config: PromptConfig) -> None:
         if not config.enabled:
             return
-        for sample in sorted(inputs, key=lambda s: s.time):
+        # A poll may expose another row for an instant already observed. Keep
+        # the input history so that replacing that winner also replaces every
+        # downstream baseline/prompt derived from it. Missing fields in old
+        # snapshots naturally start with an empty history.
+        winners = {parse_timestamp(item["time"]): item for item in self.observed}
+        for sample in inputs:
+            if sample.channels.get("tds") is None:
+                continue
+            key = sample.time
+            previous = winners.get(key)
+            row_id = sample.row_ids.get("tds", 0)
+            previous_id = (previous or {}).get("row_ids", {}).get("tds", 0)
+            if previous is None or row_id > previous_id:
+                winners[key] = {"time": key.isoformat(), "time_basis": sample.time_basis,
+                                "channels": dict(sample.channels), "row_ids": dict(sample.row_ids)}
+        updated = sorted(winners.values(), key=lambda item: (parse_timestamp(item["time"]),
+                                                              item.get("row_ids", {}).get("tds", 0)))
+        if updated == self.observed:
+            return
+        self.observed = updated
+        rejected = self.rejected
+        self.baseline, self.pending, self.recent = [], [], []
+        self.last_reading_at = None
+        self.last_prompt_at = (self.prompts[-1].get("detected_at") if self.prompts else None)
+        self.rejected = rejected
+        for sample in (SensorInput(parse_timestamp(item["time"]), item["time_basis"],
+                                   item["channels"], item.get("row_ids", {})) for item in updated):
             ppm = sample.channels.get("tds")
             if (ppm is None or not math.isfinite(ppm) or not 5 <= ppm <= 5000
                     or (self.last_reading_at and sample.time <= parse_timestamp(self.last_reading_at))):
@@ -107,7 +144,12 @@ class TdsPrompts:
         kinds = [k for k in kinds if f"{signature}:{k}" not in self.rejected]
         if not kinds:
             return
-        self.prompts.append({"id": str(uuid.uuid4()), "detection": detection, "signature": signature,
+        if any(p.get("signature") == signature and p.get("detected_at") == end.isoformat()
+               for p in self.prompts):
+            return
+        prompt_id = str(uuid.uuid5(uuid.NAMESPACE_URL,
+                                   f"tds:{detection}:{start.isoformat()}:{end.isoformat()}:{baseline}:{level}"))
+        self.prompts.append({"id": prompt_id, "detection": detection, "signature": signature,
                              "detected_at": end.isoformat(), "event_at": start.isoformat(),
                              "time_basis": time_basis, "baseline_ppm": baseline, "level_ppm": level,
                              "delta_ppm": level - baseline, "slope_ppm_hour": slope,
