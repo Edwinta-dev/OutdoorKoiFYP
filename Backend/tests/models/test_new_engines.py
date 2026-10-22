@@ -5,8 +5,9 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from koi.models import algae_engine, forecast_utils
+from koi.models import engine as chemistry_engine
 from koi.models import evaporation_engine as ev
-from koi.models.engine import RawSample, SampleVerdict, SensorGate
+from koi.models.engine import PondConfig, RawSample, SampleVerdict, SensorGate, WaterChemistryEngine
 
 PAYLOAD = json.loads("""
 {
@@ -111,6 +112,31 @@ def test_sensor_gate_logged_event_exemption_and_snapshot_compatibility():
     legacy.pop("last_trusted_time")
     restored_legacy = SensorGate.from_snapshot(legacy, lambda _: False)
     assert gate_sample(restored_legacy, T0 + timedelta(minutes=15), 7.60) == SampleVerdict.SUSPECT_RATE
+
+
+def test_chemistry_snapshot_daily_retention_uses_snapshot_data_time(monkeypatch):
+    class FrozenDateTime(datetime):
+        frozen_now = datetime(2026, 10, 22, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.frozen_now if tz is None else cls.frozen_now.astimezone(tz)
+
+    source = WaterChemistryEngine(PondConfig(volume_litres=5000, estimated_biomass_grams=8000))
+    for day in range(1, 4):
+        source.ingest_sensor_sample(RawSample(
+            datetime(2026, 1, day, 12, tzinfo=timezone.utc), 7.2, 200, 28, 15000
+        ))
+    snapshot = source.to_snapshot()
+
+    monkeypatch.setattr(chemistry_engine, "datetime", FrozenDateTime)
+    loaded_october = WaterChemistryEngine.from_snapshot(snapshot)
+    FrozenDateTime.frozen_now = datetime(2030, 6, 1, tzinfo=timezone.utc)
+    loaded_future = WaterChemistryEngine.from_snapshot(snapshot)
+
+    expected = ["2026-01-01", "2026-01-02", "2026-01-03"]
+    assert sorted(loaded_october._daily) == expected
+    assert loaded_future.to_snapshot()["daily"] == loaded_october.to_snapshot()["daily"]
 # True doubling every ~3.5 days -> mu = ln(2)/3.5 = 0.198/day
 TRUE_MU = 0.198
 BLOOM = [

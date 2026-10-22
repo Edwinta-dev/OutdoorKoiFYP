@@ -22,11 +22,11 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Callable, Optional
 
-from koi.models.local_time import DEFAULT_POND_TIME_ZONE, local_date, local_day_key
+from koi.models.local_time import DEFAULT_POND_TIME_ZONE, local_date, local_day_key, zone
 
 log = logging.getLogger(__name__)
 
@@ -1205,10 +1205,17 @@ class WaterChemistryEngine:
         engine = cls(config)
         engine._events = [PondEvent.from_dict(e) for e in snapshot.get("events", [])]
         engine._daily = cls._load_daily(snapshot)
-        # Self-heal any snapshot written before DAILY_RETENTION_DAYS existed -
-        # an old unbounded _daily dict shrinks to the rolling window on the
-        # very next load, with no migration needed.
-        engine._prune_daily(datetime.now(timezone.utc))
+        # Self-heal old unbounded snapshots against their own data time. Using
+        # the wall clock here made replay/rebuild results depend on load date.
+        if engine._daily:
+            latest_day = max(
+                aggregate.calendar_date(config.time_zone)
+                for aggregate in engine._daily.values()
+            )
+            reference_time = datetime.combine(
+                latest_day, datetime.min.time(), tzinfo=zone(config.time_zone)
+            )
+            engine._prune_daily(reference_time)
         legacy_days = engine.daily_provenance()["legacy_days"]
         if legacy_days:
             log.info("legacy_daily_aggregates_kept",
