@@ -3365,8 +3365,8 @@ components:
           - type: 'null'
         hypoxia:
           $ref: '#/components/schemas/HypoxiaFlag'
-          description: From fresh lux and water temperature readings only; unknown when either is not
-            fresh.
+          description: A local overnight advisory using fresh pH and water temperature; unknown until
+            24 hours of history are available or either reading is unavailable.
       required:
       - chemistry
       - evaporation
@@ -4467,15 +4467,33 @@ components:
         flagged:
           title: Flagged
           type: boolean
+        model_id:
+          title: Model Id
+          type: string
+        horizon:
+          title: Horizon
+          type: string
+        support:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Support
+        issue_time:
+          title: Issue Time
+          type: string
         dark:
           anyOf:
           - type: boolean
           - type: 'null'
+          default: null
+          deprecated: true
           title: Dark
         lux:
           anyOf:
           - type: number
           - type: 'null'
+          default: null
+          deprecated: true
           title: Lux
         water_temp_c:
           anyOf:
@@ -4486,22 +4504,39 @@ components:
           anyOf:
           - type: boolean
           - type: 'null'
+          default: null
+          deprecated: true
           title: Aeration
         algae_high:
           anyOf:
           - type: boolean
           - type: 'null'
+          default: null
+          deprecated: true
           title: Algae High
         watch_temp_c:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          deprecated: true
           title: Watch Temp C
-          type: number
         high_temp_c:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          deprecated: true
           title: High Temp C
-          type: number
         night_lux_threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          deprecated: true
           title: Night Lux Threshold
-          type: number
         raised_by:
+          deprecated: true
           items:
             type: string
           title: Raised By
@@ -4517,15 +4552,11 @@ components:
       required:
       - level
       - flagged
-      - dark
-      - lux
+      - model_id
+      - horizon
+      - support
+      - issue_time
       - water_temp_c
-      - aeration
-      - algae_high
-      - watch_temp_c
-      - high_temp_c
-      - night_lux_threshold
-      - raised_by
       - explanation
       - advice
       title: HypoxiaFlag

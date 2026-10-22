@@ -82,7 +82,7 @@ moment, so it changes whenever anything in the body changes:
 
 - a new reading, or a reading crossing its `fresh_until` (no new row
   needed);
-- a new evaluation, or a changed profile (the hypoxia flag uses aeration);
+- a new evaluation, or a changed profile affecting the dashboard;
 - a new forecast issuance or cache write, a forecast passing `valid_to`,
   or the Singapore hour changing (UV);
 - a changed station assignment;
@@ -160,7 +160,7 @@ known, and `status` says why. No value is ever substituted.
 | (none) | `forecast.*.ingested_at` | `weather_forecasts.updated_at`, the cache write |
 | `nea_forecasts.outlook_4day` | `forecast.outlook[]` | Every `4day` row whose day (Singapore date of `valid_period.timestamp`) is today or later, oldest day first. The old RPC took the 4 most recently written rows |
 | (none) | `assessments.chemistry`, `evaporation`, `algae` | Latest stored evaluation of each domain; null before the first |
-| (none) | `assessments.hypoxia` | `koi/models/hypoxia.py` from the fresh lux and water temperature only; `unknown` when either is not fresh |
+| (none) | `assessments.hypoxia` | `koi/models/hypoxia.py` gives an overnight advisory in Asia/Singapore when pH and water temperature are fresh and at least 24 hours of history are available; currently `history_hours=0`, so callers return `unknown` |
 | (none) | `next_actions` | Lead-time rules supported by retained observations and as-of forecasts; unavailable source windows remain unassessed |
 | `UserData.ClosestStations` | `stations` | Each assignment, or null |
 

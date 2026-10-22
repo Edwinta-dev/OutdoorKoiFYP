@@ -113,6 +113,6 @@ void main() {
     expect(a.chemistry!.tanPpm, 0.31);
     expect(a.evaporation!['days_to_topup'], 6);
     expect(a.algae!['green_ratio'], 0.03);
-    expect(a.hypoxia.level, 'none');
+    expect(a.hypoxia.level, 'unknown');
   });
 }

@@ -104,7 +104,7 @@ def test_freshness_comes_from_reading_time_not_poll_count(caplog):
                      "fresh": False}
     # The night-time oxygen check uses the readings only while they are fresh.
     levels = [r.koi_fields["hypoxia"] for r in caplog.records if getattr(r, "koi_event", None) == "pond_polled"]
-    assert levels == ["watch", "unknown"]
+    assert levels == ["unknown", "unknown"]
 
 
 def test_partial_cycle_passes_the_missing_channel_and_keeps_the_others():

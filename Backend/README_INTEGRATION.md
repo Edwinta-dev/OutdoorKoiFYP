@@ -53,8 +53,8 @@ name in `.env`. Both services read the same file.
 | `KOI_SENSOR_INGEST_OVERLAP_MINUTES` | `60` | poller; how far before the newest ingested insert time each sensor scan starts, to find rows committed out of id order |
 | `KOI_SENSOR_INGEST_BATCH_ROWS` | `2000` | poller; most `SensorData` rows one pond ingests per cycle (whole uploads only); the rest wait for the next cycle |
 | `KOI_EVALUATION_RETENTION_DAYS` | `30` | worker; local days older than this have their evaluation rows summarised into `evaluation_daily` and deleted, once a day |
-| `KOI_HYPOXIA_WATCH_TEMP_C` | `30` | poller and API; water temperature (C) at which a dark pond's hypoxia flag is `watch` |
-| `KOI_HYPOXIA_HIGH_TEMP_C` | `32` | poller and API; the same for `high`; must be above the watch level |
+| `KOI_HYPOXIA_WATCH_TEMP_C` | `30` | deprecated; retained for compatibility and unused by the hypoxia night advisory |
+| `KOI_HYPOXIA_HIGH_TEMP_C` | `32` | deprecated; retained for compatibility and unused by the hypoxia night advisory |
 | `KOI_CORS_ORIGINS` | `*` | both Flask apps; comma separated |
 | `POND_IMAGE_BUCKET` | `imageAnalysisBucket` | camera; must match the app's `env/*.json` |
 | `DEVICE_TOKEN` | empty (uploads unauthenticated) | camera; must match `Embedded/camera_node/secrets.h` |
@@ -433,10 +433,10 @@ Cheap cached reads (dashboard cards + alert badges):
 - `GET /v1/ponds/<uid>/assessments/chemistry` — chemistry
 - `GET /v1/ponds/<uid>/assessments/evaporation`
 - `GET /v1/ponds/<uid>/assessments/algae`
-- `GET /v1/ponds/<uid>/assessments` — all three in one call, plus `hypoxia`: the night-time
-  low-oxygen flag (`level` none/watch/high/unknown, `explanation`, `advice`) from the
-  latest reading, the profile's aeration and the cached algae assessment
-  (`koi/models/hypoxia.py`)
+- `GET /v1/ponds/<uid>/assessments` — all three in one call, plus `hypoxia`: a
+  non-raised overnight advisory (`watch` in the 22:00–06:00 Singapore window,
+  `none` outside it, or `unknown` until history and fresh pH/temperature are
+  available; `koi/models/hypoxia.py`). Current callers supply zero history.
 
 Live projections (detail graph screens):
 - `GET /v1/ponds/<uid>/forecasts/chemistry?horizon_days=21` — chemistry

@@ -318,15 +318,19 @@ class HypoxiaFlag(_Open):
 
     level: Literal["unknown", "none", "watch", "high"]
     flagged: bool
-    dark: Optional[bool]
-    lux: Optional[float]
+    model_id: str
+    horizon: str
+    support: Optional[str]
+    issue_time: str
+    dark: Optional[bool] = Field(default=None, deprecated=True)
+    lux: Optional[float] = Field(default=None, deprecated=True)
     water_temp_c: Optional[float]
-    aeration: Optional[bool]
-    algae_high: Optional[bool]
-    watch_temp_c: float
-    high_temp_c: float
-    night_lux_threshold: float
-    raised_by: list[str]
+    aeration: Optional[bool] = Field(default=None, deprecated=True)
+    algae_high: Optional[bool] = Field(default=None, deprecated=True)
+    watch_temp_c: Optional[float] = Field(default=None, deprecated=True)
+    high_temp_c: Optional[float] = Field(default=None, deprecated=True)
+    night_lux_threshold: Optional[float] = Field(default=None, deprecated=True)
+    raised_by: list[str] = Field(default_factory=list, deprecated=True)
     explanation: str
     advice: list[str]
 
@@ -686,8 +690,9 @@ class DashboardAssessments(_Closed):
                                                                        "the first poll or event.")
     evaporation: Optional[EvaporationAssessment]
     algae: Optional[AlgaeAssessment]
-    hypoxia: HypoxiaFlag = Field(description="From fresh lux and water temperature readings only; unknown "
-                                             "when either is not fresh.")
+    hypoxia: HypoxiaFlag = Field(description="A local overnight advisory using fresh pH and water temperature; "
+                                             "unknown until 24 hours of history are available or either reading "
+                                             "is unavailable.")
 
 
 class StationAssignment(_Closed):

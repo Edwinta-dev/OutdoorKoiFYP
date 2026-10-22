@@ -524,15 +524,11 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         )
         algae_assessment = twin.algae.assess(days_to_scrub=algae_days)
 
-        # Night-time hypoxia risk from the pond's fresh readings (its own
-        # light sensor, not NEA's), the profile in force now and the
-        # algae assessment just made.
+        # Overnight hypoxia advisory from the pond's fresh pH and water
+        # temperature; unknown while either is stale or history is warming up.
         outcome["hypoxia"] = assess_hypoxia(
-            lux=light,
-            water_temp_c=water_temp,
-            aeration=profiles.at(now).aeration,
-            algae_high=algae_assessment.scrub_now if algae_assessment is not None else None,
-            thresholds=registry.hypoxia_thresholds,
+            now=now, ph=fresh_value(freshness, "ph"),
+            water_temp_c=fresh_value(freshness, "temp"), history_hours=0,
         )
 
         outcome["events"] = events

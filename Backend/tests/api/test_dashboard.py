@@ -167,6 +167,15 @@ def test_dashboard_hypoxia_uses_fresh_readings_only():
     assert hypoxia["lux"] is None and hypoxia["level"] == "unknown"
 
 
+def test_assessment_all_matches_dashboard_and_ignores_stale_raw_sensor(scenario_app, clock):
+    _, storage, client = scenario_app
+    clock(NOW)
+    storage.set_dashboard_payload(9101, {"raw_sensor": {"pH": 7.5, "temp": 28.0, "LUX": 3.0}})
+    dashboard = client.get("/v1/ponds/9101/dashboard").get_json()
+    assessment = client.get("/v1/ponds/9101/assessments").get_json()
+    assert dashboard["assessments"]["hypoxia"]["level"] == assessment["hypoxia"]["level"] == "unknown"
+
+
 def test_dashboard_missing_station_is_not_borrowed():
     pond, now = SCENARIO["missing_station"]
     body = dashboard_for(memory_storage(), pond, now)
@@ -312,7 +321,8 @@ def test_dashboard_etag_changes_with_each_source(scenario_app, clock, change):
                                            "volume_l": 2500.0, "depth_m": None, "biomass_g": 55000.0,
                                            "fish_type": None, "fish_count": None, "tap_tds_ppm": None,
                                            "tap_nitrate_ppm": None, "aeration": True})
-    assert _get(client, etag).status_code == 200
+    expected = 304 if change == "profile" else 200
+    assert _get(client, etag).status_code == expected
 
 
 def test_other_gets_are_conditional_too(scenario_app, clock):

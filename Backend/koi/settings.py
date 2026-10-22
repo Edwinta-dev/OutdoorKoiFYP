@@ -9,6 +9,7 @@ never loaded during a test run.
 """
 from __future__ import annotations
 
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -21,6 +22,8 @@ from koi.models.algae_engine import GccSignalConfig
 from koi.models.hypoxia import HypoxiaThresholds
 from koi.models.sensor_inputs import IngestConfig
 from koi.models.tds_prompts import PromptConfig
+
+_HYPOXIA_SETTINGS_WARNING_EMITTED = False
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -336,9 +339,14 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _hypoxia_levels_ascending(self) -> "Settings":
-        if not self.hypoxia_watch_temp_c < self.hypoxia_high_temp_c:
-            raise ValueError("KOI_HYPOXIA_WATCH_TEMP_C must be below KOI_HYPOXIA_HIGH_TEMP_C")
+    def _deprecated_hypoxia_settings(self) -> "Settings":
+        global _HYPOXIA_SETTINGS_WARNING_EMITTED
+        if not _HYPOXIA_SETTINGS_WARNING_EMITTED:
+            warnings.warn(
+                "KOI_HYPOXIA_WATCH_TEMP_C and KOI_HYPOXIA_HIGH_TEMP_C are deprecated and unused",
+                DeprecationWarning, stacklevel=2,
+            )
+            _HYPOXIA_SETTINGS_WARNING_EMITTED = True
         return self
 
     @model_validator(mode="after")

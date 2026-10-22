@@ -68,7 +68,7 @@ from koi import kit_readings
 from koi.api import responses as res
 from koi.api import schemas
 from koi.api.auth import authenticate, require_pond
-from koi.api.dashboard import build_dashboard
+from koi.api.dashboard import build_dashboard, build_readings
 from koi.api.health import readiness
 from koi.api.spec import after_request, route
 from koi.errors import ApiError, PondNotConfigured, error_response
@@ -77,7 +77,7 @@ from koi.models import algae_engine as ae
 from koi.models import device_health, forecast_utils, ladder, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
-from koi.models.hypoxia import algae_is_high, assess_hypoxia
+from koi.models.hypoxia import assess_hypoxia
 from koi.models.local_time import local_date
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
@@ -831,26 +831,16 @@ def get_all_assessments(user_id):
 
 def _hypoxia_now(user_id: int, algae_assessment: Optional[dict]) -> dict:
     """The night-time hypoxia flag (koi/models/hypoxia.py) from the
-    latest sensor reading, the profile in force now and the cached algae
-    assessment: the inputs the poller uses, read fresh. A missing reading
-    gives level "unknown" rather than an error."""
-    payload = fail_soft(lambda: _storage().fetch_dashboard_payload(user_id), None) or {}
-    raw = payload.get("raw_sensor")
-    raw = raw if isinstance(raw, dict) else {}
-
-    def number(key: str) -> Optional[float]:
-        try:
-            return float(raw[key]) if raw.get(key) is not None else None
-        except (TypeError, ValueError):
-            return None
-
-    profiles = _profiles_for(user_id)
+    latest fresh pH and water temperature readings, with the same freshness
+    rule as /dashboard. A missing or stale reading gives level "unknown"
+    rather than an error."""
+    now = datetime.now(timezone.utc)
+    sources = fail_soft(lambda: _storage().fetch_dashboard_sources(user_id), None) or {}
+    readings = build_readings(list(sources.get("readings") or []), now)
+    def fresh(reading):
+        return reading.value if reading.status == "ok" else None
     return assess_hypoxia(
-        lux=number("LUX"),
-        water_temp_c=number("temp"),
-        aeration=profiles.at(datetime.now(timezone.utc)).aeration if profiles is not None else None,
-        algae_high=algae_is_high(algae_assessment),
-        thresholds=_registry().hypoxia_thresholds,
+        now=now, ph=fresh(readings.ph), water_temp_c=fresh(readings.water_temp), history_hours=0,
     ).to_dict()
 
 

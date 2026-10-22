@@ -476,3 +476,11 @@ window, questions, answers and rejections in each pond's existing snapshot.
 Older versions load empty prompt state without changing engine history.
 `none of these` suppresses all offered event kinds for later signals of the
 same type and direction on this pond. `dismiss` closes only that question.
+
+## Hypoxia night advisory (issue #124)
+
+`Backend/koi/models/hypoxia.py::assess_hypoxia` now reports a standing overnight advisory. It uses `NIGHT_START_HOUR = 22`, `NIGHT_END_HOUR = 6`, `WARMUP_HOURS = 24`, `MODEL_ID = "hypoxia-night-advisory-v2"`, and `HORIZON = "overnight"`. Times are converted with `koi.models.local_time.DEFAULT_POND_TIME_ZONE` (`Asia/Singapore`). The advisory is `watch` during the window and `none` outside it, provided required inputs are current and history is warm. It is never flagged as raised. Less than 24 hours of history, missing/stale pH, or missing/stale water temperature yields `unknown`.
+
+The warm-up and window values are owner-approved issue parameters. Dissolved oxygen remains unmeasured; the explanation says so and advises overnight aeration. `KOI_HYPOXIA_WATCH_TEMP_C` and `KOI_HYPOXIA_HIGH_TEMP_C` remain readable but are deprecated and do not affect this result. Legacy response keys remain present and deprecated; values that no longer have meaning are null or empty.
+
+Retired hypoxia thresholds: `DEFAULT_WATCH_TEMP_C` was 30 C and `DEFAULT_HIGH_TEMP_C` was 32 C; both are now unused. Issue #124 replaces the temperature gate with a fixed time-window advisory because the owner-supplied handover said the former gate warned on 0% of observed onsets. The legacy environment settings remain readable and emit a deprecation warning.
