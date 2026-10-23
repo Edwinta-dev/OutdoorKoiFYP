@@ -66,19 +66,19 @@ class FishCarouselHeader extends StatelessWidget {
                       vertical: AppSpace.sm,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.of(context).info.withValues(alpha: 0.15),
+                      color: AppColors.of(context).accent.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(AppRadius.panel),
                       border: Border.all(
                         color: AppColors.of(
                           context,
-                        ).info.withValues(alpha: 0.4),
+                        ).accent.withValues(alpha: 0.4),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.of(
                             context,
-                          ).info.withValues(alpha: 0.1),
+                          ).accent.withValues(alpha: 0.1),
                           blurRadius: 8,
                         ),
                       ],
@@ -88,14 +88,14 @@ class FishCarouselHeader extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.shield_outlined,
-                          color: AppColors.of(context).info,
+                          color: AppColors.of(context).accent,
                           size: 13,
                         ),
                         const SizedBox(width: AppSpace.xs),
                         Text(
                           'Care: $careLevel',
                           style: AppType.style(
-                            color: AppColors.of(context).info,
+                            color: AppColors.of(context).accent,
                             fontWeight: FontWeight.w700,
                             fontSize: AppType.caption,
                           ),

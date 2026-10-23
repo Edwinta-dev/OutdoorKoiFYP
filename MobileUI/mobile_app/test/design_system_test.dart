@@ -45,6 +45,7 @@ void main() {
       final c = AppColors(theme.brightness);
       expect(theme.scaffoldBackgroundColor, c.canvas);
       expect(theme.colorScheme.primary, c.primary);
+      expect(c.onAccent, c.foregroundOn(c.accent));
       expect(theme.colorScheme.surface, c.surface);
       expect(theme.colorScheme.onSurface, c.text);
       expect(theme.textTheme.bodyMedium!.fontSize, AppType.body);
@@ -54,6 +55,7 @@ void main() {
       );
       for (final background in [
         c.info,
+        c.accent,
         c.feeding,
         c.warning,
         c.water,
@@ -67,7 +69,8 @@ void main() {
         );
       }
       // Primary text and secondary copy remain legible on each surface.
-      for (final text in [c.text, c.textSecondary, c.textMuted]) {
+      // The brand accent is used as text and icon colour on surfaces.
+      for (final text in [c.text, c.textSecondary, c.textMuted, c.accent]) {
         final a = text.computeLuminance();
         final b = c.surface.computeLuminance();
         expect(

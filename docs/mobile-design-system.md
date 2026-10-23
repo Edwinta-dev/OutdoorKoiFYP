@@ -7,10 +7,20 @@ brightness. Native bars use the matching app-bar overlay style.
 
 Use `AppColors.of(context)` for colours and `AppType` for text sizes. Colour
 roles include canvas, navigation, surface, surfaceRaised, surfaceInset,
-text, textSecondary, textMuted, outline, primary, info, water, healthy,
-warning, danger, feeding and intervention. Image overlays retain a fixed
+text, textSecondary, textMuted, outline, primary, accent, info, water,
+healthy, warning, danger, feeding and intervention. Image overlays retain a fixed
 dark background with `onImage` text. Filled controls use `foregroundOn` to
 choose a contrasting foreground.
+
+| Token | Dark | Light | Use |
+| --- | --- | --- | --- |
+| `primary` | `#00E676` | `#006C45` | Primary filled controls, onboarding |
+| `accent` | `#9ED9CC` | `#3E7C72` | Brand accent: nav selection, "+ Log", spinners, refresh icons, section and card header tints, fish screens, timeline selection, empty/error states. `onAccent` is `foregroundOn(accent)` |
+| `info` | `#38BDF8` | `#006B96` | Semantic only: rain, weather, water-level and chart series. Never a brand highlight |
+
+`accent` and `onAccent` meet 4.5:1 against each other and against `surface`
+(`test/design_system_test.dart`). The navigation bar indicator, selected icons
+and bottom-navigation selection use `accent`.
 
 `lib/widgets/shared/pond_widgets.dart` provides `MetricTile`, `StatusChip`,
 `SectionHeader`, `OutcomeCardShell`, `PondEmptyState` and `PondErrorState`.

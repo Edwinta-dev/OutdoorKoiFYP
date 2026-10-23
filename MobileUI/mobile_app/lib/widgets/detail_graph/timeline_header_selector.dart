@@ -33,13 +33,13 @@ class TimelineHeaderSelector extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.selected)) {
-                return AppColors.of(context).info.withValues(alpha: 0.2);
+                return AppColors.of(context).accent.withValues(alpha: 0.2);
               }
               return AppColors.transparent;
             }),
             foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
               if (states.contains(WidgetState.selected)) {
-                return AppColors.of(context).info;
+                return AppColors.of(context).accent;
               }
               return AppColors.of(context).textMuted;
             }),

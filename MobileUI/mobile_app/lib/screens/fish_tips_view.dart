@@ -48,7 +48,7 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
     final state = ref.watch(fishProfilesProvider);
     if (state.isLoading) {
       return Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).info),
+        child: CircularProgressIndicator(color: AppColors.of(context).accent),
       );
     }
 
@@ -138,7 +138,7 @@ class FishTipsViewState extends ConsumerState<FishTipsView> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(AppRadius.small),
                           color: _currentCarouselIndex == entry.key
-                              ? AppColors.of(context).info
+                              ? AppColors.of(context).accent
                               : AppColors.of(
                                   context,
                                 ).text.withValues(alpha: 0.3),

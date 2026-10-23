@@ -22,7 +22,7 @@ class FishImageHelper {
       context: context,
       barrierDismissible: false,
       builder: (_) => Center(
-        child: CircularProgressIndicator(color: AppColors.of(context).info),
+        child: CircularProgressIndicator(color: AppColors.of(context).accent),
       ),
     );
   }
@@ -51,7 +51,7 @@ class FishImageHelper {
             toolbarWidgetColor: colors.text,
             initAspectRatio: CropAspectRatioPreset.ratio16x9,
             lockAspectRatio: false,
-            activeControlsWidgetColor: colors.info,
+            activeControlsWidgetColor: colors.accent,
             statusBarLight: !colors.isDark,
             backgroundColor: colors.canvas,
           ),
@@ -159,7 +159,7 @@ class FishImageHelper {
             ListTile(
               leading: Icon(
                 Icons.add_photo_alternate_outlined,
-                color: AppColors.of(context).info,
+                color: AppColors.of(context).accent,
               ),
               title: Text(
                 'Add Another Photo',

@@ -44,7 +44,7 @@ Future<void> handleImageManagement(
               ListTile(
                 leading: Icon(
                   Icons.add_photo_alternate_outlined,
-                  color: AppColors.of(context).info,
+                  color: AppColors.of(context).accent,
                 ),
                 title: Text(
                   'Upload / Change Image',
@@ -119,7 +119,7 @@ Future<void> _pickAndUploadImage(
         context: context,
         barrierDismissible: false,
         builder: (c) => Center(
-          child: CircularProgressIndicator(color: AppColors.of(context).info),
+          child: CircularProgressIndicator(color: AppColors.of(context).accent),
         ),
       ),
     );

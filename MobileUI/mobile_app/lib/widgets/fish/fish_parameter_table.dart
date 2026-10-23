@@ -34,7 +34,7 @@ class FishParameterTable extends StatelessWidget {
               vertical: AppSpace.md,
             ),
             decoration: BoxDecoration(
-              color: AppColors.of(context).info.withValues(alpha: 0.1),
+              color: AppColors.of(context).accent.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(AppRadius.card),
               ),
@@ -42,7 +42,7 @@ class FishParameterTable extends StatelessWidget {
             child: Text(
               headerTitle,
               style: AppType.style(
-                color: AppColors.of(context).info,
+                color: AppColors.of(context).accent,
                 fontSize: AppType.caption,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.8,
@@ -85,7 +85,7 @@ class FishParameterTable extends StatelessWidget {
                           Text(
                             key,
                             style: AppType.style(
-                              color: AppColors.of(context).info,
+                              color: AppColors.of(context).accent,
                               fontSize: AppType.label,
                               fontWeight: FontWeight.w700,
                             ),

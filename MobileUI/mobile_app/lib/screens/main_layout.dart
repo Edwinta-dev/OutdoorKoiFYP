@@ -170,7 +170,7 @@ class _MainLayoutState extends State<MainLayout> {
     String label,
   ) {
     final isSelected = _currentIndex == index;
-    final activeColor = AppColors.of(context).info;
+    final activeColor = AppColors.of(context).accent;
     final inactiveColor = AppColors.of(context).textSecondary;
 
     return InkWell(
@@ -224,19 +224,22 @@ class _MainLayoutState extends State<MainLayout> {
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [AppColors.of(context).info, AppColors.of(context).info],
+              colors: [
+                AppColors.of(context).accent,
+                AppColors.of(context).accent,
+              ],
             ),
             borderRadius: BorderRadius.circular(AppRadius.sheet),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, color: AppColors.of(context).onInfo, size: 18),
+              Icon(Icons.add, color: AppColors.of(context).onAccent, size: 18),
               const SizedBox(width: AppSpace.xs),
               Text(
                 'Log',
                 style: AppType.style(
-                  color: AppColors.of(context).onInfo,
+                  color: AppColors.of(context).onAccent,
                   fontWeight: FontWeight.bold,
                   fontSize: AppType.label,
                 ),

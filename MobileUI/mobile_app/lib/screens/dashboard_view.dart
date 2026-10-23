@@ -81,11 +81,11 @@ class DashboardViewState extends ConsumerState<DashboardView> {
         child: state.isLoading && dashboardData.isEmpty
             ? Center(
                 child: CircularProgressIndicator(
-                  color: AppColors.of(context).info,
+                  color: AppColors.of(context).accent,
                 ),
               )
             : RefreshIndicator(
-                color: AppColors.of(context).info,
+                color: AppColors.of(context).accent,
                 backgroundColor: AppColors.of(context).surface,
                 onRefresh: refreshData,
                 child: SingleChildScrollView(

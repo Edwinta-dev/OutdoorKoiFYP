@@ -31,6 +31,13 @@ class AppColors {
       isDark ? const Color(0xFF071C14) : const Color(0xFFFFFFFF);
   Color get info => isDark ? const Color(0xFF38BDF8) : const Color(0xFF006B96);
   Color get onInfo => foregroundOn(info);
+
+  /// The brand accent (pastel teal): selection, primary actions, section
+  /// headers and other non-semantic highlights. Weather, rain and water
+  /// meaning stays on [info] and [water].
+  Color get accent =>
+      isDark ? const Color(0xFF9ED9CC) : const Color(0xFF3E7C72);
+  Color get onAccent => foregroundOn(accent);
   Color foregroundOn(Color background) => background.computeLuminance() > 0.179
       ? const Color(0xFF000000)
       : const Color(0xFFFFFFFF);
@@ -175,21 +182,21 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: c.navigation,
-        indicatorColor: c.primary.withValues(alpha: 0.2),
+        indicatorColor: c.accent.withValues(alpha: 0.2),
         labelTextStyle: WidgetStatePropertyAll(
           AppType.style(fontSize: AppType.label, color: c.textSecondary),
         ),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? c.primary
+                ? c.accent
                 : c.textMuted,
           ),
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: c.navigation,
-        selectedItemColor: c.primary,
+        selectedItemColor: c.accent,
         unselectedItemColor: c.textMuted,
         elevation: 0,
       ),

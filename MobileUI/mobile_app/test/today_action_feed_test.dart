@@ -25,7 +25,7 @@ const List<Map<String, dynamic>> ladderActions = [
     'action':
         'Check the pond after yesterday\'s heavy rain; verify water level '
         'and fish behaviour.',
-    'evidence': '62.4 mm at station S24 on 2026-08-11.',
+    'evidence': '55.2 mm at station S43 on 2026-08-11.',
   },
   {
     'rule': 'PREEMPT',
@@ -88,6 +88,35 @@ Future<FakeLocalProfileRepository> pumpFeed(
   return repo;
 }
 
+Future<void> pumpFeedWith(
+  WidgetTester tester,
+  FakeLocalProfileRepository repo,
+  List<PondAction> actions,
+  DateTime Function() now,
+) async {
+  tester.view.physicalSize = phoneSize;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        pondDataSourceProvider.overrideWithValue(FakePondDataSource()),
+        localProfileRepositoryProvider.overrideWithValue(repo),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TodayActionFeed(actions: actions, clock: now),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 double topOf(WidgetTester tester, String text) =>
     tester.getTopLeft(find.text(text)).dy;
 
@@ -99,7 +128,8 @@ void main() {
       expect(a.leadTime, 'today');
       expect(a.action, startsWith('Schedule a water change'));
       expect(a.evidence, contains('0.050'));
-      expect(a.headline, 'Dry weather window - plan pond work');
+      expect(a.headline, 'Dry day for pond work');
+      expect(a.ruleTag, '24-HOUR FORECAST');
       expect(a.ruleIcon, Icons.wb_sunny_outlined);
     });
 
@@ -192,19 +222,20 @@ void main() {
             topOf(tester, parsed([raw]).single.headline),
         ];
         expect(tops, orderedEquals([...tops]..sort()));
-        expect(find.text('Now, until about 11:30'), findsOneWidget);
+        expect(find.text('Heavy rain yesterday'), findsOneWidget);
+        expect(find.text('RAIN GAUGE'), findsOneWidget);
+        // The chip appears only once a card is expanded.
+        expect(find.textContaining('from now to about'), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('expand-NOWCAST')));
+        await tester.tap(find.byKey(const ValueKey('expand-REACT')));
+        await tester.pumpAndSettle();
         expect(
-          find.text("This morning, after yesterday's rain"),
+          find.text('Thundery Showers from now to about 11:30 am'),
           findsOneWidget,
         );
         expect(
-          find.text('Heavy rain yesterday - check the pond'),
+          find.text('Rain gauge: 55.2 mm yesterday (S43)'),
           findsOneWidget,
-        );
-        expect(find.textContaining('62.4 mm at station S24'), findsOneWidget);
-        expect(
-          find.textContaining('Check the pond after yesterday'),
-          findsNothing,
         );
         expect(tester.takeException(), isNull);
       },
@@ -315,24 +346,168 @@ void main() {
       );
     });
 
-    testWidgets('why expands to the full evidence and rule', (tester) async {
+    testWidgets('the chevron expands to advice, one chip and the info '
+        'button', (tester) async {
       await pumpFeed(tester, parsed([ladderActions[1]]));
-      Text why() => tester.widget<Text>(find.textContaining('Why'));
 
-      expect(why().maxLines, 1);
-      expect(find.textContaining('Rule PREEMPT'), findsNothing);
+      expect(find.text('4-DAY OUTLOOK'), findsOneWidget);
+      expect(find.byKey(const ValueKey('evidence-PREEMPT')), findsNothing);
+      expect(find.byKey(const ValueKey('info-PREEMPT')), findsNothing);
+      expect(find.text('Reduce feeding and add aeration'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('expand-PREEMPT')));
+      await tester.pumpAndSettle();
+      expect(find.byType(Chip), findsNothing);
+      expect(find.byKey(const ValueKey('evidence-PREEMPT')), findsOneWidget);
+      expect(find.text('Tmax 34.1 °C, outlook 34.0 °C'), findsOneWidget);
+      expect(find.text('Reduce feeding and add aeration'), findsOneWidget);
       expect(find.textContaining('Reduce the feed ration'), findsNothing);
+      expect(find.textContaining('not a pond measurement'), findsNothing);
+      expect(find.textContaining('Rule PREEMPT'), findsNothing);
+      expect(find.byKey(const ValueKey('info-PREEMPT')), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('why-PREEMPT')));
+      await tester.tap(find.byKey(const ValueKey('expand-PREEMPT')));
       await tester.pumpAndSettle();
-      expect(why().maxLines, isNull);
-      expect(find.textContaining('Rule PREEMPT'), findsOneWidget);
-      expect(find.textContaining('Reduce the feed ration'), findsOneWidget);
-      expect(find.textContaining('Measured Tmax'), findsNWidgets(3));
+      expect(find.byKey(const ValueKey('evidence-PREEMPT')), findsNothing);
+    });
 
-      await tester.tap(find.byKey(const ValueKey('why-PREEMPT')));
+    testWidgets('info button opens a popup that any tap closes', (
+      tester,
+    ) async {
+      await pumpFeed(tester, parsed([ladderActions[3]]));
+      await tester.tap(find.byKey(const ValueKey('expand-NOWCAST')));
       await tester.pumpAndSettle();
-      expect(why().maxLines, 1);
+      final info = parsed([ladderActions[3]]).single.infoText;
+
+      await tester.tap(find.byKey(const ValueKey('info-NOWCAST')));
+      await tester.pumpAndSettle();
+      expect(find.text(info), findsOneWidget);
+      expect(find.text('Tap anywhere to close'), findsOneWidget);
+      final dialog = tester.widget<Dialog>(find.byType(Dialog));
+      expect(
+        (dialog.shape as RoundedRectangleBorder).borderRadius,
+        BorderRadius.circular(AppRadius.control),
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('info-popup-NOWCAST'))).width,
+        lessThanOrEqualTo(360),
+      );
+      await tester.tap(find.text(info));
+      await tester.pumpAndSettle();
+      expect(find.text(info), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('info-NOWCAST')));
+      await tester.pumpAndSettle();
+      expect(find.text(info), findsOneWidget);
+      await tester.tapAt(const Offset(2, 2)); // the barrier
+      await tester.pumpAndSettle();
+      expect(find.text(info), findsNothing);
+    });
+
+    test('each rule has its tag, advice and info text', () {
+      final a = {for (final p in parsed()) p.rule: p};
+      expect(a['NOWCAST']!.ruleTag, '2-HOUR NOWCAST');
+      expect(a['REACT']!.ruleTag, 'RAIN GAUGE');
+      expect(a['PREEMPT']!.ruleTag, '4-DAY OUTLOOK');
+      expect(a['WINDOW']!.ruleTag, '24-HOUR FORECAST');
+      expect(a['NOWCAST']!.advice, 'Pause and postpone outdoor work');
+      expect(a['REACT']!.advice, 'Perform a water chemistry check');
+      expect(a['PREEMPT']!.advice, 'Reduce feeding and add aeration');
+      expect(
+        a['WINDOW']!.advice,
+        'Good day for a water change or filter clean',
+      );
+      expect(
+        a['NOWCAST']!.infoText,
+        'Rule NOWCAST, checked against the NEA 2-hour forecast. Fires when '
+        'the latest nowcast for your area says rain, showers or thunder for '
+        'now.',
+      );
+      expect(
+        a['REACT']!.infoText,
+        'Rule REACT, checked against NEA weather telemetry. Fires when '
+        "yesterday's rain total at your rain station is 50 mm or more.",
+      );
+      expect(
+        a['PREEMPT']!.infoText,
+        'Rule PREEMPT, checked against the NEA 4-day outlook. Fires when '
+        'today was hot and the outlook stays hot for the coming days.',
+      );
+      expect(
+        a['WINDOW']!.infoText,
+        'Rule WINDOW, checked against the NEA 24-hour forecast. Fires when '
+        "the day's forecast is in the driest band.",
+      );
+      const unknown = PondAction(
+        rule: 'X',
+        leadTime: '',
+        action: 'Server text',
+        evidence: '',
+      );
+      expect(unknown.advice, 'Server text');
+    });
+
+    test('NOWCAST chip: 12-hour clock, rounded down to 15 minutes', () {
+      final n = parsed([ladderActions[3]]).single;
+      String at(int h, int m) => n.evidenceText(DateTime(2026, 8, 12, h, m));
+      expect(at(13, 10), 'Thundery Showers from now to about 3:00 pm');
+      expect(at(13, 44), 'Thundery Showers from now to about 3:30 pm');
+      expect(at(22, 50), 'Thundery Showers from now to about 12:45 am');
+      expect(at(9, 50), 'Thundery Showers from now to about 11:45 am');
+      expect(at(10, 5), 'Thundery Showers from now to about 12:00 pm');
+    });
+
+    test('REACT line: gauge total with a relative day, else raw', () {
+      final r = parsed([ladderActions[0]]).single; // rain on 2026-08-11
+      String at(int d) => r.evidenceText(DateTime(2026, 8, d, 9));
+      expect(at(12), 'Rain gauge: 55.2 mm yesterday (S43)');
+      expect(at(13), 'Rain gauge: 55.2 mm 2 days ago (S43)');
+      expect(at(14), 'Rain gauge: 55.2 mm 3 days ago (S43)');
+      expect(at(15), 'Rain gauge: 55.2 mm a long time ago (S43)');
+      expect(at(20), 'Rain gauge: 55.2 mm a long time ago (S43)');
+      expect(r.evidenceText(Fixtures.now), isNot(contains('00:00')));
+      expect(r.evidenceText(Fixtures.now), isNot(contains('since')));
+      // Month boundary.
+      expect(
+        r.evidenceText(DateTime(2026, 9, 1)),
+        'Rain gauge: 55.2 mm a long time ago (S43)',
+      );
+      const undated = PondAction(
+        rule: 'REACT',
+        leadTime: '',
+        action: '',
+        evidence: '55.2 mm at station S43 on a day.',
+      );
+      expect(
+        undated.evidenceText(DateTime(2026, 8, 20)),
+        'Rain gauge: 55.2 mm yesterday (S43)',
+      );
+      const odd = PondAction(
+        rule: 'REACT',
+        leadTime: '',
+        action: '',
+        evidence: 'Gauge total unavailable.',
+      );
+      expect(odd.evidenceText(Fixtures.now), 'Gauge total unavailable.');
+    });
+
+    test('PREEMPT and WINDOW lines are one short plain line', () {
+      expect(
+        parsed([ladderActions[1]]).single.evidenceText(Fixtures.now),
+        'Tmax 34.1 °C, outlook 34.0 °C',
+      );
+      expect(
+        parsed([ladderActions[2]]).single.evidenceText(Fixtures.now),
+        'Forecast in the driest band',
+      );
+    });
+
+    test('rain rules are told apart by icon and tag', () {
+      final now = PondAction.fromJson(const {'rule': 'NOWCAST'});
+      final react = PondAction.fromJson(const {'rule': 'REACT'});
+      expect(now.ruleIcon, isNot(react.ruleIcon));
+      expect(now.ruleTag, '2-HOUR NOWCAST');
+      expect(react.ruleTag, 'RAIN GAUGE');
     });
 
     testWidgets('log buttons open the matching log sheet', (tester) async {
@@ -380,15 +555,86 @@ void main() {
       );
       await settle(tester);
       for (final rule in ['NOWCAST', 'REACT', 'PREEMPT', 'WINDOW']) {
-        final why = find.byKey(ValueKey('why-$rule'));
+        final why = find.byKey(ValueKey('expand-$rule'));
         await tester.ensureVisible(why);
         await tester.tap(why);
         await settle(tester);
       }
-      expect(find.textContaining('Rule '), findsNWidgets(4));
+      expect(find.byType(Chip), findsNothing);
+      for (final rule in ['NOWCAST', 'REACT', 'PREEMPT', 'WINDOW']) {
+        expect(find.byKey(ValueKey('evidence-$rule')), findsOneWidget);
+      }
+      expect(find.byTooltip('About this rule'), findsNWidgets(4));
       expect(tester.takeException(), isNull);
     });
   }
+
+  group('REACT is kept until dismissed', () {
+    final react = parsed([ladderActions[0]]);
+    DateTime Function() on(int day) =>
+        () => DateTime(2026, 8, day, 9, 30);
+
+    testWidgets('first sight stores it; later days still show it', (
+      tester,
+    ) async {
+      final repo = await pumpFeed(tester, react);
+      expect(repo.values[retainedReactKey], contains('55.2 mm'));
+
+      // Two days later the server no longer returns it.
+      final later = FakeLocalProfileRepository(
+        Map.of(repo.values)..remove(dismissedActionsKey),
+      );
+      await pumpFeedWith(tester, later, const [], on(14));
+      await tester.tap(find.byKey(const ValueKey('expand-REACT')));
+      await tester.pumpAndSettle();
+      expect(find.text('Heavy rain yesterday'), findsOneWidget);
+      expect(find.text('Rain gauge: 55.2 mm 3 days ago (S43)'), findsOneWidget);
+    });
+
+    testWidgets('dismissing clears it for good', (tester) async {
+      final repo = await pumpFeed(tester, react);
+      await tester.tap(find.byTooltip('Dismiss for today'));
+      await tester.pumpAndSettle();
+      expect(repo.values[retainedReactKey], '');
+
+      final later = FakeLocalProfileRepository(Map.of(repo.values));
+      await pumpFeedWith(tester, later, const [], on(13));
+      expect(find.text('Heavy rain yesterday'), findsNothing);
+      expect(find.text('Weather rules could not be checked.'), findsOneWidget);
+    });
+
+    testWidgets('dismissed today, server still returns it: not re-kept', (
+      tester,
+    ) async {
+      final action = ladderActions[0]['action'] as String;
+      final repo = await pumpFeed(
+        tester,
+        react,
+        prefs: {
+          ...onboardedPrefs,
+          dismissedActionsKey: ['2026-08-12|REACT|$action'],
+        },
+      );
+      expect(repo.values[retainedReactKey], isNull);
+    });
+
+    testWidgets('dropped after 7 days', (tester) async {
+      final repo = await pumpFeed(tester, react);
+      final kept = FakeLocalProfileRepository(Map.of(repo.values));
+      await pumpFeedWith(tester, kept, const [], on(18)); // rain on the 11th
+      expect(find.text('Heavy rain yesterday'), findsOneWidget);
+
+      final expired = FakeLocalProfileRepository(Map.of(repo.values));
+      await pumpFeedWith(tester, expired, const [], on(19));
+      expect(find.text('Heavy rain yesterday'), findsNothing);
+      expect(expired.values[retainedReactKey], '');
+    });
+
+    testWidgets('other rules are not kept', (tester) async {
+      final repo = await pumpFeed(tester, parsed([ladderActions[3]]));
+      expect(repo.values[retainedReactKey], isNull);
+    });
+  });
 
   group('DashboardView', () {
     Future<void> unmount(WidgetTester tester) =>

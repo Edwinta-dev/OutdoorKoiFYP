@@ -502,8 +502,7 @@ class AlgaeForecast {
       rateSourceDetail == 'gcc_windowed_trend' ||
       projectionMethod == 'windowed_gcc_trend';
 
-  double? get currentSignal =>
-      isGccMode ? currentGcc : currentGreenRatio;
+  double? get currentSignal => isGccMode ? currentGcc : currentGreenRatio;
 
   String get signalLabel => isGccMode ? 'GCC' : 'Green ratio';
 
@@ -859,15 +858,118 @@ class PondAction {
 
   /// Short brief used on the collapsed Today card.
   String get headline => switch (rule) {
-    'NOWCAST' => 'Rain soon - secure feed and pause work',
-    'REACT' => 'Heavy rain yesterday - check the pond',
-    'PREEMPT' => 'Hot stretch ahead - reduce feed',
-    'WINDOW' => 'Dry weather window - plan pond work',
+    'NOWCAST' => 'Rain within 2 hours',
+    'REACT' => 'Heavy rain yesterday',
+    'PREEMPT' => 'Hot days ahead',
+    'WINDOW' => 'Dry day for pond work',
     _ => action.isEmpty ? ruleLabel : action,
   };
 
+  /// Small tag above the headline: the weather source that raised it.
+  String get ruleTag => switch (rule) {
+    'NOWCAST' => '2-HOUR NOWCAST',
+    'REACT' => 'RAIN GAUGE',
+    'PREEMPT' => '4-DAY OUTLOOK',
+    'WINDOW' => '24-HOUR FORECAST',
+    _ => rule.isEmpty ? 'WEATHER' : rule,
+  };
+
+  /// One short advice line written by the app; unknown rules show the
+  /// service's own action text.
+  String get advice => switch (rule) {
+    'NOWCAST' => 'Pause and postpone outdoor work',
+    'REACT' => 'Perform a water chemistry check',
+    'PREEMPT' => 'Reduce feeding and add aeration',
+    'WINDOW' => 'Good day for a water change or filter clean',
+    _ => action,
+  };
+
+  /// What the (i) button explains about the rule.
+  String get infoText => switch (rule) {
+    'NOWCAST' =>
+      'Rule NOWCAST, checked against the NEA 2-hour forecast. Fires when '
+          'the latest nowcast for your area says rain, showers or thunder '
+          'for now.',
+    'REACT' =>
+      'Rule REACT, checked against NEA weather telemetry. Fires when '
+          "yesterday's rain total at your rain station is 50 mm or more.",
+    'PREEMPT' =>
+      'Rule PREEMPT, checked against the NEA 4-day outlook. Fires when '
+          'today was hot and the outlook stays hot for the coming days.',
+    'WINDOW' =>
+      'Rule WINDOW, checked against the NEA 24-hour forecast. Fires when '
+          "the day's forecast is in the driest band.",
+    _ => 'Rule $rule ($ruleLabel).',
+  };
+
+  static final RegExp _rainDateRe = RegExp(r'\bon (\d{4})-(\d{2})-(\d{2})');
+
+  /// The calendar day of the REACT rain total, parsed from the evidence
+  /// ("... on 2026-10-22"); null when absent.
+  DateTime? get rainDate {
+    final m = _rainDateRe.firstMatch(evidence);
+    if (m == null) return null;
+    final y = int.parse(m[1]!), mo = int.parse(m[2]!), d = int.parse(m[3]!);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return DateTime(y, mo, d);
+  }
+
+  /// Plain-words age of the REACT rain total as seen at [now]. REACT always
+  /// reports yesterday's window, so an unreadable or future date reads as
+  /// "yesterday".
+  String relativeDay(DateTime now) {
+    final r = rainDate;
+    if (r == null) return 'yesterday';
+    final days = DateTime.utc(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime.utc(r.year, r.month, r.day)).inDays;
+    if (days <= 1) return 'yesterday';
+    if (days == 2) return '2 days ago';
+    if (days == 3) return '3 days ago';
+    return 'a long time ago';
+  }
+
+  /// The one evidence line shown under the advice, as seen at [now].
+  String evidenceText(DateTime now) {
+    final ev = evidence.trim();
+    switch (rule) {
+      case 'NOWCAST':
+        final until = now.add(const Duration(hours: 2));
+        final end = _h12(until.hour, until.minute - until.minute % 15);
+        final wording = ev.isEmpty ? 'Rain forecast' : ev;
+        return '$wording from now to about $end';
+      case 'REACT':
+        final m = RegExp(
+          r'^([\d.]*\d)\s*mm at station (\S+?) on',
+        ).firstMatch(ev);
+        if (m == null) return ev.isEmpty ? whenText(now) : ev;
+        return 'Rain gauge: ${m[1]} mm ${relativeDay(now)} (${m[2]})';
+      case 'PREEMPT':
+        final m = RegExp(
+          r'Tmax ([\d.]+) °C and outlook \w+ ([\d.]+) °C',
+        ).firstMatch(ev);
+        if (m != null) return 'Tmax ${m[1]} °C, outlook ${m[2]} °C';
+        return ev.isEmpty ? whenText(now) : '${whenText(now)} · $ev';
+      case 'WINDOW':
+        if (RegExp(r'rank ([\d.]+)').hasMatch(ev)) {
+          return 'Forecast in the driest band';
+        }
+        return ev.isEmpty ? whenText(now) : '${whenText(now)} · $ev';
+    }
+    final when = whenText(now);
+    return ev.isEmpty ? when : '$when · $ev';
+  }
+
+  static String _h12(int h, int m) {
+    final h12 = h % 12 == 0 ? 12 : h % 12;
+    return '$h12:${m.toString().padLeft(2, '0')} ${h < 12 ? 'am' : 'pm'}';
+  }
+
   IconData get ruleIcon => switch (rule) {
-    'NOWCAST' || 'REACT' => Icons.cloud,
+    'NOWCAST' => Icons.thunderstorm_outlined,
+    'REACT' => Icons.water_drop_outlined,
     'PREEMPT' => Icons.thermostat,
     'WINDOW' => Icons.wb_sunny_outlined,
     _ => Icons.rule_outlined,

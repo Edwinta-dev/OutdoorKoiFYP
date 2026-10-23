@@ -116,18 +116,18 @@ class FishImageHeader extends StatelessWidget {
                       vertical: AppSpace.xs,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.of(context).info.withValues(alpha: 0.2),
+                      color: AppColors.of(context).accent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(AppRadius.control),
                       border: Border.all(
                         color: AppColors.of(
                           context,
-                        ).info.withValues(alpha: 0.4),
+                        ).accent.withValues(alpha: 0.4),
                       ),
                     ),
                     child: Text(
                       'Care: $careLevel',
                       style: AppType.style(
-                        color: AppColors.of(context).info,
+                        color: AppColors.of(context).accent,
                         fontWeight: FontWeight.w600,
                         fontSize: AppType.caption,
                       ),

@@ -237,7 +237,7 @@ class PondEmptyState extends StatelessWidget {
     title: title,
     message: message,
     icon: icon,
-    color: AppColors.of(context).info,
+    color: AppColors.of(context).accent,
   );
 }
 

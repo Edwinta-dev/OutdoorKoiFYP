@@ -139,7 +139,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
               ),
             ),
           IconButton(
-            icon: Icon(Icons.refresh, color: AppColors.of(context).info),
+            icon: Icon(Icons.refresh, color: AppColors.of(context).accent),
             onPressed: _loadUserPreferencesAndPayload,
           ),
         ],
@@ -147,7 +147,7 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
       body: _isLoading
           ? Center(
               child: CircularProgressIndicator(
-                color: AppColors.of(context).info,
+                color: AppColors.of(context).accent,
               ),
             )
           : SingleChildScrollView(
