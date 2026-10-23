@@ -7,6 +7,7 @@ import 'package:mobile_app/widgets/detail_graph/algae_severity_rating_card.dart'
 import 'package:mobile_app/widgets/detail_graph/algae_status_card.dart';
 import 'package:mobile_app/widgets/detail_graph/evaporation_status_card.dart';
 import 'package:mobile_app/widgets/detail_graph/historical_line_chart.dart';
+import 'package:mobile_app/widgets/detail_graph/model_outlook_card.dart';
 import 'package:mobile_app/widgets/detail_graph/scarce_data_placeholder.dart';
 import 'package:mobile_app/widgets/detail_graph/water_buffer_status_card.dart';
 
@@ -32,6 +33,15 @@ FakePondDataSource _fullSource() => FakePondDataSource(
 
 Future<void> _scrollTo(WidgetTester tester, Finder finder) => tester
     .scrollUntilVisible(finder, 200, scrollable: find.byType(Scrollable).first);
+
+const _tag = 'DIGITAL TWIN MODEL';
+
+Future<void> _expandModel(WidgetTester tester) async {
+  final tag = find.text(_tag);
+  await _scrollTo(tester, tag);
+  await tester.tap(tag);
+  await settle(tester);
+}
 
 void main() {
   for (final (metric, title, cardType) in _domains) {
@@ -135,8 +145,14 @@ void main() {
         source: _fullSource(),
       );
       await settle(tester);
-      await _scrollTo(tester, find.text('in 4 days'));
-      expect(find.text('in 4 days'), findsOneWidget);
+      await _scrollTo(tester, find.text('Next top-up in 4 days'));
+      expect(find.text('Next top-up in 4 days'), findsOneWidget);
+      // Collapsed by default: the table is not built yet.
+      expect(find.text('4.2 mm/d'), findsNothing);
+      await _expandModel(tester);
+      expect(find.text('Evaporation'), findsOneWidget);
+      expect(find.text('Water loss'), findsOneWidget);
+      expect(find.text('Feed cap'), findsOneWidget);
       expect(find.text('4.2 mm/d'), findsOneWidget);
       expect(find.text('60 g/d'), findsOneWidget);
     });
@@ -212,7 +228,9 @@ void main() {
         await tester.tap(retry);
         await settle(tester);
         expect(fake.callsTo('fetchLatestAssessment'), hasLength(2));
-        expect(find.text('WATCH'), findsOneWidget);
+        expect(find.text('WATCH'), findsNothing);
+        await _expandModel(tester);
+        expect(find.text('TAN'), findsOneWidget);
         expect(find.text('0.42 ppm'), findsOneWidget);
       },
     );
@@ -229,9 +247,184 @@ void main() {
         source: _fullSource(),
       );
       await settle(tester);
-      await _scrollTo(tester, find.text('in 6 days'));
-      expect(find.text('in 6 days'), findsOneWidget);
+      await _scrollTo(tester, find.text('Scrub in about 6 days'));
+      expect(find.text('Scrub in about 6 days'), findsOneWidget);
       expect(find.byType(AlgaeSeverityRatingCard), findsOneWidget);
+    });
+
+    testWidgets('algae screen: rating card sits above the model card', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const DetailGraphScreen(
+          metricType: 'lux',
+          title: 'Solar & Algae Risk Analysis',
+        ),
+        source: _fullSource(),
+      );
+      await settle(tester);
+      await _scrollTo(tester, find.text(_tag));
+      final rating = tester.getTopLeft(find.byType(AlgaeSeverityRatingCard));
+      final model = tester.getTopLeft(find.byType(AlgaeStatusCard));
+      expect(rating.dy, lessThan(model.dy));
+    });
+
+    testWidgets('algae screen: rating card collapses and re-expands', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const DetailGraphScreen(
+          metricType: 'lux',
+          title: 'Solar & Algae Risk Analysis',
+        ),
+        source: _fullSource(),
+      );
+      await settle(tester);
+      final title = find.text('Rate What You See');
+      await _scrollTo(tester, title);
+      expect(find.text('Submit rating'), findsOneWidget);
+      await tester.tap(title);
+      await settle(tester);
+      expect(find.text('Submit rating'), findsNothing);
+      expect(title, findsOneWidget);
+      await tester.tap(title);
+      await settle(tester);
+      expect(find.text('Submit rating'), findsOneWidget);
+    });
+
+    for (final (metric, title, headline, rowLabel) in const [
+      (
+        'temperature',
+        'Detailed Temperature',
+        'Next top-up in 4 days',
+        'Feed cap',
+      ),
+      ('ph', 'pH & Buffer Stability', null, 'TAN'),
+      ('lux', 'Solar & Algae Risk Analysis', 'Scrub in about 6 days', 'Frames'),
+    ]) {
+      testWidgets('$metric model card: tag, no pill, collapsed then expands', (
+        tester,
+      ) async {
+        await pumpScreen(
+          tester,
+          DetailGraphScreen(metricType: metric, title: title),
+          source: _fullSource(),
+        );
+        await settle(tester);
+        await _scrollTo(tester, find.text(_tag));
+        expect(find.text(_tag), findsOneWidget);
+        if (headline != null) expect(find.text(headline), findsOneWidget);
+        for (final pill in [
+          'PLANNED',
+          'DUE NOW',
+          'SOON',
+          'CLEAR',
+          'STABLE',
+          'WATCH',
+        ]) {
+          expect(find.text(pill), findsNothing);
+        }
+        expect(find.text(rowLabel), findsNothing);
+        await tester.tap(find.text(_tag));
+        await settle(tester);
+        expect(find.text(rowLabel), findsOneWidget);
+        expect(find.text('Model estimate'), findsNothing);
+        await tester.tap(find.text(_tag));
+        await settle(tester);
+        expect(find.text(rowLabel), findsNothing);
+      });
+    }
+
+    testWidgets('temperature card: assumptions live in the (i) popup', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const DetailGraphScreen(
+          metricType: 'temperature',
+          title: 'Detailed Temperature',
+        ),
+        source: _fullSource(),
+      );
+      await settle(tester);
+      await _scrollTo(tester, find.text(_tag));
+      await _expandModel(tester);
+      expect(find.textContaining('Assumes'), findsNothing);
+      final info = find.byKey(const ValueKey('model-info'));
+      await _scrollTo(tester, info);
+      expect(find.byTooltip('About this estimate'), findsOneWidget);
+      await tester.tap(info);
+      await settle(tester);
+      expect(find.textContaining('Assumes'), findsOneWidget);
+      expect(find.text('Tap anywhere to close'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('model-info-popup')));
+      await settle(tester);
+      expect(find.textContaining('Assumes'), findsNothing);
+    });
+
+    testWidgets('algae card: no scrub-days or camera provenance text', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const DetailGraphScreen(
+          metricType: 'lux',
+          title: 'Solar & Algae Risk Analysis',
+        ),
+        source: _fullSource(),
+      );
+      await settle(tester);
+      await _scrollTo(tester, find.text(_tag));
+      await _expandModel(tester);
+      expect(find.textContaining('Scrubbing today buys'), findsNothing);
+      expect(find.textContaining('camera frames'), findsNothing);
+      final info = find.byKey(const ValueKey('model-info'));
+      await _scrollTo(tester, info);
+      await tester.tap(info);
+      await settle(tester);
+      expect(find.textContaining('Alert level is set'), findsOneWidget);
+      expect(find.textContaining('Scrubbing today buys'), findsNothing);
+      expect(find.textContaining('camera frames'), findsNothing);
+    });
+  });
+
+  group('ModelOutlookCard notes', () {
+    Widget host({List<String> info = const []}) => MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ModelOutlookCard(
+            headline: 'h',
+            statusColor: Colors.green,
+            statusLabel: 's',
+            subtitle: 'sub',
+            rows: const [],
+            initiallyExpanded: true,
+            alerts: const [ModelOutlookNote('TDS disagrees with forecast')],
+            infoNotes: info,
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('alert stays visible; no (i) without infoNotes', (t) async {
+      await t.pumpWidget(host());
+      expect(find.text('TDS disagrees with forecast'), findsOneWidget);
+      expect(find.byKey(const ValueKey('model-info')), findsNothing);
+    });
+
+    testWidgets('(i) opens the notes and closes on tap', (t) async {
+      await t.pumpWidget(host(info: ['Caveat one', 'Caveat two']));
+      expect(find.text('Caveat one'), findsNothing);
+      expect(find.text('TDS disagrees with forecast'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('model-info')));
+      await t.pumpAndSettle();
+      expect(find.text('Caveat one'), findsOneWidget);
+      expect(find.text('Caveat two'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('model-info-popup')));
+      await t.pumpAndSettle();
+      expect(find.text('Caveat one'), findsNothing);
     });
   });
 }

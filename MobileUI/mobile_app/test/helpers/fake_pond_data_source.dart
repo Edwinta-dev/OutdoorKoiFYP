@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:mobile_app/data/card_patch.dart';
 import 'package:mobile_app/data/pond_profile.dart';
 // A PondDataSource for tests. Each call answers from the fields below,
 // so a test sets up exactly the state it wants:
@@ -90,6 +91,13 @@ class FakePondDataSource extends PondDataSource {
   @override
   Future<List<List<double>>?> fetchCameraMask(int userId) =>
       _answer('fetchCameraMask', {'userId': userId}, cameraMask);
+
+  /// Card patches the sampled-areas overlay draws; empty: none configured.
+  List<CardPatch> cameraCardPatches = const [];
+
+  @override
+  Future<List<CardPatch>> fetchCameraCardPatches(int userId) =>
+      _answer('fetchCameraCardPatches', {'userId': userId}, cameraCardPatches);
 
   @override
   Future<void> saveCameraMask(int userId, List<List<double>> polygon) =>

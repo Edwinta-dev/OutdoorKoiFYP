@@ -62,6 +62,9 @@ def dev_settings(profile: str, **overrides: Any) -> Settings:
                               "storage": "supabase" if profile == "supabase" else "memory"}
     if profile == "memory":
         values.update(supabase_url="", supabase_servicerole_key="")
+    patches = Path(__file__).resolve().parents[2] / "fixtures" / "demo_pond" / "card_patches.json"
+    if patches.exists():
+        values["camera_card_patches_file"] = str(patches)
     values.update(overrides)
     return Settings(**values)
 

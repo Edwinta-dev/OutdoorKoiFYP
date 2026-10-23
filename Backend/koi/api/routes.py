@@ -71,6 +71,7 @@ from koi.api.auth import authenticate, require_pond
 from koi.api.dashboard import build_dashboard, build_readings
 from koi.api.health import readiness
 from koi.api.spec import after_request, route
+from koi.camera import card_patches
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
@@ -1194,7 +1195,7 @@ def put_pond_profile(user_id):
 
 def _camera_mask_response(user_id: int) -> dict:
     config = _storage().fetch_camera_mask(user_id)
-    return {
+    body = {
         "pond_id": user_id,
         "mask": config["mask"] if config else None,
         "regions": config.get("regions") if config else None,
@@ -1202,6 +1203,12 @@ def _camera_mask_response(user_id: int) -> dict:
         "updated_at": config["updated_at"] if config else None,
         "versions": _storage().fetch_camera_mask_versions(user_id),
     }
+    # Colour-card patches (koi/camera/card_patches.py): only when configured.
+    patches = card_patches.patches_for_pond(
+        current_app.config["KOI_SETTINGS"].camera_card_patches_file, user_id)
+    if patches:
+        body["card_patches"] = patches
+    return body
 
 
 @route(bp, "GET", "/v1/ponds/<int:user_id>/camera/mask", summary="Camera water mask", tag="pond",

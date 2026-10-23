@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     device_token: SecretStr = Field(
         default=SecretStr(""), validation_alias=AliasChoices("DEVICE_TOKEN", "device_token"))
 
+    # Optional JSON file of colour-card patches for one pond (koi/camera/card_patches.py);
+    # GET /v1/ponds/{pond}/camera/mask returns them as card_patches. Empty: none.
+    camera_card_patches_file: str = Field(
+        default="", validation_alias=AliasChoices("KOI_CAMERA_CARD_PATCHES_FILE", "camera_card_patches_file"))
+
     # Feature flag: short fixed camera sleep times for bench testing.
     test_mode: bool = Field(default=False, validation_alias=AliasChoices("TEST_MODE", "test_mode"))
 

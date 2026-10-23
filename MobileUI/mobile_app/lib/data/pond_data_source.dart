@@ -1,3 +1,4 @@
+import 'card_patch.dart';
 import 'pond_profile.dart';
 import 'dart:typed_data';
 import 'repositories.dart';
@@ -95,6 +96,12 @@ class LivePondDataSource extends PondDataSource {
           (point) => (point as List).map((v) => (v as num).toDouble()).toList(),
         )
         .toList();
+  }
+
+  @override
+  Future<List<CardPatch>> fetchCameraCardPatches(int userId) async {
+    final data = await api.request('GET', '/v1/ponds/$userId/camera/mask');
+    return CardPatch.listFromMaskResponse(data);
   }
 
   @override

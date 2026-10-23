@@ -58,8 +58,8 @@ POND_TABLES = (
 )
 # Insert order (parents first), and columns left to the database default.
 INSERT_ORDER = ("WeatherStationLookup", "weather_telemetry", "weather_forecasts", "UserData", "pond_profile",
-                "SensorData", "daily_sensor_averages", "imageTable", "pondInterventions", "pond_chemistry_state",
-                "Fish_Database")
+                "camera_mask_version", "camera_config", "SensorData", "daily_sensor_averages", "imageTable",
+                "pondInterventions", "pond_chemistry_state", "Fish_Database")
 DATABASE_IDS = {"pond_profile": "id", "daily_sensor_averages": "id"}
 POLLER_LEASE = "poller"
 
@@ -145,8 +145,14 @@ def _value(value: Any) -> Any:
 
 
 def _delete(cur: Any, tables: dict[str, list[dict]], ponds: list[int]) -> None:
+    # Saved mask versions are immutable (migration 0023 trigger), which also
+    # refuses deleting them. The seed owns its ponds' versions in this local,
+    # disposable database, so it lifts that guard for its own delete only,
+    # inside the same transaction, and restores it straight after.
+    cur.execute("alter table public.camera_mask_version disable trigger camera_mask_version_immutable")
     for table, column in POND_TABLES:
         cur.execute(f'delete from public."{table}" where "{column}" = any(%s)', (ponds,))
+    cur.execute("alter table public.camera_mask_version enable trigger camera_mask_version_immutable")
     sensor_ids = [r["id"] for r in tables.get("SensorData", []) if r.get("id") is not None]
     cur.execute('delete from public."SensorData" where id = any(%s)', (sensor_ids,))
     cur.execute('delete from public."WeatherStationLookup" where "Id" = any(%s)',

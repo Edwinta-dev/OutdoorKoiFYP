@@ -10853,677 +10853,8591 @@
     "station__name": "Woodlands"
    }
   ],
+  "camera_config": [
+   {
+    "mask": [
+     [
+      0.15,
+      0.12
+     ],
+     [
+      0.5,
+      0.12
+     ],
+     [
+      0.5,
+      0.92
+     ],
+     [
+      0.15,
+      0.92
+     ]
+    ],
+    "mask_version": 1,
+    "pond_id": 1,
+    "regions": {
+     "plants": [
+      [
+       0.1,
+       0.93
+      ],
+      [
+       0.3,
+       0.93
+      ],
+      [
+       0.3,
+       1.0
+      ],
+      [
+       0.1,
+       1.0
+      ]
+     ],
+     "reference": [
+      [
+       0.78,
+       0.31
+      ],
+      [
+       0.7283,
+       0.2963
+      ],
+      [
+       0.6845,
+       0.2573
+      ],
+      [
+       0.6553,
+       0.1989
+      ],
+      [
+       0.645,
+       0.13
+      ],
+      [
+       0.6553,
+       0.0611
+      ],
+      [
+       0.6845,
+       0.0027
+      ],
+      [
+       0.7283,
+       0.0
+      ],
+      [
+       0.78,
+       0.0
+      ],
+      [
+       0.8317,
+       0.0
+      ],
+      [
+       0.8755,
+       0.0027
+      ],
+      [
+       0.9047,
+       0.0611
+      ],
+      [
+       0.915,
+       0.13
+      ],
+      [
+       0.9047,
+       0.1989
+      ],
+      [
+       0.8755,
+       0.2573
+      ],
+      [
+       0.8317,
+       0.2963
+      ],
+      [
+       0.78,
+       0.31
+      ],
+      [
+       0.8,
+       0.34
+      ],
+      [
+       0.8536,
+       0.3537
+      ],
+      [
+       0.899,
+       0.3927
+      ],
+      [
+       0.9293,
+       0.4511
+      ],
+      [
+       0.94,
+       0.52
+      ],
+      [
+       0.9293,
+       0.5889
+      ],
+      [
+       0.899,
+       0.6473
+      ],
+      [
+       0.8536,
+       0.6863
+      ],
+      [
+       0.8,
+       0.7
+      ],
+      [
+       0.7464,
+       0.6863
+      ],
+      [
+       0.701,
+       0.6473
+      ],
+      [
+       0.6707,
+       0.5889
+      ],
+      [
+       0.66,
+       0.52
+      ],
+      [
+       0.6707,
+       0.4511
+      ],
+      [
+       0.701,
+       0.3927
+      ],
+      [
+       0.7464,
+       0.3537
+      ],
+      [
+       0.8,
+       0.34
+      ]
+     ],
+     "rim": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.1,
+       0.0
+      ],
+      [
+       0.1,
+       1.0
+      ],
+      [
+       0.0,
+       1.0
+      ]
+     ],
+     "water_gap": [
+      [
+       0.22,
+       0.3
+      ],
+      [
+       0.42,
+       0.3
+      ],
+      [
+       0.42,
+       0.7
+      ],
+      [
+       0.22,
+       0.7
+      ]
+     ]
+    },
+    "updated_at": "2026-09-17T02:06:00+00:00"
+   }
+  ],
+  "camera_mask_version": [
+   {
+    "created_at": "2026-09-17T02:06:00+00:00",
+    "mask": [
+     [
+      0.15,
+      0.12
+     ],
+     [
+      0.5,
+      0.12
+     ],
+     [
+      0.5,
+      0.92
+     ],
+     [
+      0.15,
+      0.92
+     ]
+    ],
+    "mask_version": 1,
+    "pond_id": 1,
+    "regions": {
+     "plants": [
+      [
+       0.1,
+       0.93
+      ],
+      [
+       0.3,
+       0.93
+      ],
+      [
+       0.3,
+       1.0
+      ],
+      [
+       0.1,
+       1.0
+      ]
+     ],
+     "reference": [
+      [
+       0.78,
+       0.31
+      ],
+      [
+       0.7283,
+       0.2963
+      ],
+      [
+       0.6845,
+       0.2573
+      ],
+      [
+       0.6553,
+       0.1989
+      ],
+      [
+       0.645,
+       0.13
+      ],
+      [
+       0.6553,
+       0.0611
+      ],
+      [
+       0.6845,
+       0.0027
+      ],
+      [
+       0.7283,
+       0.0
+      ],
+      [
+       0.78,
+       0.0
+      ],
+      [
+       0.8317,
+       0.0
+      ],
+      [
+       0.8755,
+       0.0027
+      ],
+      [
+       0.9047,
+       0.0611
+      ],
+      [
+       0.915,
+       0.13
+      ],
+      [
+       0.9047,
+       0.1989
+      ],
+      [
+       0.8755,
+       0.2573
+      ],
+      [
+       0.8317,
+       0.2963
+      ],
+      [
+       0.78,
+       0.31
+      ],
+      [
+       0.8,
+       0.34
+      ],
+      [
+       0.8536,
+       0.3537
+      ],
+      [
+       0.899,
+       0.3927
+      ],
+      [
+       0.9293,
+       0.4511
+      ],
+      [
+       0.94,
+       0.52
+      ],
+      [
+       0.9293,
+       0.5889
+      ],
+      [
+       0.899,
+       0.6473
+      ],
+      [
+       0.8536,
+       0.6863
+      ],
+      [
+       0.8,
+       0.7
+      ],
+      [
+       0.7464,
+       0.6863
+      ],
+      [
+       0.701,
+       0.6473
+      ],
+      [
+       0.6707,
+       0.5889
+      ],
+      [
+       0.66,
+       0.52
+      ],
+      [
+       0.6707,
+       0.4511
+      ],
+      [
+       0.701,
+       0.3927
+      ],
+      [
+       0.7464,
+       0.3537
+      ],
+      [
+       0.8,
+       0.34
+      ]
+     ],
+     "rim": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.1,
+       0.0
+      ],
+      [
+       0.1,
+       1.0
+      ],
+      [
+       0.0,
+       1.0
+      ]
+     ],
+     "water_gap": [
+      [
+       0.22,
+       0.3
+      ],
+      [
+       0.42,
+       0.3
+      ],
+      [
+       0.42,
+       0.7
+      ],
+      [
+       0.22,
+       0.7
+      ]
+     ]
+    }
+   }
+  ],
   "imageTable": [
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-18T04:03:00+00:00",
-    "current_state": "[\"base\", 0.02]",
-    "green_ratio": 0.02,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20001,
     "imageURL": "https://example.invalid/demo/1/frame_001.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-18T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0203]",
-    "green_ratio": 0.0209,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20002,
     "imageURL": "https://example.invalid/demo/1/frame_002.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-18T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0202]",
-    "green_ratio": 0.0199,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20003,
     "imageURL": "https://example.invalid/demo/1/frame_003.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-18T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0206]",
-    "green_ratio": 0.0215,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20004,
     "imageURL": "https://example.invalid/demo/1/frame_004.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-19T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0216]",
-    "green_ratio": 0.0238,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20005,
     "imageURL": "https://example.invalid/demo/1/frame_005.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-19T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0221]",
-    "green_ratio": 0.0232,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20006,
     "imageURL": "https://example.invalid/demo/1/frame_006.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-19T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0231]",
-    "green_ratio": 0.0253,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20007,
     "imageURL": "https://example.invalid/demo/1/frame_007.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-19T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0235]",
-    "green_ratio": 0.0244,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20008,
     "imageURL": "https://example.invalid/demo/1/frame_008.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-19T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0239]",
-    "green_ratio": 0.0248,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20009,
     "imageURL": "https://example.invalid/demo/1/frame_009.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-19T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0247]",
-    "green_ratio": 0.0266,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20010,
     "imageURL": "https://example.invalid/demo/1/frame_010.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-20T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0256]",
-    "green_ratio": 0.0278,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20011,
     "imageURL": "https://example.invalid/demo/1/frame_011.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-20T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0267]",
-    "green_ratio": 0.0294,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20012,
     "imageURL": "https://example.invalid/demo/1/frame_012.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-20T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0278]",
-    "green_ratio": 0.0305,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20013,
     "imageURL": "https://example.invalid/demo/1/frame_013.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-20T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0282]",
-    "green_ratio": 0.029,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20014,
     "imageURL": "https://example.invalid/demo/1/frame_014.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-20T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0292]",
-    "green_ratio": 0.0316,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20015,
     "imageURL": "https://example.invalid/demo/1/frame_015.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-20T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0298]",
-    "green_ratio": 0.0313,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20016,
     "imageURL": "https://example.invalid/demo/1/frame_016.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-21T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0311]",
-    "green_ratio": 0.034,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20017,
     "imageURL": "https://example.invalid/demo/1/frame_017.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-21T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0329]",
-    "green_ratio": 0.0371,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20018,
     "imageURL": "https://example.invalid/demo/1/frame_018.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-21T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0337]",
-    "green_ratio": 0.0355,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20019,
     "imageURL": "https://example.invalid/demo/1/frame_019.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-21T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0345]",
-    "green_ratio": 0.0364,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20020,
     "imageURL": "https://example.invalid/demo/1/frame_020.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-21T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0358]",
-    "green_ratio": 0.0388,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20021,
     "imageURL": "https://example.invalid/demo/1/frame_021.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-21T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0361]",
-    "green_ratio": 0.0367,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20022,
     "imageURL": "https://example.invalid/demo/1/frame_022.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-22T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0383]",
-    "green_ratio": 0.0433,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20023,
     "imageURL": "https://example.invalid/demo/1/frame_023.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-22T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0401]",
-    "green_ratio": 0.0443,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20024,
     "imageURL": "https://example.invalid/demo/1/frame_024.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-22T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0408]",
-    "green_ratio": 0.0425,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20025,
     "imageURL": "https://example.invalid/demo/1/frame_025.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-22T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0425]",
-    "green_ratio": 0.0464,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20026,
     "imageURL": "https://example.invalid/demo/1/frame_026.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-22T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0434]",
-    "green_ratio": 0.0455,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20027,
     "imageURL": "https://example.invalid/demo/1/frame_027.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-22T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0439]",
-    "green_ratio": 0.0452,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20028,
     "imageURL": "https://example.invalid/demo/1/frame_028.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-23T00:03:00+00:00",
-    "current_state": "[\"base\", 0.047]",
-    "green_ratio": 0.0542,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20029,
     "imageURL": "https://example.invalid/demo/1/frame_029.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-23T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0437]",
-    "green_ratio": 0.0361,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20030,
     "imageURL": "https://example.invalid/demo/1/frame_030.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-23T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0418]",
-    "green_ratio": 0.0375,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20031,
     "imageURL": "https://example.invalid/demo/1/frame_031.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-23T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0411]",
-    "green_ratio": 0.0396,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20032,
     "imageURL": "https://example.invalid/demo/1/frame_032.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-23T08:03:00+00:00",
-    "current_state": "[\"base\", 0.04]",
-    "green_ratio": 0.0374,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20033,
     "imageURL": "https://example.invalid/demo/1/frame_033.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-23T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0401]",
-    "green_ratio": 0.0404,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20034,
     "imageURL": "https://example.invalid/demo/1/frame_034.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-24T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0416]",
-    "green_ratio": 0.045,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20035,
     "imageURL": "https://example.invalid/demo/1/frame_035.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-24T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0422]",
-    "green_ratio": 0.0435,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20036,
     "imageURL": "https://example.invalid/demo/1/frame_036.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-24T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0438]",
-    "green_ratio": 0.0476,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20037,
     "imageURL": "https://example.invalid/demo/1/frame_037.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-24T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0445]",
-    "green_ratio": 0.0462,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20038,
     "imageURL": "https://example.invalid/demo/1/frame_038.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-24T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0451]",
-    "green_ratio": 0.0465,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20039,
     "imageURL": "https://example.invalid/demo/1/frame_039.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-24T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0466]",
-    "green_ratio": 0.0502,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20040,
     "imageURL": "https://example.invalid/demo/1/frame_040.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-25T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0484]",
-    "green_ratio": 0.0525,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20041,
     "imageURL": "https://example.invalid/demo/1/frame_041.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-25T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0504]",
-    "green_ratio": 0.0552,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20042,
     "imageURL": "https://example.invalid/demo/1/frame_042.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-25T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0526]",
-    "green_ratio": 0.0576,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20043,
     "imageURL": "https://example.invalid/demo/1/frame_043.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-25T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0532]",
-    "green_ratio": 0.0547,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20044,
     "imageURL": "https://example.invalid/demo/1/frame_044.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-25T08:03:00+00:00",
-    "current_state": "[\"base\", 0.055]",
-    "green_ratio": 0.0593,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20045,
     "imageURL": "https://example.invalid/demo/1/frame_045.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-25T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0563]",
-    "green_ratio": 0.0593,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20046,
     "imageURL": "https://example.invalid/demo/1/frame_046.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-26T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0585]",
-    "green_ratio": 0.0638,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20047,
     "imageURL": "https://example.invalid/demo/1/frame_047.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-26T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0619]",
-    "green_ratio": 0.0697,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20048,
     "imageURL": "https://example.invalid/demo/1/frame_048.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-26T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0635]",
-    "green_ratio": 0.0671,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20049,
     "imageURL": "https://example.invalid/demo/1/frame_049.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-26T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0649]",
-    "green_ratio": 0.0683,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20050,
     "imageURL": "https://example.invalid/demo/1/frame_050.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-26T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0674]",
-    "green_ratio": 0.0732,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20051,
     "imageURL": "https://example.invalid/demo/1/frame_051.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-26T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0679]",
-    "green_ratio": 0.0692,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20052,
     "imageURL": "https://example.invalid/demo/1/frame_052.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-27T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0719]",
-    "green_ratio": 0.0812,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20053,
     "imageURL": "https://example.invalid/demo/1/frame_053.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-27T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0755]",
-    "green_ratio": 0.0838,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20054,
     "imageURL": "https://example.invalid/demo/1/frame_054.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-27T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0768]",
-    "green_ratio": 0.0799,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20055,
     "imageURL": "https://example.invalid/demo/1/frame_055.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-27T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0799]",
-    "green_ratio": 0.0871,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20056,
     "imageURL": "https://example.invalid/demo/1/frame_056.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-27T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0817]",
-    "green_ratio": 0.086,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20057,
     "imageURL": "https://example.invalid/demo/1/frame_057.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-27T10:03:00+00:00",
-    "current_state": "[\"base\", 0.0826]",
-    "green_ratio": 0.0848,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20058,
     "imageURL": "https://example.invalid/demo/1/frame_058.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-28T00:03:00+00:00",
-    "current_state": "[\"base\", 0.0884]",
-    "green_ratio": 0.102,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20059,
     "imageURL": "https://example.invalid/demo/1/frame_059.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-28T02:03:00+00:00",
-    "current_state": "[\"base\", 0.0911]",
-    "green_ratio": 0.0975,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20060,
     "imageURL": "https://example.invalid/demo/1/frame_060.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-28T04:03:00+00:00",
-    "current_state": "[\"base\", 0.0939]",
-    "green_ratio": 0.1005,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20061,
     "imageURL": "https://example.invalid/demo/1/frame_061.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-28T06:03:00+00:00",
-    "current_state": "[\"base\", 0.0977]",
-    "green_ratio": 0.1067,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20062,
     "imageURL": "https://example.invalid/demo/1/frame_062.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-28T08:03:00+00:00",
-    "current_state": "[\"base\", 0.0987]",
-    "green_ratio": 0.1009,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20063,
     "imageURL": "https://example.invalid/demo/1/frame_063.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-28T10:03:00+00:00",
-    "current_state": "[\"base\", 0.1016]",
-    "green_ratio": 0.1082,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20064,
     "imageURL": "https://example.invalid/demo/1/frame_064.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-29T00:03:00+00:00",
-    "current_state": "[\"base\", 0.1076]",
-    "green_ratio": 0.1217,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20065,
     "imageURL": "https://example.invalid/demo/1/frame_065.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-29T02:03:00+00:00",
-    "current_state": "[\"base\", 0.1104]",
-    "green_ratio": 0.1169,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20066,
     "imageURL": "https://example.invalid/demo/1/frame_066.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-29T04:03:00+00:00",
-    "current_state": "[\"base\", 0.1156]",
-    "green_ratio": 0.1278,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20067,
     "imageURL": "https://example.invalid/demo/1/frame_067.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-29T06:03:00+00:00",
-    "current_state": "[\"base\", 0.1184]",
-    "green_ratio": 0.1249,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20068,
     "imageURL": "https://example.invalid/demo/1/frame_068.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-29T08:03:00+00:00",
-    "current_state": "[\"base\", 0.1203]",
-    "green_ratio": 0.1246,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20069,
     "imageURL": "https://example.invalid/demo/1/frame_069.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-29T10:03:00+00:00",
-    "current_state": "[\"base\", 0.1247]",
-    "green_ratio": 0.1351,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20070,
     "imageURL": "https://example.invalid/demo/1/frame_070.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-30T00:03:00+00:00",
-    "current_state": "[\"base\", 0.1298]",
-    "green_ratio": 0.1417,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20071,
     "imageURL": "https://example.invalid/demo/1/frame_071.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-30T02:03:00+00:00",
-    "current_state": "[\"base\", 0.1352]",
-    "green_ratio": 0.1479,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20072,
     "imageURL": "https://example.invalid/demo/1/frame_072.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-09-30T04:03:00+00:00",
-    "current_state": "[\"base\", 0.1413]",
-    "green_ratio": 0.1555,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20073,
     "imageURL": "https://example.invalid/demo/1/frame_073.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-09-30T06:03:00+00:00",
-    "current_state": "[\"base\", 0.1431]",
-    "green_ratio": 0.1472,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20074,
     "imageURL": "https://example.invalid/demo/1/frame_074.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-09-30T08:03:00+00:00",
-    "current_state": "[\"base\", 0.1479]",
-    "green_ratio": 0.1591,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20075,
     "imageURL": "https://example.invalid/demo/1/frame_075.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-09-30T10:03:00+00:00",
-    "current_state": "[\"base\", 0.1516]",
-    "green_ratio": 0.1602,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20076,
     "imageURL": "https://example.invalid/demo/1/frame_076.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-10-01T00:03:00+00:00",
-    "current_state": "[\"base\", 0.1575]",
-    "green_ratio": 0.1713,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20077,
     "imageURL": "https://example.invalid/demo/1/frame_077.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-10-01T02:03:00+00:00",
-    "current_state": "[\"base\", 0.1665]",
-    "green_ratio": 0.1874,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20078,
     "imageURL": "https://example.invalid/demo/1/frame_078.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-10-01T04:03:00+00:00",
-    "current_state": "[\"base\", 0.171]",
-    "green_ratio": 0.1814,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20079,
     "imageURL": "https://example.invalid/demo/1/frame_079.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-10-01T06:03:00+00:00",
-    "current_state": "[\"base\", 0.1746]",
-    "green_ratio": 0.1831,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20080,
     "imageURL": "https://example.invalid/demo/1/frame_080.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.422321,
+     "exg": 0.517814,
+     "g": 0.606202,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.365351,
+       0.343558,
+       0.337951,
+       0.354357,
+       0.343027,
+       0.345425,
+       0.356259,
+       0.347669,
+       0.362385
+      ],
+      "rows": 3
+     },
+     "r": 0.718829,
+     "version": 1
+    },
     "created_at": "2026-10-01T08:03:00+00:00",
-    "current_state": "[\"base\", 0.1814]",
-    "green_ratio": 0.1973,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347355,
+    "green_ratio": 0.0,
     "id": 20081,
     "imageURL": "https://example.invalid/demo/1/frame_081.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.349384,
+      "g": 0.507931,
+      "pixels": 45260,
+      "r": 0.65723
+     },
+     "regions": {
+      "plants": {
+       "b": 0.69411,
+       "exg": 0.525611,
+       "g": 0.704128,
+       "gcc": 0.350366,
+       "pixels": 4386,
+       "r": 0.611702,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.504848,
+       "exg": 0.5,
+       "g": 0.504848,
+       "gcc": 0.332059,
+       "pixels": 45260,
+       "r": 0.504848,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.452313,
+       "exg": 0.532407,
+       "g": 0.498677,
+       "gcc": 0.366532,
+       "pixels": 31200,
+       "r": 0.415415,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.628614,
+       "exg": 0.506566,
+       "g": 0.619144,
+       "gcc": 0.338339,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.58341,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.437913,
+     "exg": 0.521517,
+     "g": 0.630115,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.368703,
+       0.346559,
+       0.340864,
+       0.35712,
+       0.345464,
+       0.348314,
+       0.35832,
+       0.349964,
+       0.364368
+      ],
+      "rows": 3
+     },
+     "r": 0.736249,
+     "version": 1
+    },
     "created_at": "2026-10-01T10:03:00+00:00",
-    "current_state": "[\"base\", 0.183]",
-    "green_ratio": 0.1868,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.349552,
+    "green_ratio": 0.0,
     "id": 20082,
     "imageURL": "https://example.invalid/demo/1/frame_082.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.355969,
+      "g": 0.517845,
+      "pixels": 45260,
+      "r": 0.657079
+     },
+     "regions": {
+      "plants": {
+       "b": 0.70769,
+       "exg": 0.525902,
+       "g": 0.721705,
+       "gcc": 0.350121,
+       "pixels": 4386,
+       "r": 0.632111,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.510298,
+       "exg": 0.5,
+       "g": 0.510298,
+       "gcc": 0.332094,
+       "pixels": 45260,
+       "r": 0.510298,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.46055,
+       "exg": 0.533871,
+       "g": 0.510835,
+       "gcc": 0.367504,
+       "pixels": 31200,
+       "r": 0.425636,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.639477,
+       "exg": 0.506325,
+       "g": 0.630973,
+       "gcc": 0.338096,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.597169,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.449919,
+     "exg": 0.523358,
+     "g": 0.617322,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.370051,
+       0.348703,
+       0.34352,
+       0.358805,
+       0.347531,
+       0.349692,
+       0.358855,
+       0.350819,
+       0.36391
+      ],
+      "rows": 3
+     },
+     "r": 0.691294,
+     "version": 1
+    },
     "created_at": "2026-10-02T00:03:00+00:00",
-    "current_state": "[\"base\", 0.1934]",
-    "green_ratio": 0.2176,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.351376,
+    "green_ratio": 0.0,
     "id": 20083,
     "imageURL": "https://example.invalid/demo/1/frame_083.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.364926,
+      "g": 0.502783,
+      "pixels": 45260,
+      "r": 0.610586
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690407,
+       "exg": 0.522793,
+       "g": 0.701655,
+       "gcc": 0.348455,
+       "pixels": 4386,
+       "r": 0.62173,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.492765,
+       "exg": 0.5,
+       "g": 0.492765,
+       "gcc": 0.332102,
+       "pixels": 45260,
+       "r": 0.492765,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.445531,
+       "exg": 0.531784,
+       "g": 0.492951,
+       "gcc": 0.366434,
+       "pixels": 31200,
+       "r": 0.413238,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.619815,
+       "exg": 0.508025,
+       "g": 0.616856,
+       "gcc": 0.339412,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.581796,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {
+    "colour": {
+     "b": 0.502175,
+     "exg": 0.518956,
+     "g": 0.620075,
+     "grid": {
+      "cols": 3,
+      "gcc": [
+       0.363516,
+       0.346032,
+       0.341718,
+       0.353861,
+       0.344556,
+       0.346833,
+       0.35412,
+       0.347144,
+       0.358121
+      ],
+      "rows": 3
+     },
+     "r": 0.66215,
+     "version": 1
+    },
     "created_at": "2026-10-02T02:03:00+00:00",
-    "current_state": "[\"base\", 0.2032]",
-    "green_ratio": 0.2262,
+    "current_state": "[\"base\", 0.0]",
+    "gcc": 0.347775,
+    "green_ratio": 0.0,
     "id": 20084,
     "imageURL": "https://example.invalid/demo/1/frame_084.jpg",
+    "mask_version": 1,
+    "regions": {
+     "reference": {
+      "applied": true,
+      "b": 0.412278,
+      "g": 0.51213,
+      "pixels": 45260,
+      "r": 0.585525
+     },
+     "regions": {
+      "plants": {
+       "b": 0.690528,
+       "exg": 0.520026,
+       "g": 0.698675,
+       "gcc": 0.3466,
+       "pixels": 4386,
+       "r": 0.626718,
+       "usable_pixels": 4386
+      },
+      "reference": {
+       "b": 0.503311,
+       "exg": 0.5,
+       "g": 0.503311,
+       "gcc": 0.332291,
+       "pixels": 45260,
+       "r": 0.503311,
+       "usable_pixels": 45260
+      },
+      "rim": {
+       "b": 0.455658,
+       "exg": 0.526036,
+       "g": 0.492658,
+       "gcc": 0.359959,
+       "pixels": 31200,
+       "r": 0.425515,
+       "usable_pixels": 31200
+      },
+      "water_gap": {
+       "b": 0.625435,
+       "exg": 0.505611,
+       "g": 0.619675,
+       "gcc": 0.337578,
+       "open_fraction": 1.0,
+       "pixels": 24897,
+       "plant_fraction": 0.0,
+       "r": 0.591473,
+       "unusable_reason": null,
+       "usable": true,
+       "usable_pixels": 24897
+      }
+     },
+     "thresholds": {
+      "gap_max_plant_fraction": 0.3,
+      "plant_lower_hsv": [
+       25,
+       110,
+       60
+      ],
+      "plant_upper_hsv": [
+       90,
+       255,
+       255
+      ]
+     },
+     "version": 1
+    },
     "user_ID": 1
    },
    {

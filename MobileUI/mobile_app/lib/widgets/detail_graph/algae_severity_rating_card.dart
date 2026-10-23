@@ -1,4 +1,5 @@
 import 'package:mobile_app/widgets/shared/pond_widgets.dart';
+import 'package:mobile_app/widgets/shared/info_popup.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/detail_graph/algae_severity_rating_card.dart
 //
@@ -43,6 +44,7 @@ import '../../data/providers.dart';
 import '../../data/rating_card_data.dart';
 import '../../utils/digital_twin_api.dart';
 import '../../utils/pond_camera_storage.dart';
+import 'sample_overlay.dart';
 
 class AlgaeSeverityRatingCard extends ConsumerStatefulWidget {
   final int userId;
@@ -80,6 +82,7 @@ class _AlgaeSeverityRatingCardState
     ref.invalidate(cameraFrameProvider(widget.userId));
     ref.invalidate(ratingContextProvider(widget.userId));
     ref.invalidate(algaeForecastProvider(widget.userId));
+    ref.invalidate(cameraCardPatchesProvider(widget.userId));
     ref.invalidate(pondDashboardProvider);
     setState(() {
       _selected = null;
@@ -197,90 +200,92 @@ class _AlgaeSeverityRatingCardState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _header(),
-          const SizedBox(height: AppSpace.lg),
+          if (_expanded) ...[
+            const SizedBox(height: AppSpace.lg),
 
-          // --- the frame being rated ---
-          _framePanel(data),
+            // --- the frame being rated ---
+            _framePanel(data),
 
-          // --- camera drift warning, if the labels imply one ---
-          if (cal != null && cal.drift.isConcerning) ...[
-            const SizedBox(height: AppSpace.md),
-            _driftBanner(cal.drift),
-          ],
+            // --- camera drift warning, if the labels imply one ---
+            if (cal != null && cal.drift.isConcerning) ...[
+              const SizedBox(height: AppSpace.md),
+              _driftBanner(cal.drift),
+            ],
 
-          const SizedBox(height: AppSpace.lg),
-          Text(
-            frame?.id == null && frame?.imageUrl == null
-                ? 'How does the pond look right now?'
-                : 'How does the pond look in this photo?',
-            style: AppType.style(
-              color: AppColors.of(context).text,
-              fontSize: AppType.label,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: AppSpace.lg),
+            Text(
+              frame?.id == null && frame?.imageUrl == null
+                  ? 'How does the pond look right now?'
+                  : 'How does the pond look in this photo?',
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontSize: AppType.label,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            frame?.id == null && frame?.imageUrl == null
-                ? 'No camera frame available, so this rating will correct the '
-                      'model but will not join the calibration set.'
-                : 'Your answer corrects the model directly - it counts for more '
-                      'than the camera reading does.',
-            style: AppType.style(
-              color: AppColors.of(context).textMuted,
-              fontSize: AppType.caption,
-              height: 1.35,
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              frame?.id == null && frame?.imageUrl == null
+                  ? 'No camera frame available, so this rating will correct the '
+                        'model but will not join the calibration set.'
+                  : 'Your answer corrects the model directly - it counts for more '
+                        'than the camera reading does.',
+              style: AppType.style(
+                color: AppColors.of(context).textMuted,
+                fontSize: AppType.caption,
+                height: 1.35,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpace.md),
-
-          // --- the rating options ---
-          ..._severityOptions(cal),
-
-          // --- previous rating, for anchoring ---
-          if (ctx?.latestRating != null) ...[
             const SizedBox(height: AppSpace.md),
-            _previousRating(ctx!.latestRating!),
-          ],
 
-          const SizedBox(height: AppSpace.lg),
-          if (canRate) _submitRow(data) else _ratingOfflineNotice(),
+            // --- the rating options ---
+            ..._severityOptions(cal),
 
-          // --- what the last rating actually did ---
-          if (_lastResult != null) ...[
-            const SizedBox(height: AppSpace.md),
-            _resultBanner(_lastResult!),
-          ],
+            // --- previous rating, for anchoring ---
+            if (ctx?.latestRating != null) ...[
+              const SizedBox(height: AppSpace.md),
+              _previousRating(ctx!.latestRating!),
+            ],
 
-          if (_error != null) ...[
-            const SizedBox(height: AppSpace.md),
-            Row(
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  color: AppColors.of(context).danger,
-                  size: 14,
-                ),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: AppType.style(
-                      color: AppColors.of(context).danger,
-                      fontSize: AppType.caption,
+            const SizedBox(height: AppSpace.lg),
+            if (canRate) _submitRow(data) else _ratingOfflineNotice(),
+
+            // --- what the last rating actually did ---
+            if (_lastResult != null) ...[
+              const SizedBox(height: AppSpace.md),
+              _resultBanner(_lastResult!),
+            ],
+
+            if (_error != null) ...[
+              const SizedBox(height: AppSpace.md),
+              Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: AppColors.of(context).danger,
+                    size: 14,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: AppType.style(
+                        color: AppColors.of(context).danger,
+                        fontSize: AppType.caption,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
 
-          // --- calibration progress ---
-          if (cal != null) ...[
-            const SizedBox(height: AppSpace.lg),
-            Divider(color: AppColors.of(context).outline, height: 1),
-            const SizedBox(height: AppSpace.md),
-            _calibrationPanel(cal),
+            // --- calibration progress ---
+            if (cal != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              Divider(color: AppColors.of(context).outline, height: 1),
+              const SizedBox(height: AppSpace.md),
+              _calibrationPanel(cal),
+            ],
           ],
         ],
       ),
@@ -289,32 +294,68 @@ class _AlgaeSeverityRatingCardState
 
   // ------------------------------------------------------------------
 
-  Widget _header() => Row(
-    children: [
-      Icon(Icons.rate_review_outlined, color: _accent, size: 18),
-      const SizedBox(width: AppSpace.sm),
-      Expanded(
-        child: Text(
-          'Rate What You See',
-          style: AppType.style(
-            color: AppColors.of(context).text,
-            fontWeight: FontWeight.bold,
-            fontSize: AppType.body,
+  Widget _header() => Semantics(
+    button: true,
+    expanded: _expanded,
+    label: 'Rate What You See',
+    excludeSemantics: true,
+    onTap: _toggleExpanded,
+    child: InkWell(
+      onTap: _toggleExpanded,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: Row(
+        children: [
+          Icon(Icons.rate_review_outlined, color: _accent, size: 18),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(
+              'Rate What You See',
+              style: AppType.style(
+                color: AppColors.of(context).text,
+                fontWeight: FontWeight.bold,
+                fontSize: AppType.body,
+              ),
+            ),
           ),
-        ),
+          AnimatedRotation(
+            turns: _expanded ? 0.5 : 0,
+            duration: const Duration(milliseconds: 150),
+            child: Icon(
+              Icons.expand_more,
+              color: AppColors.of(context).textMuted,
+            ),
+          ),
+        ],
       ),
-    ],
+    ),
   );
+
+  // Collapsible like the Digital Twin Model card; open by default because
+  // this card is an input the user is expected to act on.
+  bool _expanded = true;
+
+  // The sampled-areas overlay is on by default; the switch on the photo hides it.
+  bool _showSamples = true;
+  void _toggleExpanded() => setState(() => _expanded = !_expanded);
 
   Widget _framePanel(RatingCardData data) {
     final frame = data.frame;
     final url = frame?.imageUrl;
-    return ClipRRect(
+    // Colour-card patches the camera analysis samples; none (not configured,
+    // or the read failed) means the photo shows without dots and without
+    // the switch.
+    final patches =
+        ref.watch(cameraCardPatchesProvider(widget.userId)).value ?? const [];
+    final hasAreas = url != null && patches.isNotEmpty;
+    final imageBox = ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Stack(
+        key: const ValueKey('frame-image-stack'),
         children: [
+          // The whole 4:3 frame, never cropped: the box is 4:3 and the
+          // photo is fitted inside it (contain).
           AspectRatio(
-            aspectRatio: 4 / 3,
+            aspectRatio: frameAspect,
             child: url == null
                 ? Container(
                     color: AppColors.of(context).text.withValues(alpha: 0.04),
@@ -365,7 +406,7 @@ class _AlgaeSeverityRatingCardState
                   )
                 : Image.network(
                     url,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     // The bucket is public but a phone on mobile data may
                     // still fail - degrade to a labelled placeholder
                     // rather than a broken-image glyph.
@@ -412,6 +453,16 @@ class _AlgaeSeverityRatingCardState
                     },
                   ),
           ),
+
+          // Sampled areas: dots on the card patches the camera analysis
+          // reads. The overlay maps them onto the rectangle the photo
+          // occupies in the box (contain), so they stay on their spots even
+          // if the box is not exactly 4:3. The switch is not here: it is in
+          // a row below the photo.
+          if (hasAreas && _showSamples)
+            Positioned.fill(
+              child: SampleOverlay(patches: patches, image: NetworkImage(url)),
+            ),
 
           // Frame metadata overlay - makes it unambiguous WHICH reading
           // is being rated.
@@ -510,6 +561,41 @@ class _AlgaeSeverityRatingCardState
                 ),
               ),
             ),
+        ],
+      ),
+    );
+    if (!hasAreas) return imageBox;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [imageBox, _sampleSwitchRow()],
+    );
+  }
+
+  /// "Show sampled areas": a small switch and its label in a row below the
+  /// photo, not over it.
+  Widget _sampleSwitchRow() {
+    final colors = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.xs),
+      child: Row(
+        children: [
+          Transform.scale(
+            scale: 0.7,
+            alignment: Alignment.centerLeft,
+            child: Switch(
+              key: const ValueKey('sample-overlay-toggle'),
+              value: _showSamples,
+              onChanged: (v) => setState(() => _showSamples = v),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          Text(
+            'Show sampled areas',
+            style: AppType.style(
+              color: colors.textMuted,
+              fontSize: AppType.caption,
+            ),
+          ),
         ],
       ),
     );
@@ -977,7 +1063,6 @@ class _AlgaeSeverityRatingCardState
 
   Widget _calibrationPanel(AlgaeCalibration cal) {
     final total = cal.totalLabels;
-    final remaining = cal.remainingForCalibration;
     // 2 labels per class x 4 classes is the minimum for full calibration.
     const target = 8;
     final progress = (total / target).clamp(0.0, 1.0);
@@ -1018,6 +1103,29 @@ class _AlgaeSeverityRatingCardState
                 fontSize: AppType.micro,
               ),
             ),
+            IconButton(
+              key: const ValueKey('calibration-info'),
+              tooltip: 'About calibration',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              icon: Icon(
+                Icons.info_outline,
+                size: 18,
+                color: AppColors.of(context).textMuted,
+              ),
+              onPressed: () => showInfoPopup(
+                context,
+                content: Text(
+                  _calibrationNote(cal),
+                  style: AppType.style(
+                    color: AppColors.of(context).textSecondary,
+                    fontSize: AppType.label,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
         if (!cal.isCalibrated) ...[
@@ -1033,34 +1141,22 @@ class _AlgaeSeverityRatingCardState
               valueColor: AlwaysStoppedAnimation<Color>(_accent),
             ),
           ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            remaining > 0
-                ? _neededSummary(cal)
-                : 'Enough ratings collected - thresholds will calibrate on the '
-                      'next update.',
-            style: AppType.style(
-              color: AppColors.of(context).textMuted,
-              fontSize: AppType.micro,
-              height: 1.35,
-            ),
-          ),
-        ],
-        if (cal.isCalibrated) ...[
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            'Watch at ${(cal.watchThreshold * 100).toStringAsFixed(2)}% coverage, '
-            'action at ${(cal.actionThreshold * 100).toStringAsFixed(2)}% - both '
-            'measured from where your own ratings changed.',
-            style: AppType.style(
-              color: AppColors.of(context).textMuted,
-              fontSize: AppType.micro,
-              height: 1.35,
-            ),
-          ),
         ],
       ],
     );
+  }
+
+  /// The calibration caveat, shown only behind the (i) button.
+  String _calibrationNote(AlgaeCalibration cal) {
+    if (cal.isCalibrated) {
+      return 'Watch at ${(cal.watchThreshold * 100).toStringAsFixed(2)}% coverage, '
+          'action at ${(cal.actionThreshold * 100).toStringAsFixed(2)}% - both '
+          'measured from where your own ratings changed.';
+    }
+    return cal.remainingForCalibration > 0
+        ? _neededSummary(cal)
+        : 'Enough ratings collected - thresholds will calibrate on the '
+              'next update.';
   }
 
   String _neededSummary(AlgaeCalibration cal) {

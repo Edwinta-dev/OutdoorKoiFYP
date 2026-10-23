@@ -1,3 +1,4 @@
+import 'package:mobile_app/widgets/shared/info_popup.dart';
 import 'package:mobile_app/widgets/shared/pond_widgets.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 // lib/widgets/dashboard/today_action_feed.dart
@@ -429,52 +430,19 @@ class _ActionCard extends StatelessWidget {
   }
 
   void _showInfo(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) {
-        final c = AppColors.of(ctx);
-        return Dialog(
-          backgroundColor: c.surfaceRaised,
-          constraints: const BoxConstraints(maxWidth: 360),
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
+    showInfoPopup(
+      context,
+      key: ValueKey('info-popup-${action.rule}'),
+      content: Builder(
+        builder: (ctx) => Text(
+          action.infoText,
+          style: AppType.style(
+            color: AppColors.of(ctx).text,
+            fontSize: AppType.body,
+            height: 1.4,
           ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: InkWell(
-              key: ValueKey('info-popup-${action.rule}'),
-              onTap: () => Navigator.of(ctx).pop(),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpace.xxl),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      action.infoText,
-                      style: AppType.style(
-                        color: c.text,
-                        fontSize: AppType.body,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpace.lg),
-                    Text(
-                      'Tap anywhere to close',
-                      style: AppType.style(
-                        color: c.textMuted,
-                        fontSize: AppType.caption,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 

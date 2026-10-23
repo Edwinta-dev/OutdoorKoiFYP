@@ -1,3 +1,4 @@
+import 'card_patch.dart';
 import 'rating_card_data.dart';
 import '../utils/pond_camera_storage.dart';
 import 'telemetry_history.dart';
@@ -173,6 +174,21 @@ final cameraFrameProvider = FutureProvider.family(
   (ref, int pond) =>
       ref.watch(cameraFramesRepositoryProvider).fetchLatestFrame(pond),
 );
+
+/// Colour-card patches for the rating card's sampled-areas overlay. A failed
+/// read is the same as none: the photo shows without dots.
+final cameraCardPatchesProvider = FutureProvider.family<List<CardPatch>, int>((
+  ref,
+  pond,
+) async {
+  try {
+    return await ref
+        .watch(cameraFramesRepositoryProvider)
+        .fetchCameraCardPatches(pond);
+  } catch (_) {
+    return const [];
+  }
+});
 final cameraDayProvider = FutureProvider.autoDispose.family(
   (ref, ({int pond, DateTime day}) query) => ref
       .watch(cameraFramesRepositoryProvider)

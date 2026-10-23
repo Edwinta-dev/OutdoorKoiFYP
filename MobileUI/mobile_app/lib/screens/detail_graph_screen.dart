@@ -48,6 +48,9 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
   Future<void> _loadUserPreferencesAndPayload() async {
     ref.invalidate(historyProvider((pond: _userId, days: _selectedDays)));
     ref.invalidate(assessmentProvider(_userId));
+    // A patch read that failed while the service was down must not stick
+    // for the session: a refresh asks again.
+    ref.invalidate(cameraCardPatchesProvider(_userId));
   }
 
   List<String> _getTargetSensorTypes() {
@@ -210,25 +213,15 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                   ],
 
                   // --- 3d. ALGAE DOMAIN ---
-                  // Ordered deliberately: forecast first (the outcome the
-                  // user came for), then the camera frame + rating control
-                  // that grounds it. Putting the rating control last means
-                  // the user has already seen what the model currently
-                  // believes before being asked to correct it, which makes
-                  // the correction meaningful rather than a blind survey.
+                  // Ordered deliberately: the rating control (an input) comes
+                  // first, then the collapsible Digital Twin Model card that
+                  // reflects it.
                   if (isAlgaeDomain) ...[
-                    AlgaeStatusCard(
-                      key: ValueKey(
-                        'algae-$_chemistryRefreshTick-$_algaeRefreshTick',
-                      ),
-                      userId: _userId,
-                    ),
-                    const SizedBox(height: AppSpace.xl),
                     AlgaeSeverityRatingCard(
                       key: ValueKey('algae-rating-$_algaeRefreshTick'),
                       userId: _userId,
                       // A rating changes the engine's modelled level, so
-                      // the forecast card above must be rebuilt against
+                      // the forecast card below must be rebuilt against
                       // the new state rather than left showing the
                       // pre-rating projection.
                       onRatingChanged: () {
@@ -236,6 +229,13 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                           setState(() => _algaeRefreshTick++);
                         }
                       },
+                    ),
+                    const SizedBox(height: AppSpace.xl),
+                    AlgaeStatusCard(
+                      key: ValueKey(
+                        'algae-$_chemistryRefreshTick-$_algaeRefreshTick',
+                      ),
+                      userId: _userId,
                     ),
                     const SizedBox(height: AppSpace.xl),
                   ],

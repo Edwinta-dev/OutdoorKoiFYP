@@ -3058,6 +3058,12 @@ components:
             $ref: '#/components/schemas/CameraMaskVersion'
           title: Versions
           type: array
+        card_patches:
+          anyOf:
+          - $ref: '#/components/schemas/CardPatches'
+          - type: 'null'
+          default: null
+          description: Colour-card sample patches, when configured for the pond.
       required:
       - pond_id
       - mask
@@ -3145,6 +3151,52 @@ components:
       - mask_version
       - mask
       title: CameraMaskVersion
+      type: object
+    CardPatch:
+      additionalProperties: false
+      properties:
+        name:
+          title: Name
+          type: string
+        kind:
+          title: Kind
+          type: string
+        polygon:
+          items:
+            items:
+              type: number
+            type: array
+          title: Polygon
+          type: array
+        points:
+          items:
+            items:
+              type: number
+            type: array
+          title: Points
+          type: array
+      required:
+      - name
+      - kind
+      - polygon
+      - points
+      title: CardPatch
+      type: object
+    CardPatches:
+      additionalProperties: false
+      properties:
+        version:
+          title: Version
+          type: integer
+        patches:
+          items:
+            $ref: '#/components/schemas/CardPatch'
+          title: Patches
+          type: array
+      required:
+      - version
+      - patches
+      title: CardPatches
       type: object
     ChannelHealth:
       additionalProperties: false

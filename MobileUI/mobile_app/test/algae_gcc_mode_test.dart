@@ -80,6 +80,8 @@ void main() {
       source: FakePondDataSource(algaeForecast: forecast),
     );
     await settle(tester);
+    await tester.tap(find.text('DIGITAL TWIN MODEL'));
+    await settle(tester);
 
     expect(find.text('GCC vs alert level'), findsOneWidget);
     expect(find.text('8.00% of 6.0%'), findsOneWidget);

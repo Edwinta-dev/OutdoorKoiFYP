@@ -617,6 +617,18 @@ class CameraMaskVersion(_Open):
     created_at: Optional[str] = None
 
 
+class CardPatch(_Closed):
+    name: str
+    kind: str
+    polygon: list[list[float]]
+    points: list[list[float]]
+
+
+class CardPatches(_Closed):
+    version: int
+    patches: list[CardPatch]
+
+
 class CameraMaskResponse(_Closed):
     pond_id: int
     mask: Optional[list[list[float]]] = Field(description="null: the whole frame is analysed.")
@@ -625,6 +637,8 @@ class CameraMaskResponse(_Closed):
     mask_version: Optional[int]
     updated_at: Optional[str]
     versions: list[CameraMaskVersion]
+    card_patches: Optional[CardPatches] = Field(
+        default=None, description="Colour-card sample patches, when configured for the pond.")
 
 
 # ---------------------------------------------------------------------

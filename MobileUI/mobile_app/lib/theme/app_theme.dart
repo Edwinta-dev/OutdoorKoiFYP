@@ -56,6 +56,14 @@ class AppColors {
   Color get imageOverlay => const Color(0xFF000000);
   Color get warningOnImage => const Color(0xFFFFAB40);
   Color get onImage => const Color(0xFFFFFFFF);
+
+  /// Dots of the camera "sampled areas" overlay: bright green, readable on
+  /// both the dark pond water and the pale test cards.
+  Color get samplePoint => const Color(0xCC2BFF4D);
+
+  /// A sample dot whose pixel the camera analysis rejects as clipped
+  /// (quality.CLIP_LOW_V / CLIP_HIGH_V): magenta, as in the paper.
+  Color get sampleRejected => const Color(0xDDFF2BD6);
   static const transparent = Color(0x00000000);
   static const waterMaskPreview = Color(0xAA00FF00);
 }

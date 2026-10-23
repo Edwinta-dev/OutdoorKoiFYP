@@ -11,7 +11,9 @@ ANCHOR (the NEA recording's fetch time); koi.dev moves them to the
 current time when it loads the seed.
 
 Pond 1, the demo pond: 14 days of hourly pH, TDS, water temperature and
-light readings, six camera frames a day, a feed every morning, a 30%
+light readings, six camera frames a day (the real deployment frames in
+frames/, cycled; green ratio, GCC and region metrics measured on them by
+koi.camera over the camera config mask and regions below), a feed every morning, a 30%
 water change and a top-up, and a pond profile.
 
 Pond 2, older data shapes the services must still read: no pond profile
@@ -52,12 +54,16 @@ HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parents[1]
 sys.path.insert(0, str(BACKEND))
 
+from koi.camera import card_patches, hsvEngine, quality  # noqa: E402
+from koi.camera.mask import validate_polygon, validate_regions  # noqa: E402
+from koi.dev import frames as dev_frames  # noqa: E402
 from koi.settings import Settings  # noqa: E402
 from koi.storage import MemoryStorage  # noqa: E402
 from koi.weather import job  # noqa: E402
 from koi.weather.nea import NeaClient  # noqa: E402
 
 SEED = HERE / "seed.json"
+PATCHES = HERE / "card_patches.json"
 NEA_FIXTURE = BACKEND / "tests" / "fixtures" / "nea_responses.json"
 OLD_SNAPSHOT = BACKEND / "tests" / "fixtures" / "snapshot_v2_utc_days.json"
 
@@ -95,7 +101,142 @@ RAIN_CLOUD_BELOW = 0.65
 RAIN_MM_BY_HOUR = {15: 4.0, 16: 2.4, 17: 0.6}
 HUMIDITY_EVERY_HOURS = 6
 
+# Pond 1's camera config: the water mask and named regions, as fractions of
+# a 640x480 frame (origin top-left), hand-drawn on the real deployment
+# frames in fixtures/demo_pond/frames (the first frames, where the camera
+# sits as in the owner's 15 October deployment): open water on the left, two
+# colour test-card wheels on the right.
+#   mask       the water rectangle; the green ratio and GCC are measured here
+#   water_gap  a smaller patch of open water inside it (the main algae signal)
+#   rim        a narrow strip of the pond wall at the left edge
+#   plants     a strip along the bottom edge, context only
+#   reference  BOTH wheels, as one polygon: a 16-point ellipse per wheel
+#              joined by a zero-width bridge (the region schema allows one
+#              polygon per name). The app dots every segment of both wheels.
+# Later frames drift a little; the polygons are demo-grade, not calibrated.
+DEMO_MASK = [[0.15, 0.12], [0.50, 0.12], [0.50, 0.92], [0.15, 0.92]]
+WHEELS = (  # (centre x, centre y, radius x, radius y), normalised: top wheel, then bottom wheel
+    (0.78, 0.13, 0.135, 0.18),
+    (0.80, 0.52, 0.14, 0.18),
+)
+MASK_VERSION = 1
 
+
+
+
+def _ellipse(cx: float, cy: float, rx: float, ry: float, points: int = 16, start_deg: float = 90.0) -> list:
+    """Points of an ellipse clamped into the frame, starting `start_deg`
+    degrees from +x (90 is the bottom, y grows downwards)."""
+    out = []
+    for i in range(points):
+        a = math.radians(start_deg + 360.0 * i / points)
+        out.append([round(min(1.0, max(0.0, cx + rx * math.cos(a))), 4),
+                    round(min(1.0, max(0.0, cy + ry * math.sin(a))), 4)])
+    return out
+
+
+def demo_regions() -> dict:
+    top = _ellipse(*WHEELS[0], start_deg=90.0)      # starts at the lowest point of the wheel
+    bottom = _ellipse(*WHEELS[1], start_deg=270.0)  # starts at the highest point of the wheel
+    # top ring closed back to its start, the bridge to the bottom ring, that
+    # ring closed back to its start; the polygon closing edge is the bridge
+    # again, so the bridge encloses no area.
+    reference = top + [top[0]] + bottom + [bottom[0]]
+    return validate_regions({
+        "water_gap": [[0.22, 0.30], [0.42, 0.30], [0.42, 0.70], [0.22, 0.70]],
+        "rim": [[0.0, 0.0], [0.10, 0.0], [0.10, 1.0], [0.0, 1.0]],
+        "plants": [[0.10, 0.93], [0.30, 0.93], [0.30, 1.0], [0.10, 1.0]],
+        "reference": reference,
+    })
+
+
+def demo_camera_config() -> dict:
+    mask, regions = validate_polygon(DEMO_MASK), demo_regions()
+    created = iso(ANCHOR - timedelta(days=DAYS + 1))
+    return {"camera_mask_version": [{"pond_id": DEMO_POND, "mask_version": MASK_VERSION, "mask": mask,
+                                     "regions": regions, "created_at": created}],
+            "camera_config": [{"pond_id": DEMO_POND, "mask": mask, "regions": regions,
+                               "mask_version": MASK_VERSION, "updated_at": created}]}
+
+
+# Colour-card patches (koi/camera/card_patches.py), measured on frames
+# 00062-00065 (640x480, the camera does not move between them), served by
+# the API from card_patches.json. Pixel geometry, then normalised.
+#   pH wheel (warm, 8 segments) and ammonia wheel (5 segments): centre,
+#   hub radius, segment angles in degrees clockwise from +x (y down).
+FRAME_W, FRAME_H = 640, 480
+PH_WHEEL = {"centre": (463.0, 131.0), "hub": 29.0, "outer": 92.0,
+            # clockwise from the red segment; segments are 45 degrees wide
+            "centres": [210, 255, 300, 345, 30, 75, 120, 165], "half": 45 / 2}
+NH3_WHEEL = {"centre": (459.0, 342.0), "hub": 29.0, "outer": 93.0,
+             # cream, blue, pale green, green (bottom right), green (bottom left)
+             "spans": [(144.5, 236.0), (236.0, 321.0), (321.0, 414.0), (54.0, 104.5), (104.5, 144.5)]}
+WHITE_RECT = (105.0, 165.0, 245.0, 385.0)  # x0, y0, x1, y1: cream paper left of the cards, as in the owner's reference
+SEGMENT_RADII = (45.0, 60.0, 75.0)
+SEGMENT_ARC_PX = 9.0  # distance between the three dots of a row
+WHITE_GRID = (12, 16)     # columns, rows
+
+
+def _norm(x: float, y: float) -> list:
+    return [round(min(1.0, max(0.0, x / FRAME_W)), 4), round(min(1.0, max(0.0, y / FRAME_H)), 4)]
+
+
+def _polar(centre, r: float, deg: float) -> list:
+    a = math.radians(deg)
+    return _norm(centre[0] + r * math.cos(a), centre[1] + r * math.sin(a))
+
+
+def _sector(wheel: dict, start: float, end: float) -> dict:
+    """An annular sector patch between the hub and the rim, inset 3 degrees
+    from the segment borders, with 3 x 3 sample dots (a fan)."""
+    lo, hi = start + 3.0, end - 3.0
+    r0, r1 = wheel["hub"] + 6.0, wheel["outer"] - 8.0
+    steps = 6
+    arc = [lo + (hi - lo) * i / steps for i in range(steps + 1)]
+    polygon = [_polar(wheel["centre"], r1, a) for a in arc] + [_polar(wheel["centre"], r0, a) for a in reversed(arc)]
+    mid = (lo + hi) / 2
+    points = [_polar(wheel["centre"], r, mid + k * math.degrees(SEGMENT_ARC_PX / r))
+              for r in SEGMENT_RADII for k in (-1, 0, 1)]
+    return {"polygon": polygon, "points": points}
+
+
+def _pad(wheel: dict) -> dict:
+    """The centre reading pad: a 12-point circle, with 7 dots (centre + ring of 6)."""
+    cx, cy = wheel["centre"]
+    polygon = [_polar(wheel["centre"], 20.0, 30.0 * i) for i in range(12)]
+    points = [_norm(cx, cy)] + [_polar(wheel["centre"], 11.0, 60.0 * i) for i in range(6)]
+    return {"polygon": polygon, "points": points}
+
+
+def demo_card_patches() -> dict:
+    """card_patches.json: the white reference grid, 8 pH and 5 ammonia
+    reference segments (9 dots each, so the pH wheel samples 72) and the
+    two reading pads (7 dots each)."""
+    x0, y0, x1, y1 = WHITE_RECT
+    cols, rows = WHITE_GRID
+    white = {"name": "white_ref",
+             "polygon": [_norm(x0, y0), _norm(x1, y0), _norm(x1, y1), _norm(x0, y1)],
+             "points": [_norm(x0 + (x1 - x0) * (c + 0.5) / cols, y0 + (y1 - y0) * (r + 0.5) / rows)
+                        for r in range(rows) for c in range(cols)]}
+    patches = [white]
+    for n, span in enumerate(NH3_WHEEL["spans"], 1):
+        patches.append({"name": f"nh3_ref_{n}", **_sector(NH3_WHEEL, *span)})
+    for n, mid in enumerate(PH_WHEEL["centres"], 1):
+        patches.append({"name": f"ph_ref_{n}", **_sector(PH_WHEEL, mid - PH_WHEEL["half"], mid + PH_WHEEL["half"])})
+    patches.append({"name": "nh3_reading", **_pad(NH3_WHEEL)})
+    patches.append({"name": "ph_reading", **_pad(PH_WHEEL)})
+    return {"pond_id": DEMO_POND, "patches": card_patches.validate_card_patches(patches)}
+
+
+def _six(value):
+    """Rounds floats (nested in dicts and lists) to six significant digits."""
+    if isinstance(value, float):
+        return float(f"{value:.6g}")
+    if isinstance(value, dict):
+        return {k: _six(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_six(v) for v in value]
+    return value
 
 
 def iso(dt: datetime) -> str:
@@ -147,29 +288,34 @@ def demo_sensor_rows() -> list[dict]:
 
 
 def demo_camera_rows() -> list[dict]:
-    rows = []
-    change_at = local(WATER_CHANGE["day"], WATER_CHANGE["hour"])
-    ema = None
-    n = 0
+    """One row per camera time. Each takes the next real deployment frame
+    (cycling through fixtures/demo_pond/frames; koi.dev.frames uploads the
+    same file for the same position), and its green_ratio, gcc, colour and
+    regions are measured on that frame with the production functions over
+    the pond mask and regions."""
+    times = []
     for day in range(DAYS + 1):
         for hour in CAMERA_HOURS:
             at = local(day, hour, 3)
-            if at > ANCHOR or at <= ANCHOR - timedelta(days=DAYS):
-                continue
-            days = (at - local(0, 12)).total_seconds() / 86400
-            green = BLOOM_START * math.exp(BLOOM_MU * days)
-            if at > change_at:
-                green *= 1 - WATER_CHANGE["percent"] / 100
-            # Glare and ripples: a repeatable +-4% wobble frame to frame.
-            green *= 1 + 0.04 * math.sin(n * 2.3)
-            green = round(green, 4)
-            ema = green if ema is None else round(0.3 * green + 0.7 * ema, 4)
-            n += 1
-            rows.append({"id": 20_000 + n, "created_at": iso(at), "user_ID": DEMO_POND, "green_ratio": green,
-                         # imageTable.current_state is a text column; the
-                         # camera stores its state array as JSON text.
-                         "current_state": json.dumps(["base", ema]),
-                         "imageURL": f"https://example.invalid/demo/{DEMO_POND}/frame_{n:03d}.jpg"})
+            if ANCHOR - timedelta(days=DAYS) < at <= ANCHOR:
+                times.append(at)
+    mask, regions = validate_polygon(DEMO_MASK), demo_regions()
+    rows = []
+    ema = None
+    for n, at in enumerate(times, 1):
+        data = dev_frames.demo_frame_bytes(n - 1)
+        img = quality.decode(data)
+        green = hsvEngine.analyze_image_bytes(data, polygon=mask)
+        gcc, colour = quality.colour_metrics(img, mask)
+        measured = hsvEngine.region_metrics(img, regions)
+        ema = green if ema is None else round(0.3 * green + 0.7 * ema, 4)
+        rows.append({"id": 20_000 + n, "created_at": iso(at), "user_ID": DEMO_POND, "green_ratio": green,
+                     # imageTable.current_state is a text column; the
+                     # camera stores its state array as JSON text.
+                     "current_state": json.dumps(["base", ema]),
+                     "mask_version": MASK_VERSION, "gcc": _six(gcc), "colour": _six(colour),
+                     "regions": _six(measured),
+                     "imageURL": f"https://example.invalid/demo/{DEMO_POND}/frame_{n:03d}.jpg"})
     return rows
 
 
@@ -300,6 +446,7 @@ def build() -> dict:
         "SensorData": demo_sensor_rows() + legacy["SensorData"],
         "imageTable": demo_camera_rows() + legacy["imageTable"],
         "pondInterventions": demo_interventions(),
+        **demo_camera_config(),
         "pond_chemistry_state": legacy["pond_chemistry_state"],
         **weather,
     }
@@ -316,14 +463,22 @@ def render() -> str:
     return json.dumps(build(), indent=1, sort_keys=True) + "\n"
 
 
+def render_patches() -> str:
+    return json.dumps(demo_card_patches(), indent=1) + "\n"
+
+
 def main(argv: list[str]) -> int:
-    text = render()
+    text, patches = render(), render_patches()
     if "--check" in argv:
         if not SEED.exists() or SEED.read_text(encoding="utf-8") != text:
             sys.stderr.write(f"{SEED} is out of date; run python {Path(__file__).name}\n")
             return 1
+        if not PATCHES.exists() or PATCHES.read_text(encoding="utf-8") != patches:
+            sys.stderr.write(f"{PATCHES} is out of date; run python {Path(__file__).name}\n")
+            return 1
         return 0
     SEED.write_text(text, encoding="utf-8", newline="\n")
+    PATCHES.write_text(patches, encoding="utf-8", newline="\n")
     return 0
 
 

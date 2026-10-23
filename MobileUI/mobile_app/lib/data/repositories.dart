@@ -1,3 +1,4 @@
+import 'card_patch.dart';
 import 'pond_profile.dart';
 import 'dart:typed_data';
 import '../utils/digital_twin_api.dart';
@@ -30,6 +31,11 @@ abstract interface class PondProfileRepository {
 abstract interface class CameraFramesRepository {
   Future<List<List<double>>?> fetchCameraMask(int userId);
   Future<void> saveCameraMask(int userId, List<List<double>> polygon);
+
+  /// The colour-card patches (white reference, pH and ammonia wheel
+  /// segments, reading pads) with their sample points; empty when the pond
+  /// has none. Drawn by the sampled-areas overlay.
+  Future<List<CardPatch>> fetchCameraCardPatches(int userId);
   Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day);
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,
