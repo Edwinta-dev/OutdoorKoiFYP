@@ -1112,7 +1112,7 @@ def _lead_time_actions(user_id: int, sources: dict, now: datetime) -> dict:
     # notebook's daily network Tmax or pooled 24-hour period rank. Preserve
     # these as unassessed until their matching retained series is available.
     evaluated = ladder.actions(decision_time=now, rain=rain, nowcast_text=nowcast_text,
-                               observed_tmax_c=None, temperature_regime=None, outlook_high_c=None,
+                               observed_tmax_c=None, temperature_regime=None, outlook_mean_c=None,
                                pooled_rank=None, dry_band_max=None)
     return evaluated
 

@@ -27,24 +27,33 @@ def react(rain: Optional[dict], *, decision_time: datetime) -> dict:
             f"{rain['total_mm']:.1f} mm at station {rain.get('station_id')} on {day.isoformat()}.")] if fired else []}
 
 
-def preempt(*, observed_tmax_c: Optional[float], regime: Optional[str], outlook_high_c: Optional[float],
-            outlook_hot_threshold_c: Optional[float], evidence: str = "") -> dict:
-    """Fire when today's measured heat and an available hot outlook agree."""
-    if (observed_tmax_c is None or regime not in PARAMS["temperature_threshold_c"] or outlook_high_c is None
+def preempt(*, observed_tmax_c: Optional[float], regime: Optional[str], outlook_mean_c: Optional[float] = None,
+            outlook_hot_threshold_c: Optional[float] = PARAMS["outlook_hot_threshold_c"],
+            outlook_high_c: Optional[float] = None, evidence: str = "") -> dict:
+    """Fire when today's measured heat and the mean of lead 1-4 outlook midpoints agree.
+
+    ``outlook_high_c`` is a deprecated keyword alias for ``outlook_mean_c``.
+    """
+    if outlook_mean_c is not None and outlook_high_c is not None:
+        raise ValueError("Pass outlook_mean_c or deprecated outlook_high_c, not both.")
+    if outlook_mean_c is None:
+        outlook_mean_c = outlook_high_c
+    if (observed_tmax_c is None or regime not in PARAMS["temperature_threshold_c"] or outlook_mean_c is None
             or outlook_hot_threshold_c is None):
         return {"rule": "PREEMPT", "status": "insufficient_data",
                 "reason": "A measured-temperature window or issued outlook is missing.", "actions": []}
     hot = observed_tmax_c >= PARAMS["temperature_threshold_c"][regime]
-    forecast_hot = outlook_high_c >= outlook_hot_threshold_c
+    forecast_hot = outlook_mean_c >= outlook_hot_threshold_c
     action = _action(
         "PREEMPT", "ahead of the hot stretch",
         "Reduce the feed ration and raise aeration before the hot stretch.",
-        evidence or f"Measured Tmax {observed_tmax_c:.1f} °C and outlook high {outlook_high_c:.1f} °C.",
+        evidence or f"Measured Tmax {observed_tmax_c:.1f} °C and outlook mean {outlook_mean_c:.1f} °C.",
     )
     return {"rule": "PREEMPT", "status": "assessed", "actions": [action] if hot and forecast_hot else []}
 
 
-def window(*, pooled_rank: Optional[float], dry_band_max: Optional[float], evidence: str = "") -> dict:
+def window(*, pooled_rank: Optional[float], dry_band_max: Optional[float] = PARAMS["pooled_dry_rank_max"],
+           evidence: str = "") -> dict:
     """Use a calibrated pooled forecast rank; absence is not a no-action verdict."""
     if pooled_rank is None or dry_band_max is None:
         return {"rule": "WINDOW", "status": "insufficient_data",
@@ -66,13 +75,15 @@ def nowcast(*, rain_call: Optional[str], evidence: str = "") -> dict:
 
 
 def actions(*, decision_time: datetime, rain: Optional[dict] = None, observed_tmax_c: Optional[float] = None,
-            temperature_regime: Optional[str] = None, outlook_high_c: Optional[float] = None,
-            outlook_hot_threshold_c: Optional[float] = None,
-            pooled_rank: Optional[float] = None, dry_band_max: Optional[float] = None,
+            temperature_regime: Optional[str] = None, outlook_mean_c: Optional[float] = None,
+            outlook_hot_threshold_c: Optional[float] = PARAMS["outlook_hot_threshold_c"],
+            outlook_high_c: Optional[float] = None,
+            pooled_rank: Optional[float] = None, dry_band_max: Optional[float] = PARAMS["pooled_dry_rank_max"],
             nowcast_text: Optional[str] = None) -> dict:
     results = [react(rain, decision_time=decision_time),
                preempt(observed_tmax_c=observed_tmax_c, regime=temperature_regime,
-                       outlook_high_c=outlook_high_c, outlook_hot_threshold_c=outlook_hot_threshold_c),
+                       outlook_mean_c=outlook_mean_c, outlook_high_c=outlook_high_c,
+                       outlook_hot_threshold_c=outlook_hot_threshold_c),
                window(pooled_rank=pooled_rank, dry_band_max=dry_band_max),
                nowcast(rain_call=nowcast_text)]
     return {"status": "assessed" if all(r["status"] == "assessed" for r in results) else "insufficient_data",

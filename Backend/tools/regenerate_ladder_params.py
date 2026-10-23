@@ -1,6 +1,7 @@
 """Regenerate ladder thresholds from the committed NEA CSV inputs."""
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 from datetime import date
@@ -12,6 +13,7 @@ OUTPUT = ROOT / "Backend" / "koi" / "models" / "ladder_params.json"
 LABELS = DATA / "exploration_outputs" / "daily_labels.csv"
 VALIDATION = DATA / "exploration_outputs" / "intervention_validation.csv"
 TRAIN_END = date(2024, 12, 31)
+DEFAULT_WINDOW_END = date(2026, 8, 20)
 
 
 def quantile(values: list[float], q: float) -> float:
@@ -22,14 +24,15 @@ def quantile(values: list[float], q: float) -> float:
     return values[low] + (values[high] - values[low]) * (position - low)
 
 
-def main() -> None:
+def main(end_date: date = DEFAULT_WINDOW_END) -> None:
     with (DATA / "daily_climate.csv").open(encoding="utf-8-sig", newline="") as f:
         climate = list(csv.DictReader(f))
     train = [r for r in climate if date.fromisoformat(r["date"]) <= TRAIN_END]
     old = [float(r["t_max"]) for r in train if "cluster" in r["source"]]
     # The notebook z-matches the instrument regime using that regime's
     # measured distribution, while the hot quantile itself is training-only.
-    new = [float(r["t_max"]) for r in climate if "cluster" not in r["source"]]
+    new = [float(r["t_max"]) for r in climate
+           if "cluster" not in r["source"] and date.fromisoformat(r["date"]) <= end_date]
     hot_old = quantile(old, .70)
     mean_old = sum(old) / len(old)
     std_old = (sum((x - mean_old) ** 2 for x in old) / (len(old) - 1)) ** .5
@@ -50,7 +53,8 @@ def main() -> None:
     result = {
         "source": ("NEA_Data_Analysis/daily_climate.csv, exploration_outputs/daily_labels.csv, "
                    "and intervention_validation.csv"),
-        "train_end": TRAIN_END.isoformat(), "hot_quantile": .70, "outlook_hot_quantile": .75,
+        "train_end": TRAIN_END.isoformat(), "new_regime_window_end": end_date.isoformat(),
+        "hot_quantile": .70, "outlook_hot_quantile": .75,
         "window_quantile": .16, "react_rain_mm": 50.0, "dry_day_rain_mm": 1.0,
         "temperature_threshold_c": {"old": round(hot_old, 2), "new": round(hot_new, 2)},
         "outlook_hot_threshold_c": round(quantile([float(r["outlook_temp_ahead"]) for r in train_labels
@@ -65,4 +69,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--end-date", type=date.fromisoformat, default=DEFAULT_WINDOW_END,
+                        help="inclusive end date for new-regime climate rows (default: %(default)s)")
+    main(parser.parse_args().end_date)

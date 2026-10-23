@@ -101,11 +101,15 @@ absent window is `insufficient_data`; a covered day below 50 mm is an
 assessed no-action result.
 
 `Backend/koi/models/ladder.py::preempt` requires both a measured daily Tmax
-and an issued hot outlook. The observed hot thresholds are regime-aware:
-32.60 °C for the validation's older two-station cluster and 31.86 °C for its
-later full-network regime, regenerated from the committed CSV. The notebook's
-saved run reports 31.80 °C for the latter regime, a 0.06 °C difference from
-the committed snapshot. The validation reports held-out precision 0.885.
+and an issued outlook mean, the average of the lead 1-4 daily midpoint
+values `(temp_low + temp_high) / 2` (the notebook's `outlook_temp_ahead`).
+The deprecated `outlook_high_c` keyword remains an alias for callers being
+migrated. The observed hot thresholds are regime-aware:
+32.60 °C for the validation's older two-station cluster and 31.80 °C for its
+later full-network regime. The prior 31.86 °C value used climate rows through
+2026-09-28; the notebook window ends 2026-08-20 and its same regeneration
+formula gives 31.795 °C (rounded to 31.80 °C), so the runtime cut now matches
+that window. The validation reports held-out precision 0.885.
 This evidence is a network-mean series; it has not been shown to transfer to
 one pond's assigned weather station. The live API leaves PREEMPT unassessed
 until a complete station-day maximum and matching as-of outlook are
@@ -127,7 +131,9 @@ is a short-fuse rain alert, not a pond-safety prediction.
 
 `Backend/tools/regenerate_ladder_params.py` derives observed heat thresholds
 and forecast cutoffs from committed climate and daily-label CSVs through
-2024-12-31 and writes `Backend/koi/models/ladder_params.json`. The compact
+2024-12-31 and writes `Backend/koi/models/ladder_params.json`. Its inclusive
+`--end-date` defaults to the new-regime notebook endpoint, 2026-08-20; that
+cutoff applies to new-regime climate rows. The compact
 daily-label CSV omits PREEMPT's future three-day heat target, so its 0.8851
 held-out precision is read from the committed notebook validation export;
 the test checks its recorded sample count and precision. Precision figures

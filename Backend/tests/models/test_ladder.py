@@ -17,12 +17,30 @@ def test_react_requires_complete_rain_and_fires_at_threshold():
 
 
 def test_preempt_requires_both_heat_signals():
-    assert ladder.preempt(observed_tmax_c=33, regime="old", outlook_high_c=33,
+    assert ladder.preempt(observed_tmax_c=33, regime="old", outlook_mean_c=33,
                           outlook_hot_threshold_c=32)["actions"]
-    assert ladder.preempt(observed_tmax_c=30, regime="old", outlook_high_c=33,
+    assert ladder.preempt(observed_tmax_c=30, regime="old", outlook_mean_c=33,
                           outlook_hot_threshold_c=32)["actions"] == []
-    assert ladder.preempt(observed_tmax_c=33, regime="unknown", outlook_high_c=33,
+    assert ladder.preempt(observed_tmax_c=33, regime="unknown", outlook_mean_c=33,
                           outlook_hot_threshold_c=32)["status"] == "insufficient_data"
+
+
+def test_preempt_legacy_alias_and_default_threshold():
+    kwargs = dict(observed_tmax_c=33, regime="old")
+    assert ladder.preempt(**kwargs, outlook_high_c=29.125)["actions"]
+    assert ladder.preempt(**kwargs, outlook_mean_c=29.124)["actions"] == []
+    import pytest
+    with pytest.raises(ValueError, match="not both"):
+        ladder.preempt(**kwargs, outlook_mean_c=30, outlook_high_c=30)
+
+
+def test_ladder_defaults_and_new_regime_cut():
+    assert ladder.PARAMS["temperature_threshold_c"]["new"] == 31.8
+    assert ladder.window(pooled_rank=.1)["actions"]
+    result = ladder.actions(decision_time=NOW, observed_tmax_c=33, temperature_regime="old",
+                            outlook_mean_c=29.125, pooled_rank=.1)
+    assert result["rules"][1]["actions"]
+    assert result["rules"][2]["actions"]
 
 
 def test_window_distinguishes_dry_rank_from_missing():
