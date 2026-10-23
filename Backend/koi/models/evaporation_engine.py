@@ -37,7 +37,8 @@ Penman (1948) aerodynamic/mass-transfer term for open water:
     ea_air   = actual vapour pressure of air = es(T_air) * RH/100
 
 Sanity check for typical Singapore conditions (water 29C, air 30C,
-RH 75%, wind 3 m/s at 2 m, shelter 0.5) this yields ~3.9 mm/day.
+RH 75%, wind 3 m/s at 2 m, shelter 0.6) this yields ~4.2 mm/day, inside the
+accepted 3.5-5 mm/day band for open water in the tropics.
 The constants 0.26 and 0.54 are Penman's originals and are exposed as WIND_FN_A / WIND_FN_B so
 they can be calibrated against this specific pond later (see the
 calibration note in the write-up).
@@ -81,7 +82,7 @@ _WIND_10M_TO_2M = 0.748
 # for the supplied 18 Aug payload, NEA's 4-day outlook bands work out to a
 # 15-knot midpoint (~7.7 m/s) while the live nea_telemetry anemometer that
 # same hour reported 6.9 KNOTS (~3.5 m/s) - a 2x discrepancy that flows
-# straight into evaporation as roughly +45%. 0.5 brings projected
+# straight into evaporation as roughly +45%. 0.6 brings projected
 # evaporation back into the 4-5 mm/day band that matches both the live
 # telemetry and published Singapore open-water evaporation figures.
 #
@@ -89,7 +90,7 @@ _WIND_10M_TO_2M = 0.748
 # log actual top-up volumes against elapsed days, fit this first.
 # fit_shelter_factor does that per pond (issue #32); this stays the default
 # for a pond without a fit.
-POND_SHELTER_FACTOR = 0.5
+POND_SHELTER_FACTOR = 0.6
 
 # NEA's 4-day outlook gives a forecast code/text but no rainfall depth.
 # These are coarse daily accumulations (mm) used to offset evaporation.

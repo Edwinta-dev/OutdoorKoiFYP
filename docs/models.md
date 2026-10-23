@@ -54,8 +54,8 @@ and 0.035 per hour) stay as they are. A pond with no fit uses exactly these.
 | Parameter / readout | Old | New | Reason |
 |---|---|---|---|
 | `WIND_FN_A` / `WIND_FN_B` pressure units | 0.26 / 0.54 multiplied by mmHg | 0.26 / 0.54 multiplied by hPa | Penman's 0.26 coefficient is for hPa; the engine had supplied mmHg. Convert Tetens kPa to hPa by multiplying by 10. Owner-supplied offline PAN benchmark (35 dry days, 10 runs) reports MAE 1.27 to 0.86 mm/day and bias -1.20 to -0.63. |
-| `POND_SHELTER_FACTOR` | 0.6 | 0.5 | The corrected calculation's shelter root is about 0.45; rounded to one decimal as requested, 0.5 gives a four-day midpoint mean of 4.4 mm/day. The four results are 4.0, 3.4, 5.2 and 4.9 mm/day; the mean is `(3.9857 + 3.4321 + 5.1792 + 4.8788) / 4 = 4.3689`, rounded to 4.4. Wind uses the existing 10 m to 2 m factor 0.748 and outlook midpoint winds. At 0.6 the same mean is 4.9. |
-| Typical Singapore sanity check (29 C water, 30 C air, 75% RH, 3 m/s) | ~4.2 mm/day (the old figure assumed 2 m wind and no shelter, despite the old conversion) | ~3.9 mm/day at 2 m, shelter 0.5 | Recomputed with hPa pressure difference and the stated shelter. Owner-supplied PAN result supports correcting the unit mismatch; no fitted multiplier was added. |
+| `POND_SHELTER_FACTOR` | 0.6 | 0.6 (issue #131 briefly set 0.5; reverted by the owner) | Both values meet the 4-5 mm/day criterion after the unit fix: the corrected four-day midpoint mean for the 18 Aug payload is 4.9 mm/day at 0.6 and 4.4 at 0.5. The owner kept 0.6 because the engine underpredicts on the only external data (owner-supplied PAN benchmark: bias -0.94 mm/day at 0.6 vs -1.02 at 0.5, 2 m wind), so the smaller shelter discount errs towards earlier top-ups. |
+| Typical Singapore sanity check (29 C water, 30 C air, 75% RH, 3 m/s) | ~4.2 mm/day (old units, 2 m wind, no shelter) | ~4.2 mm/day at 2 m, shelter 0.6 | Recomputed with the hPa pressure difference and the stated shelter. |
 
 The owner-supplied PAN benchmark leaves about 22% underprediction, attributed
 to the model having no radiation term; that remains outside this change.
@@ -72,7 +72,7 @@ run, and appends each result to `pond_calibration` (migration 0022):
   volume, an interval of 1 to 45 days, 75% of its hours complete
   (missing hours are covered by scaling the complete ones). Assumes each
   top-up refilled to the same level. Error: in-sample RMSE in litres
-  beside the RMSE at the default 0.45.
+  beside the RMSE at the default 0.6.
 - Water/air temperature (`fit_water_air_temperature`): the pond's hourly
   water temperature against the station's hourly air temperature, lags 0
   to 12 hours, offset the mean difference at each lag. The first 70% of
@@ -461,7 +461,7 @@ with both counters at 0; the app only reads element 0.
 ## Projection sensitivity ranges (issue #31)
 
 The central constants remain unchanged: TAN nitrification 0.05/hour,
-nitrite nitrification 0.035/hour, wind shelter factor 0.45, assumed depth
+nitrite nitrification 0.035/hour, wind shelter factor 0.6, assumed depth
 1.2 m, and fallback algae intrinsic rate 0.45/day.
 `Backend/koi/models/uncertainty.json` records low/central/high values and
 a source comment for each range. Nitrification and fallback algae rates

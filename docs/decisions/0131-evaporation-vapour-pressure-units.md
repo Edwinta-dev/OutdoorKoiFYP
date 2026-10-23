@@ -5,7 +5,7 @@
 Status: implemented · Issue: #131 · Date: 2026-10-23
 
 ## In short
-The Penman aerodynamic term now receives vapour-pressure differences in hPa, which matches its retained coefficients 0.26 and 0.54. The default shelter factor is 0.5, and the Singapore sanity check is stated as about 3.9 mm/day at 2 m wind with that shelter.
+The Penman aerodynamic term now receives vapour-pressure differences in hPa, which matches its retained coefficients 0.26 and 0.54. The default shelter factor stays 0.6 (an owner revision of this issue's first change to 0.5; see Key parameters), and the Singapore sanity check is about 4.2 mm/day at 2 m wind with shelter 0.6.
 
 ## How it works
 1. The model calculates saturation vapour pressure over the water and in the air from temperature using the existing Tetens equation, which returns kPa.
@@ -16,7 +16,7 @@ The Penman aerodynamic term now receives vapour-pressure differences in hPa, whi
 ## Main design choice
 Convert kPa directly to hPa and retain the published `WIND_FN_A` and `WIND_FN_B` values. Keeping mmHg would require replacing both coefficients with the equivalent mmHg pair and would preserve pressure in a unit the code never needs elsewhere. The former makes the coefficient's intended units explicit and removes the unused mmHg conversion helper.
 
-The shelter default targets a four-day mean in the stated 4–5 mm/day band for the 18 Aug payload conditions. For outlook midpoint air temperatures, humidity and wind, the corrected daily values at 0.5 are 3.9857, 3.4321, 5.1792 and 4.8788 mm/day. Their mean is 4.3689 mm/day, rounded to 4.4. The wind calculation uses the existing 10 m-to-2 m multiplier 0.748 (`Backend/koi/models/evaporation_engine.py::_WIND_10M_TO_2M`). At shelter 0.6 the same mean is 4.9. The shelter root is approximately 0.45, rounded to one decimal place as 0.5 for the configured default. The typical-condition calculation uses 3 m/s at 2 m, shelter 0.5, and gives about 3.9 mm/day. These are model calculations from the supplied payload and documented conditions, not fresh PAN measurements.
+The shelter default targets a four-day mean in the stated 4–5 mm/day band for the 18 Aug payload conditions. For outlook midpoint air temperatures, humidity and wind, the corrected daily values at 0.5 are 3.9857, 3.4321, 5.1792 and 4.8788 mm/day. Their mean is 4.3689 mm/day, rounded to 4.4. The wind calculation uses the existing 10 m-to-2 m multiplier 0.748 (`Backend/koi/models/evaporation_engine.py::_WIND_10M_TO_2M`). At shelter 0.6 the same mean is 4.9. The shelter root is approximately 0.45, rounded to one decimal place as 0.5 for the configured default. The typical-condition calculation uses 3 m/s at 2 m and gives about 3.9 mm/day at shelter 0.5 and 4.2 at 0.6. Owner revision (2026-10-23): both 0.5 and 0.6 meet the 4-5 mm/day criterion, and the default stays 0.6. The engine still underpredicts on the owner-supplied PAN data (bias -0.94 mm/day at 0.6 vs -1.02 at 0.5, 2 m wind), so the smaller shelter discount errs towards earlier top-up reminders. These are model calculations from the supplied payload and documented conditions, not fresh PAN measurements.
 
 ## Traps: why the obvious fix is wrong
 - Do not retain `saturation_vapour_pressure_mmhg` in this formula with `WIND_FN_A = 0.26`: the coefficient expects hPa, so that combination preserves the 25% low result.
@@ -25,9 +25,9 @@ The shelter default targets a four-day mean in the stated 4–5 mm/day band for 
 
 ## Components
 - `Backend/koi/models/evaporation_engine.py::evaporation_mm_per_day` — hPa Penman term
-- `Backend/koi/models/evaporation_engine.py::POND_SHELTER_FACTOR` — default 0.5
+- `Backend/koi/models/evaporation_engine.py::POND_SHELTER_FACTOR` — default 0.6 (owner revision)
 - `Backend/tests/models/test_new_engines.py::test_penman_evaporation_physical_plausibility` — independent fixed-input calculation
-- `Backend/koi/models/uncertainty.json` — scenarios recentered to 0.5
+- `Backend/koi/models/uncertainty.json` — scenarios 0.4/0.6/0.8 around the 0.6 default
 - `docs/models.md` — old/new model parameter table
 
 ## Breaks or needs follow-up
@@ -110,8 +110,8 @@ whitespace/conflict-marker check, apply pending migrations to the local Supabase
 - Not verified: 0 checked, 0 tested, 1 claimed
 - Breaks or needs follow-up: 0 checked, 0 tested, 1 claimed
   - [checked] Components: `Backend/koi/models/evaporation_engine.py::evaporation_mm_per_day` — hPa Penman term (named code exists and changed)
-  - [checked] Components: `Backend/koi/models/evaporation_engine.py::POND_SHELTER_FACTOR` — default 0.5 (named code exists and changed)
-  - [checked] Components: `Backend/koi/models/uncertainty.json` — scenarios recentered to 0.5 (named code exists and changed)
+  - [checked] Components: `Backend/koi/models/evaporation_engine.py::POND_SHELTER_FACTOR` — default 0.6 (owner revision) (named code exists and changed)
+  - [checked] Components: `Backend/koi/models/uncertainty.json` — scenarios 0.4/0.6/0.8 around the 0.6 default (named code exists and changed)
   - [claimed] Components: `Backend/tests/models/test_new_engines.py::test_penman_evaporation_physical_plausibilit... (names no code)
   - [claimed] Key parameters: `WIND_FN_A = 0.26`, `WIND_FN_B = 0.54`: unchanged, pressure input now hPa. (no cited constant with a matching value)
   - [claimed] Edge cases: Handled: condensation remains floored at zero; humidity remains clamped to 0–100%. (names no code)

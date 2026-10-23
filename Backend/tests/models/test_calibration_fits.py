@@ -233,7 +233,7 @@ def test_calibration_shelter_factor_drives_the_loss_integral_and_projection():
     assert default.project_forward(daily_environment=days)["wind_shelter_factor"] == ev.POND_SHELTER_FACTOR
     # A scenario factor is read relative to the default.
     assert fitted.project_forward(daily_environment=days, shelter_factor=0.8)["wind_shelter_factor"] == \
-        pytest.approx(0.48)
+        pytest.approx(0.4)
     assert default.project_forward(daily_environment=days, shelter_factor=0.8)["wind_shelter_factor"] == 0.8
 
 

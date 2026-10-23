@@ -305,7 +305,7 @@
         "data_confidence": null,
         "days_to_topup": 6,
         "evaluated_at": null,
-        "evaporation_mm_per_day": 3.9,
+        "evaporation_mm_per_day": 4.2,
         "feed_cap_grams": 60.0,
         "feed_note": "Normal ration.",
         "forecast_issued_at": null,

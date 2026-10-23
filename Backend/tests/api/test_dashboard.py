@@ -44,7 +44,7 @@ CHEMISTRY = {"status": "Amber", "category": "Watch", "tan_ppm": 0.31, "no2_ppm":
              "ph_reactivity": None, "reactivity_trend": None, "tds_trend": 0.8, "sensor_warnings": [],
              "advisory": "Ammonia is rising. Feed lightly for two days.", "add_hardener_now": False}
 EVAPORATION = {"status": "Green", "category": "Normal", "loss_litres": 42.0, "loss_pct": 1.7,
-               "evaporation_mm_per_day": 3.9, "loss_litres_per_day": 10.5, "water_temp_c": 29.5,
+               "evaporation_mm_per_day": 4.2, "loss_litres_per_day": 10.5, "water_temp_c": 29.5,
                "feed_cap_grams": 60.0, "feed_note": "Normal ration.", "days_to_topup": 6,
                "advisory": "No top-up needed this week.", "topup_now": False}
 
