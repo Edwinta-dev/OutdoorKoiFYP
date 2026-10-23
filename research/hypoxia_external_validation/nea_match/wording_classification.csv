@@ -1,0 +1,21 @@
+wording,nowcast_2hr,periods_24h,general_24h,outlook_4day,total,notebook_tier,notebook_rank,notebook_nonFair,prod_rain_incoming,prod_intensity,prod_intensity_rank,ladder_nowcast_fires,nonFair_agrees,incoming_agrees_nonFair
+Partly Cloudy (Day),32772,69883,1055,631,104341,Fair,0,False,False,unknown,0,False,True,True
+Cloudy,38403,51726,559,30,90718,Fair,0,False,False,unknown,0,False,True,True
+Partly Cloudy (Night),27660,56942,0,0,84602,Fair,0,False,False,unknown,0,False,True,True
+Windy,4335,9676,587,855,15453,Fair,0,False,False,unknown,0,False,True,True
+Fair (Day),3692,6449,187,479,10807,Fair,0,False,False,unknown,0,False,True,True
+Fair (Night),4069,4919,0,0,8988,Fair,0,False,False,unknown,0,False,True,True
+Fair & Warm,831,2180,271,654,3936,Fair,0,False,False,unknown,0,False,True,True
+Hazy,0,12,1,0,13,Fair,0,False,False,unknown,0,False,True,True
+Mist,8,5,0,0,13,Fair,0,False,False,unknown,0,False,True,True
+Showers,11024,9366,1298,834,22522,Light,1,True,True,moderate,1,True,True,True
+Light Rain,7784,7993,467,1,16245,Light,1,True,True,moderate,1,True,True,True
+Passing Showers,1259,2651,371,382,4663,Light,1,True,True,moderate,1,True,True,True
+Light Showers,3548,211,8,1,3768,Light,1,True,True,moderate,1,True,True,True
+Slightly Hazy,8,27,2,0,37,Light,1,True,False,unknown,0,False,False,False
+Thundery Showers,6144,72903,13411,17552,110010,Thundery,2,True,True,heavy,2,True,True,True
+Moderate Rain,2432,3890,461,28,6811,Moderate,3,True,True,moderate,1,True,True,True
+Heavy Thundery Showers with Gusty Winds,1142,1149,203,46,2540,Severe,4,True,True,heavy,2,True,True,True
+Heavy Thundery Showers,868,114,22,35,1039,Severe,4,True,True,heavy,2,True,True,True
+Heavy Rain,90,212,11,4,317,Severe,4,True,True,heavy,2,True,True,True
+Heavy Showers,66,92,7,4,169,Severe,4,True,True,heavy,2,True,True,True

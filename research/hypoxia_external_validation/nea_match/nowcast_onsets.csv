@@ -1,0 +1,5 @@
+scope,classifier,onsets,flagged_any,pct_any,pct_lead_ge0,median_any,p25_any,p75_any,flagged_strict_before_onset_hour,pct_strict,median_strict,p25_strict,p75_strict
+"all years (chapter: 1,722 onsets)",notebook non-Fair,1722,1363,79.1521486643438,68.46689895470384,49.0,14.0,90.0,1150,66.7828106852497,64.0,30.0,90.0
+"all years (chapter: 1,722 onsets)",production ladder.nowcast,1722,1363,79.1521486643438,68.46689895470384,49.0,14.0,90.0,1150,66.7828106852497,64.0,30.0,90.0
+TEST onsets 2025-01-01..2026-08-19,notebook non-Fair,406,360,88.66995073891626,76.60098522167488,52.0,14.0,90.0,305,75.1231527093596,69.0,33.0,90.0
+TEST onsets 2025-01-01..2026-08-19,production ladder.nowcast,406,360,88.66995073891626,76.60098522167488,52.0,14.0,90.0,305,75.1231527093596,69.0,33.0,90.0

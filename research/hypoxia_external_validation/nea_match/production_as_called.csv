@@ -1,0 +1,5 @@
+rule,decision_days,status_counts,actions_fired
+REACT,596,"{""insufficient_data"": 596}",0
+PREEMPT,596,"{""insufficient_data"": 596}",0
+WINDOW,596,"{""insufficient_data"": 596}",0
+NOWCAST,596,"{""assessed"": 585, ""insufficient_data"": 11}",67

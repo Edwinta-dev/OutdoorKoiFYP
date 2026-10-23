@@ -1,0 +1,6 @@
+notebook_tier,prod_intensities,n
+Fair,['unknown'],318871
+Light,"['moderate', 'unknown']",47235
+Thundery,['heavy'],110010
+Moderate,['moderate'],6811
+Severe,['heavy'],4065
