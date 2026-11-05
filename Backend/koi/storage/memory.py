@@ -618,22 +618,12 @@ class MemoryStorage:
                                   max_days)
             if not groups:
                 return {"days": [], "rows": 0, "summaries": 0}
-            daily = self._tables["evaluation_daily"]
-            written: list[tuple[Optional[int], dict]] = []
-            for (pond, domain, day), rows in sorted(groups.items()):
-                new = summarize_group(domain, rows)
-                index = next((i for i, r in enumerate(daily) if _same_user(r, "pond_id", pond)
-                              and r["domain"] == domain and r["local_date"] == day.isoformat()), None)
-                if index is None:
-                    written.append((None, {"pond_id": pond, "domain": domain, "local_date": day.isoformat(),
-                                           "time_zone": time_zone, **new, "summarized_at": now.isoformat(),
-                                           "updated_at": now.isoformat()}))
-                else:
-                    written.append((index, {**merge_summary(daily[index], new), "updated_at": now.isoformat()}))
+            written = self._plan_daily_summaries(groups, time_zone, now)
             try:
                 written = [(i, _copy(row)) for i, row in written]
             except (TypeError, ValueError) as exc:  # a value jsonb could not hold; nothing written yet
                 raise StorageError("summarize_evaluation_days", exc) from exc
+            daily = self._tables["evaluation_daily"]
             for index, row in written:
                 if index is None:
                     daily.append(row)
@@ -644,6 +634,24 @@ class MemoryStorage:
                 self._tables[table][:] = [r for r in self._tables[table] if int(r["id"]) not in ids]
             return {"days": sorted({day.isoformat() for _, _, day in groups}),
                     "rows": sum(len(rows) for rows in groups.values()), "summaries": len(groups)}
+
+    def _plan_daily_summaries(self, groups: dict, time_zone: str, now: datetime) -> list[tuple[Optional[int], dict]]:
+        """(index in evaluation_daily or None for a new row, the row to
+        write) for each (pond, domain, day) group, merging into an existing
+        day's summary. Nothing is written here."""
+        daily = self._tables["evaluation_daily"]
+        written: list[tuple[Optional[int], dict]] = []
+        for (pond, domain, day), rows in sorted(groups.items()):
+            new = summarize_group(domain, rows)
+            index = next((i for i, r in enumerate(daily) if _same_user(r, "pond_id", pond)
+                          and r["domain"] == domain and r["local_date"] == day.isoformat()), None)
+            if index is None:
+                written.append((None, {"pond_id": pond, "domain": domain, "local_date": day.isoformat(),
+                                       "time_zone": time_zone, **new, "summarized_at": now.isoformat(),
+                                       "updated_at": now.isoformat()}))
+            else:
+                written.append((index, {**merge_summary(daily[index], new), "updated_at": now.isoformat()}))
+        return written
 
     def fetch_evaluation_daily(self, user_id: int, domain: Optional[str] = None) -> list[dict]:
         self._check("fetch_evaluation_daily")
