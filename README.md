@@ -162,12 +162,15 @@ Backend/koi/settings.py             Every environment value, typed (pydantic-set
 Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node (uploads to Supabase); service mode with -DKOI_SERVICE_MODE
 Embedded/camera_node/               ESP32-CAM capture and upload
+Embedded/full_sketch/               Earlier single-file sensor sketch (see issue #142 for its status)
 Embedded/bench_tests/               Single-purpose pH bench sketches
 Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
 Embedded/tests/                     Host-side tests for koi_sensing
 MobileUI/mobile_app/                Flutter client
 supabase/migrations/                Database schema as numbered SQL migrations (see supabase/README.md)
-PythonSimulatorProject/             Historical simulation study and forecast validation
+PythonSimulatorProject/             Desktop pond simulator and the NEA rainfall, climate and forecast scrapers
+NEA_Data_Analysis/                  Forecast-versus-reality study over historical NEA data (notebook, outputs, reports)
+AquariumScraper/                    One-off scraper behind the Fish Tips species catalogue (fish_characteristics*.csv)
 analysis/tds_viability/             Offline analysis of the TDS bench tests T1 to T4 (report Section 4.4.3.1)
 docs/                               Design notes, experiment protocols, screenshots
 archive/pre-refactor/               Superseded code, kept for traceability only
@@ -274,14 +277,19 @@ mkdir -p build
 g++ -std=c++17 -I Embedded/libraries/koi_sensing/src Embedded/tests/test_all.cpp -o build/fw_tests && ./build/fw_tests
 ```
 
-**Simulation study**
+**Simulation study and data analysis**
 
 ```bash
 cd PythonSimulatorProject
-python localisation.py                 # builds the dataset — run first
-python nea_final_validation.py         # forecast claim validation
-python simulator.py                    # interactive four-arm simulator
+python simulator1.py                   # interactive desktop simulator (needs customtkinter, pandas, matplotlib)
 ```
+
+The NEA scrapers that build the rainfall, climate and forecast datasets are in
+`PythonSimulatorProject/NEADataScraper`, `NEAClimateScraper` and
+`NEAForecastScraper` (each folder's README or script header says how to run
+it). The forecast-versus-reality study is
+`NEA_Data_Analysis/forecast_reality_pipeline.ipynb`, with its reports in
+`NEA_Data_Analysis/nea_final_reports/`.
 
 ### API
 
