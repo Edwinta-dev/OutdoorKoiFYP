@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from conftest import make_settings, ticking_clock
-from koi.camera import camera, create_app, hsvEngine
+from koi.camera import camera, create_app, hsv_engine
 from koi.storage import MemoryStorage
 
 USER_ID = "455"
@@ -24,7 +24,7 @@ def _evolve(readings, state, **kwargs):
     """Feeds readings through evalstate, returning every state."""
     states = []
     for green in readings:
-        state = hsvEngine.evalstate(green, 0.0, list(state), **kwargs)
+        state = hsv_engine.evalstate(green, 0.0, list(state), **kwargs)
         states.append(state)
     return states
 
@@ -32,7 +32,7 @@ def _evolve(readings, state, **kwargs):
 # --- the state machine -----------------------------------------------
 
 def test_a_lone_spike_stays_obstruction_and_starts_a_candidate():
-    state = hsvEngine.evalstate(0.60, 0.0, ["base", 0.10, 0, 1])
+    state = hsv_engine.evalstate(0.60, 0.0, ["base", 0.10, 0, 1])
     assert state == ("obstruction", 0.10, 0, 0, 0.60, 1)
 
 
@@ -50,7 +50,7 @@ def test_the_live_stuck_pond_unsticks_after_three_frames():
     states = _evolve([0.1869, 0.1913, 0.1890], ["obstruction", 0.0125])
     assert states[-1][0] == "base"
     assert states[-1][1] == pytest.approx((0.1869 + 0.1913 + 0.1890) / 3, abs=1e-4)
-    assert hsvEngine.rebaselined(["obstruction", 0.0125, 0, 0, *states[1][4:]], states[-1])
+    assert hsv_engine.rebaselined(["obstruction", 0.0125, 0, 0, *states[1][4:]], states[-1])
 
 
 def test_an_inconsistent_frame_restarts_the_candidate():
@@ -79,10 +79,10 @@ def test_confirm_frames_is_configurable(confirm):
 
 
 def test_a_return_near_the_baseline_still_clears_normally():
-    state = hsvEngine.evalstate(0.12, 0.0, ["obstruction", 0.10, 0, 0, 0.30, 2])
+    state = hsv_engine.evalstate(0.12, 0.0, ["obstruction", 0.10, 0, 0, 0.30, 2])
     assert state[0] == "base"
     assert state[1] == pytest.approx(0.2 * 0.12 + 0.8 * 0.10)
-    assert not hsvEngine.rebaselined(["obstruction", 0.10, 0, 0, 0.30, 2], state)
+    assert not hsv_engine.rebaselined(["obstruction", 0.10, 0, 0, 0.30, 2], state)
 
 
 @pytest.mark.parametrize("prev, new, expected", [
@@ -93,7 +93,7 @@ def test_a_return_near_the_baseline_still_clears_normally():
     ('["obstruction", 0.0125]', ("base", 0.19, 0, 0), True),
 ])
 def test_rebaselined(prev, new, expected):
-    assert hsvEngine.rebaselined(prev, new) is expected
+    assert hsv_engine.rebaselined(prev, new) is expected
 
 
 @pytest.mark.parametrize("stored, candidate", [
@@ -106,7 +106,7 @@ def test_rebaselined(prev, new, expected):
     (None, (None, 0)),
 ])
 def test_candidate_read_back_from_old_and_new_rows(stored, candidate):
-    assert hsvEngine._coerce_candidate(stored) == candidate
+    assert hsv_engine._coerce_candidate(stored) == candidate
 
 
 # --- through POST /upload ---------------------------------------------

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from conftest import make_settings
-from koi.camera import create_app, hsvEngine, quality
+from koi.camera import create_app, hsv_engine, quality
 from koi.storage import MemoryStorage
 
 
@@ -40,8 +40,8 @@ def test_mask_means_use_same_pixels_as_green_ratio_but_grid_keeps_whole_frame():
     assert masked_colour["grid"] == whole_colour["grid"]
     ok, data = cv2.imencode(".png", img)
     assert ok
-    assert hsvEngine.analyze_image_bytes(data.tobytes(), polygon=polygon) == 1.0
-    assert hsvEngine.analyze_image_bytes(data.tobytes()) == 0.5
+    assert hsv_engine.analyze_image_bytes(data.tobytes(), polygon=polygon) == 1.0
+    assert hsv_engine.analyze_image_bytes(data.tobytes()) == 0.5
     result = quality.assess(img, polygon)
     assert result["metrics"]["gcc"] == masked
     assert result["metrics"]["s_mean"] == pytest.approx(109, abs=1)
@@ -116,7 +116,7 @@ def test_upload_stores_colour_and_settings_without_changing_reply_or_green_ratio
     assert response.status_code == 200
     assert set(response.get_json()) == {"status", "state", "sleep_sec", "reason", "next_at"}
     row = storage.fetch_image_history(15)[0]
-    assert row["green_ratio"] == hsvEngine.analyze_image_bytes(data)
+    assert row["green_ratio"] == hsv_engine.analyze_image_bytes(data)
     assert row["current_state"] == state
     assert row["quality"]["reasons"] == ["colour_cast"]
     assert row["quality"]["thresholds"] == quality.thresholds()
@@ -131,7 +131,7 @@ def test_upload_stores_colour_and_settings_without_changing_reply_or_green_ratio
     assert row["quality"]["status"] == "pass"
     assert row["quality"]["thresholds"]["gcc_max"] == 0.6
     assert row["quality"]["thresholds"]["s_mean_max"] == 255
-    assert response.get_json()["state"] == list(hsvEngine.evalstate(row["green_ratio"], 0.1, state))
+    assert response.get_json()["state"] == list(hsv_engine.evalstate(row["green_ratio"], 0.1, state))
 
 
 @pytest.mark.parametrize("rows,cols", [(0, 3), (3, 0), (-1, 3)])

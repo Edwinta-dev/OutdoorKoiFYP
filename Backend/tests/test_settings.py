@@ -54,7 +54,7 @@ def test_defaults_match_the_old_hard_coded_values(clean_env):
     assert s.storage == "supabase"
     assert s.poll_interval_minutes == 15          # poller.POLL_INTERVAL_MINUTES
     assert s.worker_threads == 4
-    assert s.timezone == "Asia/Singapore"         # imageSchedule.TZ
+    assert s.timezone == "Asia/Singapore"         # image_schedule.TZ
     assert s.tz == ZoneInfo("Asia/Singapore")
     assert s.pond_image_bucket == "imageAnalysisBucket"
     assert s.cors_origins == ("*",)               # CORS(app) allowed any origin

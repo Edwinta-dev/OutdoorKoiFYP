@@ -467,7 +467,7 @@ class _AlgaeSeverityRatingCardState
                 ),
               ),
             ),
-          // hsvEngine already suspects this frame is blocked - surface
+          // hsv_engine already suspects this frame is blocked - surface
           // that so the user is nudged toward the right answer rather
           // than rating a leaf as severe algae.
           if (frame?.isFlaggedObstructed == true)

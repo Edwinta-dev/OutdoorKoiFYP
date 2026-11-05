@@ -4,7 +4,7 @@ koi.camera.camera
 Routes of the camera service (formerly Backend/Camera/camera.py; the app is
 built by koi.camera.create_app). Receives an ESP32-CAM frame, runs the HSV
 analysis, stores the frame and its reading, and replies with the next wake:
-sleep_sec, reason (an imageSchedule.REASONS code) and next_at (local ISO
+sleep_sec, reason (an image_schedule.REASONS code) and next_at (local ISO
 time). Error replies carry the same three keys.
 
 Configuration comes from koi.settings.Settings:
@@ -35,7 +35,7 @@ Named regions (issue #91, migration 0023): the same camera_config row may
 carry regions (koi/camera/mask.py::validate_regions), saved in the same
 mask_version as the mask, so changing any region resets the baseline
 exactly as a mask change does. When it does, every frame's per-region
-metrics (hsvEngine.region_metrics) are stored in imageTable.regions; the
+metrics (hsv_engine.region_metrics) are stored in imageTable.regions; the
 green ratio, quality gate and state machine still use the mask (or the
 whole frame) as before. A config with only a mask behaves as before and
 stores no regions. If the metrics cannot be computed the frame is stored
@@ -48,7 +48,7 @@ failed frame is stored and shown, but the state machine skips it: its row
 carries the previous accepted frame's state unchanged, the next frame is
 evaluated against the newest frame that did not fail (from stored rows, so
 this holds across restarts), and the reply wakes the camera within 30
-minutes in daylight (imageSchedule.quality_retry_wake).
+minutes in daylight (image_schedule.quality_retry_wake).
 
 Thumbnails: a 320 px wide JPEG is stored beside each frame
 ("{user_id}/{ts}_photo_thumb.jpg") and its object path, not a URL, is
@@ -83,7 +83,7 @@ import cv2
 from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 
-from koi.camera import hsvEngine, imageSchedule, quality
+from koi.camera import hsv_engine, image_schedule, quality
 from koi.errors import STORAGE_RETRY_AFTER_SEC, error_response
 from koi.logs import log_event
 from koi.metrics import Counter, Histogram, Metrics
@@ -129,14 +129,14 @@ def _storage() -> Storage:
     return current_app.extensions["koi_storage"]
 
 
-def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWake | None = None,
+def error_reply(status: int, code: str, message: str, wake: image_schedule.NextWake | None = None,
                 details: dict | None = None, headers: dict | None = None):
     """The koi.errors envelope; every error still carries the next wake
     (the fallback sleep unless a schedule was already computed)."""
     log_event(log, "upload_rejected", level=logging.WARNING, status=status, code=code, message=message)
     _metrics()[0].inc(result=code)
     if wake is None:
-        wake = imageSchedule.fallback_wake(FALLBACK_SLEEP_SEC, datetime.now(_settings().tz))
+        wake = image_schedule.fallback_wake(FALLBACK_SLEEP_SEC, datetime.now(_settings().tz))
     response, status = error_response(status, code, message, details, **wake.reply())
     if headers:
         response.headers.update(headers)
@@ -174,11 +174,11 @@ def get_prev_image_data(user_id: str):
         if quality.is_failed(latest):
             continue
         prev_green_ratio = latest.get("green_ratio", DEFAULT_BASELINE)
-        prev_state = latest.get("current_state", hsvEngine.DEFAULT_STATE)
+        prev_state = latest.get("current_state", hsv_engine.DEFAULT_STATE)
         return prev_green_ratio, prev_state, latest
 
     log_event(log, "camera_baseline_defaulted")
-    return DEFAULT_BASELINE, hsvEngine.DEFAULT_STATE, None
+    return DEFAULT_BASELINE, hsv_engine.DEFAULT_STATE, None
 
 
 def get_camera_config(user_id: str) -> tuple[list | None, dict | None, int | None]:
@@ -199,12 +199,12 @@ def get_mask(user_id: str) -> tuple[list | None, int | None]:
 
 
 def measure_regions(img, regions: dict | None) -> dict | None:
-    """hsvEngine.region_metrics for the pond's regions, or None when it has
+    """hsv_engine.region_metrics for the pond's regions, or None when it has
     none or they cannot be measured (logged); the frame is stored either way."""
     if not regions:
         return None
     try:
-        return hsvEngine.region_metrics(img, regions)
+        return hsv_engine.region_metrics(img, regions)
     except Exception as exc:  # noqa: BLE001 - an observation, never a reason to refuse the frame
         log_event(log, "region_metrics_failed", level=logging.WARNING, error=str(exc))
         return None
@@ -215,10 +215,10 @@ def carried_state(prev_state, prev_green_ratio) -> list:
     [label, baseline, raised, stable] unchanged, so it is shown as the
     camera's current state and moves nothing, including an obstruction
     candidate (issue #80), which a failed frame neither extends nor breaks."""
-    raised, stable = hsvEngine._coerce_counters(prev_state)
-    carried = [hsvEngine._coerce_state(prev_state),
-               round(hsvEngine._coerce_baseline(prev_state, prev_green_ratio), 4), raised, stable]
-    mean, count = hsvEngine._coerce_candidate(prev_state)
+    raised, stable = hsv_engine._coerce_counters(prev_state)
+    carried = [hsv_engine._coerce_state(prev_state),
+               round(hsv_engine._coerce_baseline(prev_state, prev_green_ratio), 4), raised, stable]
+    mean, count = hsv_engine._coerce_candidate(prev_state)
     if mean is not None:
         carried += [mean, count]
     return carried
@@ -257,7 +257,7 @@ def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
                             gcc=gcc, colour=colour, regions=regions)
 
 
-def record_contact(user_id: str, wake: imageSchedule.NextWake) -> None:
+def record_contact(user_id: str, wake: image_schedule.NextWake) -> None:
     """Records this upload as a contact of the pond's camera, expected
     again at the reply's next_at. Never raises."""
     try:
@@ -298,7 +298,7 @@ def upload_image():
     polygon, regions, mask_version = get_camera_config(user_id)
     started = time.perf_counter()
     try:
-        green_ratio = hsvEngine.analyze_image_bytes(file_bytes, polygon=polygon)
+        green_ratio = hsv_engine.analyze_image_bytes(file_bytes, polygon=polygon)
         img = quality.decode(file_bytes)
         gcc, colour = quality.colour_metrics(img, polygon, rows=settings.camera_colour_grid_rows,
                                              cols=settings.camera_colour_grid_cols)
@@ -329,35 +329,35 @@ def upload_image():
         baseline_reset = RESET_MASK_CHANGED
         log_event(log, "camera_baseline_reset", reason=baseline_reset,
                   from_mask_version=prev_row.get("mask_version"), to_mask_version=mask_version)
-        state = (hsvEngine.DEFAULT_STATE, green_ratio, 0, 0)
+        state = (hsv_engine.DEFAULT_STATE, green_ratio, 0, 0)
         rise = 0.0
     else:
-        state = hsvEngine.evalstate(green_ratio, prev_green_ratio, prev_state,
+        state = hsv_engine.evalstate(green_ratio, prev_green_ratio, prev_state,
                                     enter_frames=settings.camera_dynamic_enter_frames,
                                     exit_frames=settings.camera_dynamic_exit_frames,
                                     confirm_frames=settings.camera_obstruction_confirm_frames,
                                     tolerance=settings.camera_obstruction_tolerance)
-        rise = hsvEngine.frame_rise(green_ratio, prev_green_ratio, prev_state)
-        if hsvEngine.rebaselined(prev_state, state):
+        rise = hsv_engine.frame_rise(green_ratio, prev_green_ratio, prev_state)
+        if hsv_engine.rebaselined(prev_state, state):
             # A persistent, consistent level is a new view, not an
             # obstruction: the baseline restarted there (issue #80).
             baseline_reset = RESET_OBSTRUCTION_PERSISTED
             rise = 0.0
             log_event(log, "camera_baseline_reset", reason=baseline_reset,
-                      from_baseline=hsvEngine._coerce_baseline(prev_state, prev_green_ratio),
+                      from_baseline=hsv_engine._coerce_baseline(prev_state, prev_green_ratio),
                       to_baseline=state[1])
     analysis_seconds.observe(analysis_time + time.perf_counter() - started)
-    from_state = hsvEngine._coerce_state(prev_state)
+    from_state = hsv_engine._coerce_state(prev_state)
     transitions.inc(from_state=from_state, to_state=state[0])
 
     # 4. Next wake
     # CHANGED: one call, local pond time, night-time fallback to base schedule
     now = datetime.now(settings.tz)
-    wake = imageSchedule.next_wake(
+    wake = image_schedule.next_wake(
         state[0], now=now, test_mode=settings.test_mode,
         rise=rise, levels=settings.camera_dynamic_rate_levels)
     if not passed:
-        wake = imageSchedule.quality_retry_wake(wake, now=now, test_mode=settings.test_mode)
+        wake = image_schedule.quality_retry_wake(wake, now=now, test_mode=settings.test_mode)
     log_event(log, "frame_analysed", green_ratio=green_ratio, mask_version=mask_version,
               quality=frame_quality["status"],
               gap_usable=(region_values["regions"]["water_gap"].get("usable") if region_values else None),

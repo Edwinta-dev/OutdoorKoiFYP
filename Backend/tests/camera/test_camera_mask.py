@@ -15,7 +15,7 @@ import pytest
 
 from conftest import make_settings, ticking_clock
 from koi.camera import camera as camera_routes
-from koi.camera import create_app, hsvEngine
+from koi.camera import create_app, hsv_engine
 from koi.camera import mask as camera_mask
 from koi.storage import MemoryStorage
 
@@ -105,9 +105,9 @@ def test_mask_polygon_point_limit_is_inclusive():
 
 def test_mask_green_outside_the_mask_is_not_counted():
     data = frame(algae_fraction=0.0)
-    assert hsvEngine.analyze_image_bytes(data) == pytest.approx(0.5, abs=TOL)  # the plants
-    assert hsvEngine.analyze_image_bytes(data, polygon=RIGHT_HALF) == pytest.approx(0.0, abs=TOL)
-    assert hsvEngine.analyze_image_bytes(data, polygon=PLANTS_ONLY) == pytest.approx(1.0, abs=TOL)
+    assert hsv_engine.analyze_image_bytes(data) == pytest.approx(0.5, abs=TOL)  # the plants
+    assert hsv_engine.analyze_image_bytes(data, polygon=RIGHT_HALF) == pytest.approx(0.0, abs=TOL)
+    assert hsv_engine.analyze_image_bytes(data, polygon=PLANTS_ONLY) == pytest.approx(1.0, abs=TOL)
 
 
 @pytest.mark.parametrize("fraction", [0.1, 0.2, 0.5])
@@ -115,7 +115,7 @@ def test_mask_ratio_is_over_the_mask_area(fraction):
     """Algae over the top fraction of the water half: the masked ratio is
     that fraction, whatever the plants outside do."""
     for plants in (True, False):
-        ratio = hsvEngine.analyze_image_bytes(frame(fraction, plants=plants), polygon=RIGHT_HALF)
+        ratio = hsv_engine.analyze_image_bytes(frame(fraction, plants=plants), polygon=RIGHT_HALF)
         assert ratio == pytest.approx(fraction, abs=TOL)
 
 
@@ -211,7 +211,7 @@ def test_mask_camera_save_during_an_upload_keeps_polygon_and_version_together(mo
     uses version 2 and resets the baseline."""
     storage = _storage()
     storage.save_camera_mask(15, RIGHT_HALF)
-    analyse = hsvEngine.analyze_image_bytes
+    analyse = hsv_engine.analyze_image_bytes
     used = []
 
     def analyse_while_saving(data, roi_bounds=None, polygon=None):
@@ -220,7 +220,7 @@ def test_mask_camera_save_during_an_upload_keeps_polygon_and_version_together(mo
             storage.save_camera_mask(15, PLANTS_ONLY)
         return analyse(data, roi_bounds, polygon)
 
-    monkeypatch.setattr(hsvEngine, "analyze_image_bytes", analyse_while_saving)
+    monkeypatch.setattr(hsv_engine, "analyze_image_bytes", analyse_while_saving)
     client = _client(storage)
     post(client, frame(0.0))
     first = latest(storage)

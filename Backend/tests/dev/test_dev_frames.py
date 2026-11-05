@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from koi.camera.hsvEngine import analyze_image_bytes
+from koi.camera.hsv_engine import analyze_image_bytes
 from koi.dev import frames
 
 

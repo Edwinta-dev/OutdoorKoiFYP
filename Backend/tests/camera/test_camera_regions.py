@@ -15,7 +15,7 @@ import pytest
 
 from conftest import make_settings, ticking_clock
 from koi.camera import camera as camera_routes
-from koi.camera import create_app, hsvEngine
+from koi.camera import create_app, hsv_engine
 from koi.camera import mask as camera_mask
 from koi.storage import MemoryStorage
 
@@ -85,8 +85,8 @@ def test_regions_validation_rejects_bad_configs(value, message):
 # --- per-region metrics -----------------------------------------------------
 
 def test_regions_metrics_report_each_region_colour_and_ignore_the_rest():
-    result = hsvEngine.region_metrics(scene(), REGIONS)
-    assert result["version"] == hsvEngine.REGIONS_VERSION and result["reference"] is None
+    result = hsv_engine.region_metrics(scene(), REGIONS)
+    assert result["version"] == hsv_engine.REGIONS_VERSION and result["reference"] is None
     regions = result["regions"]
     assert set(regions) == {"water_gap", "rim", "plants"}
     assert regions["water_gap"]["gcc"] == pytest.approx(gcc(GREEN_WATER))
@@ -105,7 +105,7 @@ def test_regions_metrics_report_each_region_colour_and_ignore_the_rest():
 def test_regions_metrics_skip_clipped_pixels():
     img = scene()
     img[0:32, 0:96] = (255, 255, 255)  # glare over the top of the gap
-    gap = hsvEngine.region_metrics(img, REGIONS)["regions"]["water_gap"]
+    gap = hsv_engine.region_metrics(img, REGIONS)["regions"]["water_gap"]
     assert gap["usable_pixels"] == 65 * (65 - 32)
     assert gap["gcc"] == pytest.approx(gcc(GREEN_WATER))
 
@@ -113,10 +113,10 @@ def test_regions_metrics_skip_clipped_pixels():
 def test_regions_reference_patch_brings_a_colour_cast_grey_back_to_one_third():
     cast = (0.6, 1.0, 1.3)  # warm cast: blue down, red up
     img = scene(cast=cast)
-    uncorrected = hsvEngine.region_metrics(img, REGIONS)["regions"]
+    uncorrected = hsv_engine.region_metrics(img, REGIONS)["regions"]
     assert abs(uncorrected["rim"]["gcc"] - 1 / 3) > 0.01
 
-    result = hsvEngine.region_metrics(img, {**REGIONS, "reference": REFERENCE})
+    result = hsv_engine.region_metrics(img, {**REGIONS, "reference": REFERENCE})
     ref = result["reference"]
     assert ref["applied"] is True and ref["pixels"] == 39 * 33
     assert (ref["r"], ref["g"], ref["b"]) == pytest.approx((234 / 255, 180 / 255, 108 / 255))
@@ -129,23 +129,23 @@ def test_regions_reference_patch_brings_a_colour_cast_grey_back_to_one_third():
 def test_regions_reference_without_usable_pixels_is_not_applied():
     img = scene()
     img[0:48, 112:176] = (255, 255, 255)  # a blown-out patch
-    result = hsvEngine.region_metrics(img, {**REGIONS, "reference": REFERENCE})
+    result = hsv_engine.region_metrics(img, {**REGIONS, "reference": REFERENCE})
     assert result["reference"] == {"applied": False, "pixels": 0, "r": None, "g": None, "b": None}
     assert result["regions"]["rim"]["gcc"] == pytest.approx(1 / 3)
     assert result["regions"]["reference"]["gcc"] is None
 
 
 def test_regions_gap_drifted_over_by_plants_is_unusable():
-    gap = hsvEngine.region_metrics(scene(gap_leaf_cols=40), REGIONS)["regions"]["water_gap"]
+    gap = hsv_engine.region_metrics(scene(gap_leaf_cols=40), REGIONS)["regions"]["water_gap"]
     assert gap["plant_fraction"] == pytest.approx(40 / 65, abs=1e-4)
     assert gap["open_fraction"] == pytest.approx(25 / 65, abs=1e-4)
-    assert gap["usable"] is False and gap["unusable_reason"] == hsvEngine.GAP_PLANTS_OVER
+    assert gap["usable"] is False and gap["unusable_reason"] == hsv_engine.GAP_PLANTS_OVER
 
 
 def test_regions_gap_edge_leaves_are_left_out_of_the_water_colour():
     """A few leaves at the edge of the gap: still usable, and the GCC is
     the water's, not shifted towards the leaf colour."""
-    gap = hsvEngine.region_metrics(scene(gap_leaf_cols=8), REGIONS)["regions"]["water_gap"]
+    gap = hsv_engine.region_metrics(scene(gap_leaf_cols=8), REGIONS)["regions"]["water_gap"]
     assert gap["plant_fraction"] == pytest.approx(8 / 65, abs=1e-4)
     assert gap["usable"] is True
     assert gap["usable_pixels"] == 65 * 57
@@ -155,7 +155,7 @@ def test_regions_gap_edge_leaves_are_left_out_of_the_water_colour():
 def test_regions_green_water_is_not_counted_as_plant():
     img = scene()
     img[0:96, 0:96] = (75, 125, 85)  # greener water, saturation below PLANT_LOWER
-    gap = hsvEngine.region_metrics(img, REGIONS)["regions"]["water_gap"]
+    gap = hsv_engine.region_metrics(img, REGIONS)["regions"]["water_gap"]
     assert gap["plant_fraction"] == 0 and gap["usable"] is True
 
 
@@ -199,7 +199,7 @@ def test_regions_legacy_mask_only_config_is_unchanged():
     row = latest(storage)
     assert "regions" not in row
     assert row["mask_version"] == 1 and row.get("baseline_reset") is None
-    assert row["green_ratio"] == hsvEngine.analyze_image_bytes(jpeg(scene()), polygon=GAP)
+    assert row["green_ratio"] == hsv_engine.analyze_image_bytes(jpeg(scene()), polygon=GAP)
     assert set(body) == {"status", "state", "sleep_sec", "reason", "next_at"}
 
 
@@ -212,7 +212,7 @@ def test_regions_upload_stores_per_region_metrics():
     assert set(body) == {"status", "state", "sleep_sec", "reason", "next_at"}
     assert row["mask_version"] == 1
     # No mask: the green ratio is over the whole frame, as before.
-    assert row["green_ratio"] == hsvEngine.analyze_image_bytes(data)
+    assert row["green_ratio"] == hsv_engine.analyze_image_bytes(data)
     stored = row["regions"]
     assert stored["version"] == 1 and stored["reference"]["applied"] is True
     assert set(stored["regions"]) == {"water_gap", "rim", "plants", "reference"}
@@ -241,7 +241,7 @@ def test_regions_metrics_failure_keeps_the_frame(monkeypatch):
     def broken(img, regions):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(hsvEngine, "region_metrics", broken)
+    monkeypatch.setattr(hsv_engine, "region_metrics", broken)
     storage = _storage()
     storage.save_camera_mask(15, None, REGIONS)
     post(_client(storage), jpeg(scene()))

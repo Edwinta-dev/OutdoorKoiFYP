@@ -29,7 +29,7 @@ class PondCameraFrame {
   final double? gcc;
   final DateTime? capturedAt;
 
-  /// hsvEngine's own label for this frame - "base", "dynamic" or
+  /// hsv_engine's own label for this frame - "base", "dynamic" or
   /// "obstruction". Worth surfacing: if the pipeline already suspects the
   /// view is blocked, say so before the user rates a leaf as severe algae.
   final String? state;

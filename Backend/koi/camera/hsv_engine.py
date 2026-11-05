@@ -1,5 +1,5 @@
 """
-hsvEngine.py  (patched)
+hsv_engine.py  (patched)
 
 HSV green-coverage analysis + adaptive-cycling state machine for the
 ESP32-CAM pond camera.

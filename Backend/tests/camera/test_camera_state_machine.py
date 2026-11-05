@@ -1,4 +1,4 @@
-"""Camera state machine (hsvEngine.evalstate) driven through POST /upload
+"""Camera state machine (hsv_engine.evalstate) driven through POST /upload
 with generated frames and MemoryStorage (issue #37).
 
 Covers every transition in the report's camera state table and the four
@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 from conftest import make_settings, ticking_clock
-from koi.camera import create_app, hsvEngine
+from koi.camera import create_app, hsv_engine
 from koi.storage import MemoryStorage
 
 SIZE = 320
@@ -98,12 +98,12 @@ def _approx_pair(state, label, baseline, counters=None):
 
 @pytest.mark.parametrize("fraction", [0.0, 0.1, 0.2, 0.3, 0.5])
 def test_water_frame_green_ratio_matches_the_algae_band(fraction):
-    assert hsvEngine.analyze_image_bytes(water_frame(fraction)) == pytest.approx(fraction, abs=TOL)
+    assert hsv_engine.analyze_image_bytes(water_frame(fraction)) == pytest.approx(fraction, abs=TOL)
 
 
 def test_glare_blob_hides_algae_and_leaf_covers_the_view():
-    assert hsvEngine.analyze_image_bytes(glare_frame(0.2)) < 0.2 - 0.03
-    assert hsvEngine.analyze_image_bytes(leaf_frame()) > 0.85
+    assert hsv_engine.analyze_image_bytes(glare_frame(0.2)) < 0.2 - 0.03
+    assert hsv_engine.analyze_image_bytes(leaf_frame()) > 0.85
 
 
 # --- transitions, one stored previous frame each ---------------------
@@ -157,7 +157,7 @@ def test_enter_and_exit_frame_counts_are_configurable(enter, exit_, labels):
     state = ("base", 0.10)
     seen = []
     for offset in (0.10, 0.10, 0.10, 0.0, 0.0, 0.0):
-        state = hsvEngine.evalstate(state[1] + offset, 0.0, list(state), enter_frames=enter, exit_frames=exit_)
+        state = hsv_engine.evalstate(state[1] + offset, 0.0, list(state), enter_frames=enter, exit_frames=exit_)
         seen.append(state[0])
     assert seen == labels
 
@@ -180,7 +180,7 @@ def test_settings_reach_the_state_machine():
     (None, (0, 0)),
 ])
 def test_counters_read_back_from_old_and_new_rows(stored, counters):
-    assert hsvEngine._coerce_counters(stored) == counters
+    assert hsv_engine._coerce_counters(stored) == counters
 
 
 def test_old_dynamic_row_without_counters_still_loads():
@@ -231,14 +231,14 @@ def test_obstruction_cleared_within_the_clear_threshold(fraction):
                                                (-0.04, "base"), (0.0, "base")])
 def test_clear_threshold_edge(current, expected):
     """Either side of baseline +/- 0.15, with no JPEG error in the way."""
-    assert hsvEngine.evalstate(current, 0.0, ["obstruction", 0.10])[0] == expected
+    assert hsv_engine.evalstate(current, 0.0, ["obstruction", 0.10])[0] == expected
 
 
 def test_glare_does_not_trip_obstruction_or_dynamic():
     """Glare lowers the green ratio, so it can only pull the baseline
     down slightly; it never reads as a leaf."""
     frame = glare_frame(0.1)
-    measured = hsvEngine.analyze_image_bytes(frame)
+    measured = hsv_engine.analyze_image_bytes(frame)
     state = post(_client(_storage((0.10, ["base", 0.10]))), frame)
     assert state[0] == "base"
     assert state[1] == pytest.approx(0.2 * measured + 0.8 * 0.10, abs=1e-4)
@@ -298,7 +298,7 @@ def test_bloom_then_settle_walks_base_dynamic_base():
     state = ("base", 0.10)
     labels = []
     for _ in range(8):
-        state = hsvEngine.evalstate(0.2, 0.0, list(state))
+        state = hsv_engine.evalstate(0.2, 0.0, list(state))
         labels.append(state[0])
     assert labels == ["base"] + ["dynamic"] * 5 + ["base", "base"]
     assert state[1] < 0.2

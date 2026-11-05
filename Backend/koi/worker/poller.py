@@ -109,7 +109,7 @@ user actions:
     occur. Recomputing from a timestamp at request time throws that away.
   * Algae growth tracks light, temperature and nitrate continuously,
     while the camera that measures it sleeps for hours between frames
-    (imageSchedule's base schedule is six fixed slots a day). Without a
+    (image_schedule's base schedule is six fixed slots a day). Without a
     model running in between, the dashboard would show a stale number
     most of the time and could not answer "when will this cross the
     line" at all.

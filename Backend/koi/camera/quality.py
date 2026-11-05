@@ -106,7 +106,7 @@ def decode(image_bytes: bytes) -> np.ndarray:
 
 
 def _region(shape: tuple, polygon: list | None) -> np.ndarray | None:
-    """Boolean mask of the pixels inside polygon (as hsvEngine fills it),
+    """Boolean mask of the pixels inside polygon (as hsv_engine fills it),
     or None for the whole frame."""
     if polygon is None:
         return None

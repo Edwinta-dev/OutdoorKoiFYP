@@ -8,7 +8,7 @@ import pytest
 
 from conftest import make_settings
 from koi.camera import camera as camera_routes
-from koi.camera import create_app, imageSchedule
+from koi.camera import create_app, image_schedule
 from koi.storage import MemoryStorage
 
 
@@ -69,7 +69,7 @@ def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(st
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["status"] == "success"
-    assert body["sleep_sec"] == imageSchedule.TEST_SLEEP_SEC[body["state"][0]]
+    assert body["sleep_sec"] == image_schedule.TEST_SLEEP_SEC[body["state"][0]]
     [frame_key, thumb_key] = storage.uploads
     assert frame_key[0] == thumb_key[0] == "frames" and frame_key[1].split("/")[0] == "15"
     assert thumb_key[1] == frame_key[1].replace("_photo.jpg", "_photo_thumb.jpg")
@@ -96,12 +96,12 @@ def test_upload_survives_a_failed_previous_frame_read(storage):
 
 
 def _fixed_wake(seconds, reason="slot"):
-    at = datetime(2026, 8, 1, 12, 0, tzinfo=imageSchedule.TZ)
-    return imageSchedule.NextWake(seconds, reason, at + timedelta(seconds=seconds))
+    at = datetime(2026, 8, 1, 12, 0, tzinfo=image_schedule.TZ)
+    return image_schedule.NextWake(seconds, reason, at + timedelta(seconds=seconds))
 
 
 def test_failed_upload_still_returns_the_computed_sleep(storage, monkeypatch):
-    monkeypatch.setattr(imageSchedule, "next_wake", lambda state, **kwargs: _fixed_wake(900, "dynamic_rising"))
+    monkeypatch.setattr(image_schedule, "next_wake", lambda state, **kwargs: _fixed_wake(900, "dynamic_rising"))
     storage.failing.add("upload_image")
     resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
     assert resp.status_code == 503
@@ -125,13 +125,13 @@ def test_upload_uses_the_configured_time_zone(storage, monkeypatch):
         seen.append((now.tzinfo, test_mode))
         return _fixed_wake(600)
 
-    monkeypatch.setattr(imageSchedule, "next_wake", fake_wake)
+    monkeypatch.setattr(image_schedule, "next_wake", fake_wake)
     resp = _client(storage, timezone="UTC").post("/upload", data=_jpeg((0, 0, 0)))
     assert resp.get_json()["sleep_sec"] == 600
     assert [(str(tz), tm) for tz, tm in seen] == [("UTC", False)]
 
 
 def test_sleep_for_state_test_mode_is_an_argument():
-    noon = datetime(2026, 8, 1, 12, 0, tzinfo=imageSchedule.TZ)
-    assert imageSchedule.sleep_for_state("obstruction", now=noon, test_mode=True) == 80
-    assert imageSchedule.sleep_for_state("obstruction", now=noon) == imageSchedule.OBSTRUCTION_SLEEP_SEC
+    noon = datetime(2026, 8, 1, 12, 0, tzinfo=image_schedule.TZ)
+    assert image_schedule.sleep_for_state("obstruction", now=noon, test_mode=True) == 80
+    assert image_schedule.sleep_for_state("obstruction", now=noon) == image_schedule.OBSTRUCTION_SLEEP_SEC

@@ -22,7 +22,7 @@ TRIGGERS
                      device_health.SILENT_AFTER_INTERVALS (3) expected
                      intervals after it was due (device_health.device_status).
   camera_obstructed  issue #41. The camera enters the obstruction state
-                     (koi/camera/hsvEngine.py::evalstate): a warning,
+                     (koi/camera/hsv_engine.py::evalstate): a warning,
                      "Camera view blocked since 14:10", once per episode
                      while its newest frame is within OBSTRUCTION_MAX_AGE.
                      It clears after more than OBSTRUCTION_CLEAR_AFTER
@@ -209,7 +209,7 @@ def _frame_state(row: dict) -> Optional[str]:
     """The state machine's label stored in an imageTable row's
     current_state: a [label, baseline, ...] list (or its JSON text) as
     camera.py writes it, or a bare label from older rows. The same reading
-    as koi/camera/hsvEngine.py::_coerce_state, without importing OpenCV
+    as koi/camera/hsv_engine.py::_coerce_state, without importing OpenCV
     into the worker."""
     value = row.get("current_state")
     if isinstance(value, str) and value.strip().startswith("["):

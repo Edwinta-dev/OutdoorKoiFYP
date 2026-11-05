@@ -8,7 +8,7 @@
 3. Obstruction state:
 - Fixed 2 hour schedule for taking pictures
 
-imageSchedule computes the next wake (sleep_sec, a reason code and next_at, the local
+image_schedule computes the next wake (sleep_sec, a reason code and next_at, the local
 wake time), camera.py encodes it in JSON and returns it to the ESP32.
 
 Reason codes (issue #38), sent as `reason` in every reply:
@@ -136,7 +136,7 @@ def fallback_wake(sleep_sec: int, now: datetime | None = None) -> NextWake:
 def next_wake(state_label: str, now: datetime | None = None, test_mode: bool = False,
               rise: float = 0.0, levels: tuple = DYNAMIC_RATE_LEVELS) -> NextWake:
     """Single entry point used by camera.py. rise is the frame's green-ratio
-    rise over the smoothed baseline (hsvEngine.frame_rise)."""
+    rise over the smoothed baseline (hsv_engine.frame_rise)."""
     now = now or datetime.now(TZ)
     if test_mode:
         return _wake(now, TEST_SLEEP_SEC.get(state_label, 100), "test_mode")

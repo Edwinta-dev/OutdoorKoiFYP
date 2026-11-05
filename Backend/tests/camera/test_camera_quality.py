@@ -20,7 +20,7 @@ import pytest
 
 from conftest import make_settings, ticking_clock
 from koi.camera import camera as camera_routes
-from koi.camera import create_app, hsvEngine, imageSchedule, quality
+from koi.camera import create_app, hsv_engine, image_schedule, quality
 from koi.models import algae_engine as ae
 from koi.storage import MemoryStorage, StorageError
 
@@ -228,9 +228,9 @@ def test_quality_failed_frame_leaves_baseline_and_counters_alone():
     assert latest(storage)["current_state"] == ["base", 0.1, 1, 0]
 
     # The next good frame is judged against the stored good state, not the dark one.
-    green = hsvEngine.analyze_image_bytes(good_frame())
+    green = hsv_engine.analyze_image_bytes(good_frame())
     body = post(_client(storage), good_frame())
-    assert body["state"] == list(hsvEngine.evalstate(green, 0.1, ["base", 0.1, 1, 0]))
+    assert body["state"] == list(hsv_engine.evalstate(green, 0.1, ["base", 0.1, 1, 0]))
 
 
 @pytest.mark.parametrize("make", [dark_frame, bright_frame, blurred_frame],
@@ -251,16 +251,16 @@ def test_quality_rejection_holds_across_a_service_restart():
     first = post(_client(storage), good_frame(48))["state"]
     post(_client(storage), bright_frame())
     post(_client(storage), blurred_frame())
-    green = hsvEngine.analyze_image_bytes(good_frame(96))
+    green = hsv_engine.analyze_image_bytes(good_frame(96))
     third = post(_client(storage), good_frame(96))["state"]
-    assert third == list(hsvEngine.evalstate(green, first[1], first))
+    assert third == list(hsv_engine.evalstate(green, first[1], first))
     assert [quality.status_of(r) for r in storage.rows("imageTable")] == ["pass", "fail", "fail", "pass"]
 
 
 def test_quality_first_frame_failing_stores_the_default_state():
     storage = _storage()
     body = post(_client(storage), dark_frame())
-    assert body["state"] == [hsvEngine.DEFAULT_STATE, camera_routes.DEFAULT_BASELINE, 0, 0]
+    assert body["state"] == [hsv_engine.DEFAULT_STATE, camera_routes.DEFAULT_BASELINE, 0, 0]
 
 
 def test_quality_legacy_rows_without_a_result_still_seed_the_state_machine():
@@ -269,8 +269,8 @@ def test_quality_legacy_rows_without_a_result_still_seed_the_state_machine():
     storage = _storage({"green_ratio": 0.2, "current_state": ["base", 0.2]})
     [legacy] = storage.rows("imageTable")
     assert quality.status_of(legacy) == "unknown"
-    green = hsvEngine.analyze_image_bytes(good_frame())
-    assert post(_client(storage), good_frame())["state"] == list(hsvEngine.evalstate(green, 0.2, ["base", 0.2]))
+    green = hsv_engine.analyze_image_bytes(good_frame())
+    assert post(_client(storage), good_frame())["state"] == list(hsv_engine.evalstate(green, 0.2, ["base", 0.2]))
 
 
 def test_quality_failed_frame_does_not_reset_the_baseline_on_a_mask_change():
@@ -291,7 +291,7 @@ def test_quality_failed_frame_retries_in_30_minutes_in_daylight(monkeypatch):
     assert (good["reason"], good["sleep_sec"]) == ("slot", 2 * 3600)  # 12:00 -> 14:00 slot
     failed = post(_client(storage, test_mode=False), dark_frame())
     assert failed["reason"] == "quality_retry"
-    assert failed["sleep_sec"] == imageSchedule.QUALITY_RETRY_SEC == 30 * 60
+    assert failed["sleep_sec"] == image_schedule.QUALITY_RETRY_SEC == 30 * 60
     assert failed["next_at"] == "2026-08-03T12:30:00+08:00"
 
 
@@ -303,14 +303,14 @@ def test_quality_failed_frame_at_night_keeps_the_night_schedule(monkeypatch):
 
 
 def test_quality_retry_never_lengthens_a_shorter_wake():
-    now = datetime(2026, 8, 3, 12, 0, tzinfo=imageSchedule.TZ)
-    short = imageSchedule.next_wake("dynamic", now=now, rise=0.5)
+    now = datetime(2026, 8, 3, 12, 0, tzinfo=image_schedule.TZ)
+    short = image_schedule.next_wake("dynamic", now=now, rise=0.5)
     assert short.sleep_sec == 30 * 60
-    assert imageSchedule.quality_retry_wake(short, now=now) is short
-    obstruction = imageSchedule.next_wake("obstruction", now=now)
-    assert imageSchedule.quality_retry_wake(obstruction, now=now).reason == "quality_retry"
-    test_wake = imageSchedule.next_wake("base", now=now, test_mode=True)
-    assert imageSchedule.quality_retry_wake(test_wake, now=now, test_mode=True) is test_wake
+    assert image_schedule.quality_retry_wake(short, now=now) is short
+    obstruction = image_schedule.next_wake("obstruction", now=now)
+    assert image_schedule.quality_retry_wake(obstruction, now=now).reason == "quality_retry"
+    test_wake = image_schedule.next_wake("base", now=now, test_mode=True)
+    assert image_schedule.quality_retry_wake(test_wake, now=now, test_mode=True) is test_wake
 
 
 def test_quality_reply_keeps_the_upload_contract_keys():

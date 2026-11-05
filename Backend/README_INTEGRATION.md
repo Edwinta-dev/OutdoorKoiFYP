@@ -22,7 +22,7 @@ flat-script version it replaced is kept in `archive/pre-refactor/`.
 | `koi/api/` | `DigitalTwin/app.py` | `create_app(settings)` and the routes, all under `/v1` (route table in `spec.py`, response models in `responses.py`, the dashboard in `dashboard.py`); `python -m koi.api.openapi` regenerates `docs/api/openapi.yaml` |
 | `koi/worker/poller.py` | `DigitalTwin/poller.py` | Environmental poll, lease-gated `Worker`, pond thread pool |
 | `koi/worker/retention.py` | | Daily evaluation retention job (summaries in `evaluation_daily`) |
-| `koi/camera/` | `Camera/camera.py`, `hsvEngine.py`, `imageSchedule.py` | Camera service, `create_app(settings)` |
+| `koi/camera/` | `Camera/camera.py`, `hsv_engine.py`, `image_schedule.py` | Camera service, `create_app(settings)` |
 
 `koi/models/` does no I/O. The API, the worker and the camera service each
 hold one `Storage` (chosen by `KOI_STORAGE`) and do all database and file

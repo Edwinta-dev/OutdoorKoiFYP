@@ -178,7 +178,7 @@ values) also reduces confidence.
 
 ## Camera obstruction off-ramp (issue #80)
 
-Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/camera.py`.
+Files: `Backend/koi/camera/hsv_engine.py`, `Backend/koi/camera/camera.py`.
 New constants; no existing constant changed.
 
 | Constant | Value | Why |
@@ -193,7 +193,7 @@ candidate load with none, and the app only reads element 0.
 
 ## Camera frame quality gate (issue #40)
 
-Files: `Backend/koi/camera/quality.py`, `Backend/koi/camera/imageSchedule.py`.
+Files: `Backend/koi/camera/quality.py`, `Backend/koi/camera/image_schedule.py`.
 New constants; no existing constant changed. The thresholds were chosen
 against synthetic frames (noise-textured water and algae, darkened,
 brightened, glared and Gaussian-blurred copies), not yet against real
@@ -405,7 +405,7 @@ session whose time zone is not UTC no longer shifts the hourly buckets.
 
 ## Camera state machine and capture schedule (issue #38)
 
-Files: `Backend/koi/camera/hsvEngine.py`, `Backend/koi/camera/imageSchedule.py`,
+Files: `Backend/koi/camera/hsv_engine.py`, `Backend/koi/camera/image_schedule.py`,
 `Embedded/camera_node/camera_node.ino`.
 
 | Constant | Old | New | Why |

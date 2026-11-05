@@ -4,7 +4,7 @@
 A mask is a list of [x, y] points, x and y in 0..1 as fractions of the
 frame's width and height, origin at the top-left corner. The camera
 service computes the green ratio over the pixels inside it only
-(hsvEngine.analyze_image_bytes), so planting, edges and decking in view
+(hsv_engine.analyze_image_bytes), so planting, edges and decking in view
 do not change the reading.
 
 The limits below are the same ones the database checks

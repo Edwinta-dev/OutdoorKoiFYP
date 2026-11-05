@@ -257,7 +257,7 @@ def parse_image_rows(rows: list) -> list:
 
     Handles the `current_state` column's actual on-disk shape, which is a
     two-element JSON array like ["base", 0.1235] - element 0 is the state
-    machine's label and element 1 is hsvEngine's smoothed (EMA) baseline.
+    machine's label and element 1 is hsv_engine's smoothed (EMA) baseline.
     Supabase may hand this back already decoded as a Python list, or as a
     JSON string depending on the column type, so both are handled.
 
@@ -335,7 +335,7 @@ def fit_specific_growth_rate(samples: list) -> Optional[float]:
     a linear fit would treat the second as twenty times more significant.
 
     Samples whose state is "obstruction" are excluded: those frames are
-    flagged by hsvEngine as physically blocked (a leaf on the lens, a
+    flagged by hsv_engine as physically blocked (a leaf on the lens, a
     hand in shot) and their green ratio is not a measurement of the pond.
 
     Returns None when there is too little usable history, or when the
@@ -833,7 +833,7 @@ class AlgaeGrowthEngine:
       * Pure model  -> drifts, because growth rate is only approximate
                        and nothing ever pulls it back to reality.
       * Pure camera -> useless between frames. The camera sleeps for
-                       hours at a time (imageSchedule's base schedule is
+                       hours at a time (image_schedule's base schedule is
                        six fixed slots a day, and deep-sleep intervals
                        stretch further), so a dashboard reading straight
                        off the last frame is stale most of the time, and
@@ -855,7 +855,7 @@ class AlgaeGrowthEngine:
     # 0.0 = ignore the camera entirely, 1.0 = snap to it and discard the
     # model. 0.7 leans on the measurement (it IS ground truth) while still
     # damping single-frame noise from glare, a passing cloud, or a fish
-    # breaking the surface - the same noise hsvEngine's own EMA exists to
+    # breaking the surface - the same noise hsv_engine's own EMA exists to
     # suppress.
     CAMERA_TRUST = 0.7
 

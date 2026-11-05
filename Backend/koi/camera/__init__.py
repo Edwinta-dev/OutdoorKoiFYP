@@ -35,11 +35,11 @@ def create_app(settings: Optional[Settings] = None, storage: Optional[Storage] =
 
     from datetime import datetime
 
-    from koi.camera import imageSchedule
+    from koi.camera import image_schedule
     from koi.camera.camera import FALLBACK_SLEEP_SEC, bp, camera_metrics
 
     bp.register(app, {})  # what Flask.register_blueprint does
-    register_error_handlers(app, extra=lambda: imageSchedule.fallback_wake(
+    register_error_handlers(app, extra=lambda: image_schedule.fallback_wake(
         FALLBACK_SLEEP_SEC, datetime.now(settings.tz)).reply())
     camera_metrics(instrument_app(app, "camera", pond_id_from=lambda req: req.headers.get("X-User-ID")))
     return app

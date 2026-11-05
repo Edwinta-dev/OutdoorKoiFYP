@@ -1,4 +1,4 @@
-"""Camera sleep schedule (imageSchedule) and the sleep_sec, reason and
+"""Camera sleep schedule (image_schedule) and the sleep_sec, reason and
 next_at on every camera reply (issues #37 and #38).
 
 Base slots are 08:00 to 18:00 every two hours, Singapore time. A wake up
@@ -15,10 +15,10 @@ from test_camera_state_machine import leaf_frame, water_frame
 
 from conftest import make_settings
 from koi.camera import camera as camera_routes
-from koi.camera import create_app, hsvEngine, imageSchedule
+from koi.camera import create_app, hsv_engine, image_schedule
 from koi.storage import MemoryStorage
 
-SGT = imageSchedule.TZ
+SGT = image_schedule.TZ
 HOUR = 3600
 
 
@@ -38,7 +38,7 @@ def sgt(hour, minute=0):
     (sgt(23, 59), 8 * HOUR + 60),        # -> 08:00 tomorrow
 ])
 def test_base_schedule_wakes_at_the_next_singapore_slot(now, expected):
-    assert imageSchedule.get_base_schedule_sleep_seconds(now) == expected
+    assert image_schedule.get_base_schedule_sleep_seconds(now) == expected
 
 
 @pytest.mark.parametrize("now, expected", [
@@ -50,16 +50,16 @@ def test_base_schedule_wakes_at_the_next_singapore_slot(now, expected):
     (sgt(17, 55), 14 * HOUR + 5 * 60),   # counts as 18:00, next is 08:00 tomorrow
 ])
 def test_early_wake_within_grace_counts_as_the_slot(now, expected):
-    assert imageSchedule.get_base_schedule_sleep_seconds(now) == expected
+    assert image_schedule.get_base_schedule_sleep_seconds(now) == expected
 
 
 def test_base_schedule_always_lands_on_a_slot_after_the_grace():
     start = sgt(0, 0)
     for minute in range(24 * 60):
         now = start + timedelta(minutes=minute)
-        sleep = imageSchedule.get_base_schedule_sleep_seconds(now)
-        assert imageSchedule.EARLY_WAKE_GRACE.total_seconds() < sleep <= imageSchedule.MAX_SLEEP_SEC
-        assert (now + timedelta(seconds=sleep)).strftime("%H:%M") in imageSchedule.BASE_FIXED_TIMINGS
+        sleep = image_schedule.get_base_schedule_sleep_seconds(now)
+        assert image_schedule.EARLY_WAKE_GRACE.total_seconds() < sleep <= image_schedule.MAX_SLEEP_SEC
+        assert (now + timedelta(seconds=sleep)).strftime("%H:%M") in image_schedule.BASE_FIXED_TIMINGS
 
 
 class _FrozenDatetime(datetime):
@@ -89,11 +89,11 @@ def test_upload_on_a_utc_server_schedules_in_singapore_time(monkeypatch):
 
 @pytest.mark.parametrize("now", [sgt(7, 50), sgt(12, 0), sgt(18, 10)], ids=["07:50", "12:00", "18:10"])
 def test_daylight_states_use_their_own_interval(now):
-    assert imageSchedule.sleep_for_state("obstruction", now=now) == imageSchedule.OBSTRUCTION_SLEEP_SEC
-    assert imageSchedule.sleep_for_state("dynamic", now=now) == 2 * HOUR
-    base = imageSchedule.get_base_schedule_sleep_seconds(now)
-    assert imageSchedule.sleep_for_state("base", now=now) == base
-    assert imageSchedule.sleep_for_state("unknown", now=now) == base
+    assert image_schedule.sleep_for_state("obstruction", now=now) == image_schedule.OBSTRUCTION_SLEEP_SEC
+    assert image_schedule.sleep_for_state("dynamic", now=now) == 2 * HOUR
+    base = image_schedule.get_base_schedule_sleep_seconds(now)
+    assert image_schedule.sleep_for_state("base", now=now) == base
+    assert image_schedule.sleep_for_state("unknown", now=now) == base
 
 
 @pytest.mark.parametrize("now, expected", [
@@ -104,13 +104,13 @@ def test_daylight_states_use_their_own_interval(now):
 ], ids=["07:49", "18:11", "22:00", "03:00"])
 @pytest.mark.parametrize("state", ["base", "dynamic", "obstruction"])
 def test_night_falls_back_to_the_base_schedule(state, now, expected):
-    assert not imageSchedule.is_daylight(now)
-    assert imageSchedule.sleep_for_state(state, now=now) == expected
+    assert not image_schedule.is_daylight(now)
+    assert image_schedule.sleep_for_state(state, now=now) == expected
 
 
 def test_daylight_window_edges():
-    assert imageSchedule.is_daylight(sgt(7, 50)) and imageSchedule.is_daylight(sgt(18, 10))
-    assert not imageSchedule.is_daylight(sgt(7, 49)) and not imageSchedule.is_daylight(sgt(18, 11))
+    assert image_schedule.is_daylight(sgt(7, 50)) and image_schedule.is_daylight(sgt(18, 10))
+    assert not image_schedule.is_daylight(sgt(7, 49)) and not image_schedule.is_daylight(sgt(18, 11))
 
 
 # --- dynamic steps (issue #38) ---------------------------------------------
@@ -121,21 +121,21 @@ def test_daylight_window_edges():
     (0.2001, 30 * 60), (0.39, 30 * 60),
 ])
 def test_dynamic_interval_steps_down_as_the_rise_grows(rise, expected):
-    assert imageSchedule.get_dynamicstate_sleep_seconds(rise) == expected
-    assert imageSchedule.sleep_for_state("dynamic", now=sgt(12), rise=rise) == expected
+    assert image_schedule.get_dynamicstate_sleep_seconds(rise) == expected
+    assert image_schedule.sleep_for_state("dynamic", now=sgt(12), rise=rise) == expected
 
 
 def test_dynamic_levels_are_configurable():
     levels = (0.02, 0.04)
-    assert [imageSchedule.sleep_for_state("dynamic", now=sgt(12), rise=r, levels=levels)
+    assert [image_schedule.sleep_for_state("dynamic", now=sgt(12), rise=r, levels=levels)
             for r in (0.01, 0.03, 0.05)] == [2 * HOUR, 1 * HOUR, 30 * 60]
 
 
 def test_rise_only_steps_the_dynamic_state():
     for state in ("base", "obstruction"):
-        assert (imageSchedule.sleep_for_state(state, now=sgt(12), rise=0.3)
-                == imageSchedule.sleep_for_state(state, now=sgt(12)))
-    assert imageSchedule.sleep_for_state("dynamic", now=sgt(22), rise=0.3) == 10 * HOUR
+        assert (image_schedule.sleep_for_state(state, now=sgt(12), rise=0.3)
+                == image_schedule.sleep_for_state(state, now=sgt(12)))
+    assert image_schedule.sleep_for_state("dynamic", now=sgt(22), rise=0.3) == 10 * HOUR
 
 
 @pytest.mark.parametrize("raw, expected", [("0.05,0.3", (0.05, 0.3)), ("0.1, 0.2", (0.1, 0.2))])
@@ -182,37 +182,37 @@ def test_rate_levels_setting_reaches_the_reply(levels, expected, monkeypatch):
     ("base", sgt(23), True, "test_mode"),
 ])
 def test_next_wake_reason(state, now, test_mode, reason):
-    wake = imageSchedule.next_wake(state, now=now, test_mode=test_mode)
+    wake = image_schedule.next_wake(state, now=now, test_mode=test_mode)
     assert wake.reason == reason
-    assert wake.sleep_sec == imageSchedule.sleep_for_state(state, now=now, test_mode=test_mode)
+    assert wake.sleep_sec == image_schedule.sleep_for_state(state, now=now, test_mode=test_mode)
     assert wake.next_at == now + timedelta(seconds=wake.sleep_sec)
 
 
 def test_every_reason_code_is_listed():
-    assert set(imageSchedule.REASONS) == {"slot", "dynamic_rising", "obstruction_hold",
+    assert set(image_schedule.REASONS) == {"slot", "dynamic_rising", "obstruction_hold",
                                          "night_base", "error_fallback", "test_mode", "quality_retry"}
 
 
 def test_reply_keys_and_next_at_format():
-    wake = imageSchedule.next_wake("base", now=datetime(2026, 8, 3, 13, 0, 42, 999_000, tzinfo=SGT))
+    wake = image_schedule.next_wake("base", now=datetime(2026, 8, 3, 13, 0, 42, 999_000, tzinfo=SGT))
     assert wake.reply() == {"sleep_sec": 3557, "reason": "slot", "next_at": "2026-08-03T14:00:00+08:00"}
 
 
 def test_fallback_wake():
-    wake = imageSchedule.fallback_wake(camera_routes.FALLBACK_SLEEP_SEC, now=sgt(12))
+    wake = image_schedule.fallback_wake(camera_routes.FALLBACK_SLEEP_SEC, now=sgt(12))
     assert wake.reply() == {"sleep_sec": 7200, "reason": "error_fallback",
                             "next_at": "2026-08-03T14:00:00+08:00"}
-    assert imageSchedule.fallback_wake(5, now=sgt(12)).sleep_sec == imageSchedule.MIN_SLEEP_SEC
+    assert image_schedule.fallback_wake(5, now=sgt(12)).sleep_sec == image_schedule.MIN_SLEEP_SEC
 
 
 # --- TEST_MODE -----------------------------------------------------------
 
 @pytest.mark.parametrize("now", [sgt(12, 0), sgt(23, 0)], ids=["day", "night"])
 def test_test_mode_intervals_ignore_the_clock(now):
-    for state, seconds in imageSchedule.TEST_SLEEP_SEC.items():
-        assert imageSchedule.sleep_for_state(state, now=now, test_mode=True) == seconds
-    assert imageSchedule.TEST_SLEEP_SEC == {"base": 100, "obstruction": 80, "dynamic": 60}
-    assert imageSchedule.sleep_for_state("unknown", now=now, test_mode=True) == 100
+    for state, seconds in image_schedule.TEST_SLEEP_SEC.items():
+        assert image_schedule.sleep_for_state(state, now=now, test_mode=True) == seconds
+    assert image_schedule.TEST_SLEEP_SEC == {"base": 100, "obstruction": 80, "dynamic": 60}
+    assert image_schedule.sleep_for_state("unknown", now=now, test_mode=True) == 100
 
 
 def test_test_mode_env_var_reaches_the_upload_reply(monkeypatch):
@@ -236,15 +236,15 @@ def test_test_mode_env_var_reaches_the_upload_reply(monkeypatch):
     (86_400, 86_400), (86_401, 86_400), (10 ** 9, 86_400),
 ])
 def test_clamp_bounds(seconds, expected):
-    assert imageSchedule._clamp(seconds) == expected
-    assert (imageSchedule.MIN_SLEEP_SEC, imageSchedule.MAX_SLEEP_SEC) == (60, 86_400)
+    assert image_schedule._clamp(seconds) == expected
+    assert (image_schedule.MIN_SLEEP_SEC, image_schedule.MAX_SLEEP_SEC) == (60, 86_400)
 
 
 def test_state_intervals_are_clamped(monkeypatch):
-    monkeypatch.setattr(imageSchedule, "DYNAMIC_STEP_SEC", (5, 5, 5))
-    monkeypatch.setattr(imageSchedule, "OBSTRUCTION_SLEEP_SEC", 3 * 24 * HOUR)
-    assert imageSchedule.sleep_for_state("dynamic", now=sgt(12)) == 60
-    assert imageSchedule.sleep_for_state("obstruction", now=sgt(12)) == 86_400
+    monkeypatch.setattr(image_schedule, "DYNAMIC_STEP_SEC", (5, 5, 5))
+    monkeypatch.setattr(image_schedule, "OBSTRUCTION_SLEEP_SEC", 3 * 24 * HOUR)
+    assert image_schedule.sleep_for_state("dynamic", now=sgt(12)) == 60
+    assert image_schedule.sleep_for_state("obstruction", now=sgt(12)) == 86_400
 
 
 # --- every error reply carries sleep_sec --------------------------------------
@@ -261,7 +261,7 @@ ERROR_CASES = {
     "image_unreadable": dict(status=422, data=b"not a jpeg"),
     "not_found": dict(status=404, path="/no-such-route", method="get"),
     "method_not_allowed": dict(status=405, method="get"),
-    "internal_error": dict(status=500, data=water_frame(0.1), patch=(hsvEngine, "evalstate", _boom)),
+    "internal_error": dict(status=500, data=water_frame(0.1), patch=(hsv_engine, "evalstate", _boom)),
     "storage_unavailable": dict(status=503, data=water_frame(0.1), failing="upload_image"),
 }
 
@@ -282,8 +282,8 @@ def test_every_error_reply_carries_sleep_sec(case, monkeypatch):
     body = resp.get_json()
     assert set(body["error"]) == {"code", "message", "details"}
     assert isinstance(body["sleep_sec"], int)
-    assert imageSchedule.MIN_SLEEP_SEC <= body["sleep_sec"] <= imageSchedule.MAX_SLEEP_SEC
-    assert body["reason"] in imageSchedule.REASONS
+    assert image_schedule.MIN_SLEEP_SEC <= body["sleep_sec"] <= image_schedule.MAX_SLEEP_SEC
+    assert body["reason"] in image_schedule.REASONS
     next_at = datetime.fromisoformat(body["next_at"])
     assert next_at.utcoffset() == timedelta(hours=8)
     assert abs((next_at - datetime.now(SGT)).total_seconds() - body["sleep_sec"]) < 5
