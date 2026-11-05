@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'repositories.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/app_log.dart';
 import '../utils/digital_twin_api.dart';
 import '../utils/pond_camera_storage.dart';
 
@@ -317,7 +318,8 @@ class LivePondDataSource extends PondDataSource {
     // The worker can apply the saved event if the immediate API call fails.
     try {
       return await push();
-    } catch (_) {
+    } catch (error) {
+      log('immediate event push failed; the worker will apply it: $error');
       return null;
     }
   }

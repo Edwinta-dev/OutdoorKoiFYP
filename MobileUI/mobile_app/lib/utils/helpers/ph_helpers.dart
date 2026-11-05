@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../app_log.dart' as app_log;
 import '../pond_heuristics.dart';
 
 class PondSample {
@@ -73,7 +74,8 @@ class PhHelpers {
       if (hoursDiff <= 0) return 0.0;
 
       return (lastVal - firstVal) / hoursDiff;
-    } catch (_) {
+    } catch (error) {
+      app_log.log('pH rate of change unavailable: $error');
       return 0.0;
     }
   }

@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import 'app_log.dart';
 
 /// The message from a DigitalTwin error body. The service sends
 /// {"error": {"code", "message", "details"}}; a service not yet
@@ -502,8 +503,7 @@ class AlgaeForecast {
       rateSourceDetail == 'gcc_windowed_trend' ||
       projectionMethod == 'windowed_gcc_trend';
 
-  double? get currentSignal =>
-      isGccMode ? currentGcc : currentGreenRatio;
+  double? get currentSignal => isGccMode ? currentGcc : currentGreenRatio;
 
   String get signalLabel => isGccMode ? 'GCC' : 'Green ratio';
 
@@ -965,7 +965,8 @@ class DigitalTwinApi {
         );
       }
       return null;
-    } catch (_) {
+    } catch (error) {
+      log('fetchLatestAssessment failed: $error');
       return null;
     }
   }
@@ -994,7 +995,8 @@ class DigitalTwinApi {
         );
       }
       return null;
-    } catch (_) {
+    } catch (error) {
+      log('fetchForecast failed: $error');
       return null;
     }
   }
@@ -1016,7 +1018,8 @@ class DigitalTwinApi {
         return (forecast: WaterChemistryForecast.fromJson(body), error: null);
       }
       return (forecast: null, error: errorMessageFrom(body, 'Unavailable'));
-    } catch (_) {
+    } catch (error) {
+      log('fetchForecastOrError failed: $error');
       return (forecast: null, error: 'DigitalTwin service unreachable');
     }
   }
@@ -1066,7 +1069,8 @@ class DigitalTwinApi {
         forecast: null,
         error: errorMessageFrom(body, 'Forecast unavailable'),
       );
-    } catch (_) {
+    } catch (error) {
+      log('fetchEvaporationForecastOrError failed: $error');
       return (forecast: null, error: 'DigitalTwin service unreachable');
     }
   }
@@ -1101,7 +1105,8 @@ class DigitalTwinApi {
         forecast: null,
         error: errorMessageFrom(body, 'Forecast unavailable'),
       );
-    } catch (_) {
+    } catch (error) {
+      log('fetchAlgaeForecastOrError failed: $error');
       return (forecast: null, error: 'DigitalTwin service unreachable');
     }
   }
@@ -1122,7 +1127,8 @@ class DigitalTwinApi {
         );
       }
       return null;
-    } catch (_) {
+    } catch (error) {
+      log('fetchAlgaeRatingContext failed: $error');
       return null;
     }
   }
