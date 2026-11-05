@@ -235,18 +235,11 @@ class PondTwin:
         newest_event = self.ledger.newest_event_time()
         replay_boundary = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time,
                                            newest_event) if t is not None), default=None)
-        sensor_clock = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time)
-                            if t is not None), default=None)
         late_sensor = {id(item): (self.last_input_at is not None and item.time < self.last_input_at)
                        for item in inputs}
-        floor = replay_boundary - el.WINDOW if replay_boundary is not None else None
-        unplaced = {id(item) for item in inputs
-                    if floor is not None and sensor_clock is not None and item.time < sensor_clock
-                    and item.time < floor}
-        out: dict[int, dict] = {id(item): {
-            "time": item.time.isoformat(), "time_basis": item.time_basis, "model_time": None,
-            "late": True, "placed": False, "row_ids": dict(item.row_ids), "missing": item.missing}
-            for item in inputs if id(item) in unplaced}
+        unplaced = self._unplaced_inputs(inputs, replay_boundary)
+        out: dict[int, dict] = {id(item): self._input_entry(item, None, True, placed=False)
+                                for item in inputs if id(item) in unplaced}
         placeable = [item for item in inputs if id(item) not in unplaced]
 
         def ordered() -> list[dict]:
@@ -257,24 +250,38 @@ class PondTwin:
             replay = self._replay(placeable[0].time, history, now, extra_inputs=placeable)
             if replay is not None:
                 for item in placeable:
-                    out[id(item)] = {
-                        "time": item.time.isoformat(), "time_basis": item.time_basis,
-                        "model_time": item.time.isoformat(), "late": late_sensor[id(item)], "replayed": True,
-                        "row_ids": dict(item.row_ids), "missing": item.missing}
+                    out[id(item)] = self._input_entry(item, item.time, late_sensor[id(item)], replayed=True)
                 return ordered(), replay["warnings"]
 
         warnings: list[str] = []
         for item in placeable:
-            current_input_time = max((t for t in (self.last_input_at, self.chemistry.last_ingest_time)
-                                      if t is not None), default=None)
+            current_input_time = self._sensor_clock()
             late = current_input_time is not None and item.time < current_input_time
             model_time = current_input_time if late and current_input_time is not None else item.time
             warnings = self._chemistry_sensor(item, model_time)
-            out[id(item)] = {
-                "time": item.time.isoformat(), "time_basis": item.time_basis,
-                "model_time": model_time.isoformat(), "late": late,
-                "row_ids": dict(item.row_ids), "missing": item.missing}
+            out[id(item)] = self._input_entry(item, model_time, late)
         return ordered(), warnings
+
+    def _sensor_clock(self) -> Optional[datetime]:
+        """The newest time the chemistry engine has applied a sensor input at."""
+        return max((t for t in (self.last_input_at, self.chemistry.last_ingest_time) if t is not None),
+                   default=None)
+
+    def _unplaced_inputs(self, inputs: list[SensorInput], replay_boundary: Optional[datetime]) -> set[int]:
+        """ids of the inputs older than both the sensor clock and the
+        replay window: no checkpoint to rewind to, so they are left out."""
+        sensor_clock = self._sensor_clock()
+        floor = replay_boundary - el.WINDOW if replay_boundary is not None else None
+        return {id(item) for item in inputs
+                if floor is not None and sensor_clock is not None and item.time < sensor_clock
+                and item.time < floor}
+
+    @staticmethod
+    def _input_entry(item: SensorInput, model_time: Optional[datetime], late: bool, **flag: bool) -> dict:
+        """One input's provenance entry; `flag` is placed=False or replayed=True."""
+        return {"time": item.time.isoformat(), "time_basis": item.time_basis,
+                "model_time": model_time.isoformat() if model_time is not None else None, "late": late,
+                **flag, "row_ids": dict(item.row_ids), "missing": item.missing}
 
     def _record_channels(self, item: SensorInput) -> None:
         """Keeps each channel's newest reading (sensor_channels)."""
