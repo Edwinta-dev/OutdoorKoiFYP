@@ -13,9 +13,7 @@ See EngineRegistry in registry.py for how that's enforced.
 `project_forward()` is the one exception to "stateful and mutated in
 place": it operates on local copies of the pools only and never touches
 self, so it's safe to call from a read-only endpoint without going through
-the mutate-then-persist contract (though routing it through
-registry.with_engine is still fine/simplest, since the persisted snapshot
-comes out unchanged).
+the mutate-then-persist contract.
 """
 from __future__ import annotations
 

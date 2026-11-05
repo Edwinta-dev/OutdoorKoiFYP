@@ -828,20 +828,3 @@ class PondTwin:
         The algae engine reads none of them."""
         self.chemistry.config = profile.pond_config(base=self.chemistry.config)
         self.evaporation.config = self._evaporation_config(profile)
-
-    def sync_config(self, pond_config: PondConfig, pond_depth_m: Optional[float] = None) -> None:
-        """Re-applies pond volume/biomass from UserData onto every engine.
-
-        Called on each poll so that a user editing their pond volume in
-        onboarding actually propagates - without this, a resized pond
-        would keep computing ppm and loss percentages against the volume
-        captured when its snapshot was first written.
-        """
-        self.chemistry.config = pond_config
-        self.evaporation.config = ev.EvaporationConfig(
-            volume_litres=pond_config.volume_litres,
-            estimated_biomass_grams=pond_config.estimated_biomass_grams,
-            pond_depth_m=pond_depth_m
-            if pond_depth_m is not None
-            else self.evaporation.config.pond_depth_m,
-        )

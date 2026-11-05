@@ -78,8 +78,8 @@ BLOOM = [
 
 def evaporation_engine():
     engine = ev.EvaporationFeedEngine(CONFIG)
-    # The water/air offset is now engine STATE, fitted from history by
-    # refit_water_air_offset, rather than a per-call argument.
+    # The water/air offset is engine STATE (fitted by the calibration job),
+    # not a per-call argument.
     engine._water_air_offset_c = -1.5
     return engine
 

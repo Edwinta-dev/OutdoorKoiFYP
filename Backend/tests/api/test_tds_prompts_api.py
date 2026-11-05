@@ -7,11 +7,17 @@ from tests.storage.test_supabase_storage import FakeClient
 
 from conftest import USER, add_upload, api_client, make_settings, make_storage
 from koi.api import create_app, schemas
-from koi.api.openapi import build_document, schema_for
+from koi.api.openapi import REF, build_document
 from koi.api.responses import TdsPromptAnswer, TdsPromptList
 from koi.models.pond_twin import PondTwin
 from koi.storage import SupabaseStorage
 from koi.worker.poller import _poll_user
+
+
+def schema_for(model, document=None):
+    """A component schema by model name, with $refs resolvable against the document."""
+    document = document or build_document()
+    return {"$ref": REF.format(model=model.__name__), "components": document["components"]}
 
 
 def setup_prompt(enabled=True, falling=False):

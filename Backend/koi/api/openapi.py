@@ -142,13 +142,6 @@ def build_document() -> dict:
     }
 
 
-def schema_for(model: type[BaseModel], document: Optional[dict] = None) -> dict:
-    """A component schema by model name, with $refs resolvable against
-    the document (for jsonschema)."""
-    document = document or build_document()
-    return {"$ref": REF.format(model=model.__name__), "components": document["components"]}
-
-
 def render(document: dict) -> str:
     import yaml
 

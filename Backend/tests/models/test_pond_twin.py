@@ -288,18 +288,6 @@ def test_camera_correction_pulls_the_model_back_to_reality():
         f"obstructed frame did not corrupt the level: {twin.algae.green_ratio:.5f}"
 
 
-def test_sync_config_propagates_a_resized_pond():
-    twin = fresh_twin()
-    assert twin.evaporation.config.volume_litres == 5000, "initial volume 5000"
-    twin.sync_config(PondConfig(volume_litres=9000, estimated_biomass_grams=12000))
-    assert twin.chemistry.config.volume_litres == 9000, "chemistry volume updated"
-    assert twin.evaporation.config.volume_litres == 9000, "evaporation volume updated"
-    assert twin.evaporation.config.estimated_biomass_grams == 12000, \
-        "evaporation biomass updated"
-    assert twin.evaporation.config.pond_depth_m == ev.DEFAULT_POND_DEPTH_M, \
-        "depth preserved across a resize"
-
-
 def test_projections_never_mutate_engine_state():
     twin = fresh_twin()
     ingest(twin, T0, camera([(T0 - timedelta(days=1), 0.10), (T0, 0.12)]))

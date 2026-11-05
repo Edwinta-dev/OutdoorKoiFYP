@@ -664,12 +664,6 @@ class EvaporationFeedEngine:
         self._last_advance_time = now
         return step_litres
 
-    def refit_water_air_offset(self, water_temps: list, air_temps: list) -> Optional[float]:
-        fitted = fit_water_air_offset(water_temps, air_temps)
-        if fitted is not None:
-            self._water_air_offset_c = fitted
-        return self._water_air_offset_c
-
     # ----------------------------------------------------------
     # Intervention handling (the "state reset")
     # ----------------------------------------------------------

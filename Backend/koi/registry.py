@@ -238,23 +238,6 @@ class EngineRegistry:
             loaded.forecasts.clear()
         return result
 
-    # Backwards-compatible alias. Older call sites passed a callback
-    # expecting the chemistry engine directly; keeping this shim means
-    # any straggler keeps working instead of failing at import time.
-    def with_engine(
-        self,
-        user_id: int,
-        fn: Callable,
-        default_config: Optional[PondConfig] = None,
-        persist: bool = True,
-    ):
-        return self.with_twin(
-            user_id,
-            lambda twin: fn(twin.chemistry),
-            default_config=default_config,
-            persist=persist,
-        )
-
     def evict(self, user_id: int) -> None:
         """Drops a user's in-memory twin so the next access reloads from
         storage. Useful after an out-of-band snapshot change."""
