@@ -46,9 +46,8 @@ class TdsPrompts:
         if not config.enabled:
             return
         for sample in sorted(inputs, key=lambda s: s.time):
-            ppm = sample.channels.get("tds")
-            if (ppm is None or not math.isfinite(ppm) or not 5 <= ppm <= 5000
-                    or (self.last_reading_at and sample.time <= parse_timestamp(self.last_reading_at))):
+            ppm = self._new_reading(sample)
+            if ppm is None:
                 continue
             point = [sample.time.isoformat(), ppm]
             self.last_reading_at = sample.time.isoformat()
@@ -56,41 +55,64 @@ class TdsPrompts:
             if len(self.baseline) < DEFAULT_BASELINE_READINGS:
                 self.baseline.append(point)
                 continue
-            values = [p[1] for p in self.baseline]
-            baseline = statistics.median(values)
-            spread = max(values) - min(values)
-            floor = max(config.min_step_ppm, detection_floor(spread))
-            if abs(ppm - baseline) <= floor:
-                self.pending = []
-                self.baseline = (self.baseline + [point])[-DEFAULT_BASELINE_READINGS:]
-            else:
-                if self.pending and (self.pending[0][1] - baseline) * (ppm - baseline) < 0:
-                    self.pending = []
-                self.pending.append(point)
-                steps = detect_steps([(parse_timestamp(t), v) for t, v in self.baseline + self.pending], floor)
-                if steps:
-                    step = steps[-1]
-                    self._candidate("step", step.time, sample.time, step.baseline_ppm, step.level_ppm,
-                                    max(0.0, 1 - spread / abs(step.delta_ppm)), None,
-                                    sample.time_basis, ledger, config)
-                    self.baseline, self.pending = self.pending, []
-                    self.recent = list(self.baseline)
-                    continue
-            # A slope needs 12 readings, a net movement above the floor,
-            # and no adjacent jump above it. Linear fit R-squared is its confidence.
-            if len(self.recent) == DEFAULT_BASELINE_READINGS and not self.pending:
-                times = [parse_timestamp(p[0]) for p in self.recent]
-                ys = [p[1] for p in self.recent]
-                xs = [(t - times[0]).total_seconds() / 3600 for t in times]
-                mx, my = statistics.mean(xs), statistics.mean(ys)
-                xx = sum((x - mx) ** 2 for x in xs)
-                yy = sum((y - my) ** 2 for y in ys)
-                xy = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
-                if (xx and yy and abs(ys[-1] - ys[0]) > config.min_step_ppm
-                        and max(abs(b - a) for a, b in zip(ys, ys[1:], strict=False)) <= config.min_step_ppm):
-                    self._candidate("slope", times[0], sample.time, ys[0], ys[-1],
-                                    min(1.0, xy ** 2 / (xx * yy)), xy / xx,
-                                    sample.time_basis, ledger, config)
+            if self._judge_against_baseline(point, sample, ledger, config):
+                continue
+            self._check_slope(sample, ledger, config)
+
+    def _new_reading(self, sample: SensorInput) -> float | None:
+        """The sample's TDS in ppm when it is plausible and newer than the
+        last reading seen, else None."""
+        ppm = sample.channels.get("tds")
+        if (ppm is None or not math.isfinite(ppm) or not 5 <= ppm <= 5000
+                or (self.last_reading_at and sample.time <= parse_timestamp(self.last_reading_at))):
+            return None
+        return ppm
+
+    def _judge_against_baseline(self, point: list, sample: SensorInput, ledger: EventLedger,
+                                config: PromptConfig) -> bool:
+        """Folds a reading into the baseline when it is within the floor,
+        else tracks it as pending and looks for a persistent step. True
+        when a step was found and the baseline moved to it."""
+        ppm = point[1]
+        values = [p[1] for p in self.baseline]
+        baseline = statistics.median(values)
+        spread = max(values) - min(values)
+        floor = max(config.min_step_ppm, detection_floor(spread))
+        if abs(ppm - baseline) <= floor:
+            self.pending = []
+            self.baseline = (self.baseline + [point])[-DEFAULT_BASELINE_READINGS:]
+            return False
+        if self.pending and (self.pending[0][1] - baseline) * (ppm - baseline) < 0:
+            self.pending = []
+        self.pending.append(point)
+        steps = detect_steps([(parse_timestamp(t), v) for t, v in self.baseline + self.pending], floor)
+        if not steps:
+            return False
+        step = steps[-1]
+        self._candidate("step", step.time, sample.time, step.baseline_ppm, step.level_ppm,
+                        max(0.0, 1 - spread / abs(step.delta_ppm)), None,
+                        sample.time_basis, ledger, config)
+        self.baseline, self.pending = self.pending, []
+        self.recent = list(self.baseline)
+        return True
+
+    def _check_slope(self, sample: SensorInput, ledger: EventLedger, config: PromptConfig) -> None:
+        """A slope needs 12 readings, a net movement above the floor, and
+        no adjacent jump above it. Linear fit R-squared is its confidence."""
+        if len(self.recent) != DEFAULT_BASELINE_READINGS or self.pending:
+            return
+        times = [parse_timestamp(p[0]) for p in self.recent]
+        ys = [p[1] for p in self.recent]
+        xs = [(t - times[0]).total_seconds() / 3600 for t in times]
+        mx, my = statistics.mean(xs), statistics.mean(ys)
+        xx = sum((x - mx) ** 2 for x in xs)
+        yy = sum((y - my) ** 2 for y in ys)
+        xy = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+        if (xx and yy and abs(ys[-1] - ys[0]) > config.min_step_ppm
+                and max(abs(b - a) for a, b in zip(ys, ys[1:], strict=False)) <= config.min_step_ppm):
+            self._candidate("slope", times[0], sample.time, ys[0], ys[-1],
+                            min(1.0, xy ** 2 / (xx * yy)), xy / xx,
+                            sample.time_basis, ledger, config)
 
     def _candidate(self, detection: str, start: datetime, end: datetime, baseline: float, level: float,
                    confidence: float, slope: float | None, time_basis: str,
