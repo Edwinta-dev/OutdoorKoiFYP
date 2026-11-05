@@ -352,52 +352,72 @@ class PondTwin:
         seen: set[str] = set()
 
         for row in rows:
-            event = el.event_from_row(row)
-            event_id = row.get("event_id")
-            if event is None or event_id is None or event.time < window_start:
-                report["skipped"].append({"row_id": row.get("id"), "reason": "unknown event_type" if event is None
-                                          else "no event_id" if event_id is None else "outside the window"})
-                continue
-            try:
-                self._validate_salt(event)
-            except ValueError as exc:
-                report["skipped"].append({"row_id": row.get("id"), "reason": str(exc)})
-                continue
-            event_id = el.normalise_event_id(event_id)
-            seen.add(event_id)
-            row_fp = el.event_values(event)
-            entry = self.ledger.get(event_id)
-            if entry is None:
-                created = row.get("created_at")
-                if self.ledger.since is not None and created is not None \
-                        and parse_timestamp(created) < self.ledger.since:
-                    continue  # logged before the ledger: applied by the twin of that time
-                legacy = self.ledger.legacy_match(event)
-                if legacy is not None:
-                    self.ledger.rekey(legacy, event_id)
-                    legacy.row_id, legacy.row = row.get("id"), row_fp
-                    report["claimed"].append(event_id)
-                    continue
-                entry = self.ledger.add(event_id, event, recorded_at=now, source="reconcile",
-                                        row_id=row.get("id"), row=row_fp)
-                new.append(entry)
-                continue
-            if entry.row is None:
-                # First sight of the row of a posted event: the post's
-                # values stand (the row may hold phone-local time).
-                entry.row_id, entry.row = row.get("id"), row_fp
-                continue
-            if entry.status == el.DELETED:
-                changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
-                entry.status, entry.event, entry.model_time, entry.row = el.APPLIED, event, event.time, row_fp
-                entry.row_id = row.get("id")
-                report["restored"].append(event_id)
-            elif row_fp != entry.row:
-                changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
-                entry.event, entry.model_time, entry.row = event, event.time, row_fp
-                entry.revision += 1
-                report["revised"].append(event_id)
+            self._reconcile_row(row, window_start, now, seen, new, changed, report)
+        self._delete_missing(seen, window_start, changed, report)
 
+        for entry in new:
+            self._other_engines_event(entry.event, now)
+        outcome = self._place(new, changed, now, history)
+        if outcome.get("not_replayable"):
+            self._undo_unreplayable(changed, report)
+        report["applied"] = [e.event_id for e in new]
+        report["replayed"], report["replayed_from"] = outcome["replayed"], outcome["replayed_from"]
+        return report
+
+    def _reconcile_row(self, row: dict, window_start: datetime, now: datetime, seen: set, new: list,
+                       changed: list, report: dict) -> None:
+        """One pondInterventions row against the ledger: skips it, claims a
+        legacy entry, adds it to `new`, or revises or restores its entry
+        (added to `changed` with its old state) as event_ledger.py describes."""
+        event = el.event_from_row(row)
+        event_id = row.get("event_id")
+        if event is None or event_id is None or event.time < window_start:
+            report["skipped"].append({"row_id": row.get("id"), "reason": "unknown event_type" if event is None
+                                      else "no event_id" if event_id is None else "outside the window"})
+            return
+        try:
+            self._validate_salt(event)
+        except ValueError as exc:
+            report["skipped"].append({"row_id": row.get("id"), "reason": str(exc)})
+            return
+        event_id = el.normalise_event_id(event_id)
+        seen.add(event_id)
+        row_fp = el.event_values(event)
+        entry = self.ledger.get(event_id)
+        if entry is None:
+            created = row.get("created_at")
+            if self.ledger.since is not None and created is not None \
+                    and parse_timestamp(created) < self.ledger.since:
+                return  # logged before the ledger: applied by the twin of that time
+            legacy = self.ledger.legacy_match(event)
+            if legacy is not None:
+                self.ledger.rekey(legacy, event_id)
+                legacy.row_id, legacy.row = row.get("id"), row_fp
+                report["claimed"].append(event_id)
+                return
+            entry = self.ledger.add(event_id, event, recorded_at=now, source="reconcile",
+                                    row_id=row.get("id"), row=row_fp)
+            new.append(entry)
+            return
+        if entry.row is None:
+            # First sight of the row of a posted event: the post's
+            # values stand (the row may hold phone-local time).
+            entry.row_id, entry.row = row.get("id"), row_fp
+            return
+        if entry.status == el.DELETED:
+            changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
+            entry.status, entry.event, entry.model_time, entry.row = el.APPLIED, event, event.time, row_fp
+            entry.row_id = row.get("id")
+            report["restored"].append(event_id)
+        elif row_fp != entry.row:
+            changed.append((entry, entry.to_dict(), min(entry.model_time, event.time)))
+            entry.event, entry.model_time, entry.row = event, event.time, row_fp
+            entry.revision += 1
+            report["revised"].append(event_id)
+
+    def _delete_missing(self, seen: set, window_start: datetime, changed: list, report: dict) -> None:
+        """Marks deleted the applied entries whose row was in the window but
+        is no longer among the rows read."""
         for entry in list(self.ledger.entries.values()):
             if (entry.status == el.APPLIED and entry.row is not None and entry.event_id not in seen
                     and parse_timestamp(entry.row["time"]) >= window_start):
@@ -405,21 +425,15 @@ class PondTwin:
                 entry.status = el.DELETED
                 report["deleted"].append(entry.event_id)
 
-        for entry in new:
-            self._other_engines_event(entry.event, now)
-        outcome = self._place(new, changed, now, history)
-        if outcome.get("not_replayable"):
-            # Edits and deletions that could not be replayed are undone in
-            # the ledger, so the entry still describes the engine state.
-            for entry, old, _ in changed:
-                self.ledger.entries[entry.event_id] = el.LedgerEntry.from_dict(old)
-                report["not_replayable"].append(entry.event_id)
-                for key in ("revised", "deleted", "restored"):
-                    if entry.event_id in report[key]:
-                        report[key].remove(entry.event_id)
-        report["applied"] = [e.event_id for e in new]
-        report["replayed"], report["replayed_from"] = outcome["replayed"], outcome["replayed_from"]
-        return report
+    def _undo_unreplayable(self, changed: list, report: dict) -> None:
+        """Edits and deletions that could not be replayed are undone in
+        the ledger, so the entry still describes the engine state."""
+        for entry, old, _ in changed:
+            self.ledger.entries[entry.event_id] = el.LedgerEntry.from_dict(old)
+            report["not_replayable"].append(entry.event_id)
+            for key in ("revised", "deleted", "restored"):
+                if entry.event_id in report[key]:
+                    report[key].remove(entry.event_id)
 
     def _place(self, new: list[el.LedgerEntry], changed: list[tuple[el.LedgerEntry, dict, datetime]],
                now: datetime, history: Optional[SensorHistory]) -> dict:
