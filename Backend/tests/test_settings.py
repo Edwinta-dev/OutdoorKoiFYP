@@ -20,7 +20,8 @@ def test_camera_colour_settings_defaults_and_environment(clean_env):
     assert (s.camera_s_mean_min, s.camera_s_mean_max) == (0, 200)
     for name, value in {"CAMERA_COLOUR_GRID_ROWS": "2", "CAMERA_COLOUR_GRID_COLS": "4",
                         "CAMERA_GCC_MIN": "0.2", "CAMERA_GCC_MAX": "0.6",
-                        "CAMERA_S_MEAN_MIN": "10", "CAMERA_S_MEAN_MAX": "240"}.items():
+                        "CAMERA_S_MEAN_MIN": "10", "CAMERA_S_MEAN_MAX": "240",
+                        "KOI_ALGAE_REFERENCE_CELLS": "5,6,7"}.items():  # the default (6,7,8) is off a 2 x 4 grid
         clean_env.setenv(name, value)
     s = Settings(_env_file=None)
     assert (s.camera_colour_grid_rows, s.camera_colour_grid_cols) == (2, 4)

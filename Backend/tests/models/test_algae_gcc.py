@@ -423,10 +423,18 @@ def test_settings_build_the_signal_config():
     {"KOI_ALGAE_DAILY_STATISTIC": "mean"},
     {"KOI_ALGAE_CELL_RUN": "1"},
     {"KOI_ALGAE_REFERENCE_CELLS": "-1"},
+    {"KOI_ALGAE_REFERENCE_CELLS": "9"},                         # the default grid is 3 x 3
+    {"KOI_ALGAE_OBJECT_CELLS": "4", "CAMERA_COLOUR_GRID_ROWS": "1", "CAMERA_COLOUR_GRID_COLS": "3"},
 ])
 def test_settings_reject_bad_algae_values(env):
     with pytest.raises(ValueError):
         Settings(_env_file=None, **env)
+
+
+def test_algae_cells_follow_the_configured_camera_grid():
+    settings = Settings(_env_file=None, KOI_ALGAE_REFERENCE_CELLS="9, 10, 11",
+                        CAMERA_COLOUR_GRID_ROWS="4", CAMERA_COLOUR_GRID_COLS="3")
+    assert settings.algae_signal_config.reference_cells == (9, 10, 11)
 
 
 def test_signal_config_rejects_unknown_modes():

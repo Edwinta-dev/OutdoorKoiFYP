@@ -109,7 +109,8 @@ def test_upload_stores_colour_and_settings_without_changing_reply_or_green_ratio
     storage = MemoryStorage()
     state = ["base", 0.1, 1, 0]
     storage.insert_image(15, 0.1, state, "old", quality={"version": 1, "status": "pass"})
-    settings = make_settings(test_mode=True, camera_colour_grid_rows=2, camera_colour_grid_cols=4)
+    settings = make_settings(test_mode=True, camera_colour_grid_rows=2, camera_colour_grid_cols=4,
+                              algae_reference_cells=(5, 6, 7))
     client = create_app(settings, storage=storage).test_client()
     response = client.post("/upload", data=data, headers={"X-User-ID": "15"})
     assert response.status_code == 200

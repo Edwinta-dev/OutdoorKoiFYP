@@ -187,8 +187,12 @@ class Settings(BaseSettings):
             raise ValueError("KOI_ALGAE_DAY_START_HOUR must be before KOI_ALGAE_DAY_END_HOUR")
         if not self.algae_watch_offset < self.algae_action_offset:
             raise ValueError("KOI_ALGAE_WATCH_OFFSET must be below KOI_ALGAE_ACTION_OFFSET")
-        if any(not 0 <= i < 81 for i in (*self.algae_reference_cells, *self.algae_object_cells)):
-            raise ValueError("KOI_ALGAE_REFERENCE_CELLS and KOI_ALGAE_OBJECT_CELLS are grid indices from 0")
+        cells = self.camera_colour_grid_rows * self.camera_colour_grid_cols
+        if any(not 0 <= i < cells for i in (*self.algae_reference_cells, *self.algae_object_cells)):
+            raise ValueError(
+                "KOI_ALGAE_REFERENCE_CELLS and KOI_ALGAE_OBJECT_CELLS are row-major indices into the "
+                f"camera colour grid ({self.camera_colour_grid_rows} x {self.camera_colour_grid_cols} = "
+                f"0 to {cells - 1})")
         return self
 
     @model_validator(mode="after")
