@@ -752,38 +752,52 @@ class MemoryStorage:
             now = self._clock()
             keep_from = now - timedelta(days=30)
             table = self._tables["device_contact"]
-            mine = {parse_timestamp(r["received_at"]): r for r in table
-                    if _same_user(r, "pond_id", user_id) and r["kind"] == kind}
-            newest = None
-            for c in contacts:
-                received = parse_timestamp(c["received_at"])
-                newest = received if newest is None or received > newest else newest
-                if received < keep_from or received in mine:
-                    continue
-                expected = c.get("expected_next_at")
-                expected = expected if expected is not None and parse_timestamp(expected) > received else None
-                row = {"pond_id": user_id, "kind": kind, "received_at": received.isoformat(),
-                       "expected_next_at": parse_timestamp(expected).isoformat() if expected else None}
-                table.append(row)
-                mine[received] = row
+            mine, newest = self._add_contacts(table, user_id, kind, contacts, keep_from)
             if newest is not None:
-                next_at = (mine.get(newest) or {}).get("expected_next_at")
-                devices = self._tables["devices"]
-                device = next((d for d in devices if _same_user(d, "pond_id", user_id) and d["kind"] == kind), None)
-                if device is None:
-                    devices.append({"pond_id": user_id, "kind": kind, "expected_interval_seconds": None,
-                                    "last_seen_at": newest.isoformat(), "next_expected_at": next_at,
-                                    "created_at": now.isoformat(), "updated_at": now.isoformat()})
-                else:
-                    old = device.get("last_seen_at")
-                    if old is None or newest >= parse_timestamp(old):
-                        device["last_seen_at"] = newest.isoformat()
-                        device["next_expected_at"] = next_at
-                    device["updated_at"] = now.isoformat()
+                self._touch_device(user_id, kind, newest, (mine.get(newest) or {}).get("expected_next_at"), now)
             table[:] = [r for r in table if not (_same_user(r, "pond_id", user_id) and r["kind"] == kind
                                                  and parse_timestamp(r["received_at"]) < keep_from)]
             rows = self._select("devices", user_id, kind=kind)
             return rows[0] if rows else None
+
+    @staticmethod
+    def _add_contacts(table: list, user_id: int, kind: str, contacts: list[dict],
+                      keep_from: datetime) -> tuple[dict, Optional[datetime]]:
+        """Appends the contacts not already recorded and not older than
+        keep_from; (the pond's contacts of this kind by receipt time, the
+        newest receipt time among `contacts`)."""
+        mine = {parse_timestamp(r["received_at"]): r for r in table
+                if _same_user(r, "pond_id", user_id) and r["kind"] == kind}
+        newest = None
+        for c in contacts:
+            received = parse_timestamp(c["received_at"])
+            newest = received if newest is None or received > newest else newest
+            if received < keep_from or received in mine:
+                continue
+            expected = c.get("expected_next_at")
+            expected = expected if expected is not None and parse_timestamp(expected) > received else None
+            row = {"pond_id": user_id, "kind": kind, "received_at": received.isoformat(),
+                   "expected_next_at": parse_timestamp(expected).isoformat() if expected else None}
+            table.append(row)
+            mine[received] = row
+        return mine, newest
+
+    def _touch_device(self, user_id: int, kind: str, newest: datetime, next_at: Optional[str],
+                      now: datetime) -> None:
+        """Creates the pond's device row of this kind, or moves its
+        last_seen_at forward to `newest` (never back)."""
+        devices = self._tables["devices"]
+        device = next((d for d in devices if _same_user(d, "pond_id", user_id) and d["kind"] == kind), None)
+        if device is None:
+            devices.append({"pond_id": user_id, "kind": kind, "expected_interval_seconds": None,
+                            "last_seen_at": newest.isoformat(), "next_expected_at": next_at,
+                            "created_at": now.isoformat(), "updated_at": now.isoformat()})
+            return
+        old = device.get("last_seen_at")
+        if old is None or newest >= parse_timestamp(old):
+            device["last_seen_at"] = newest.isoformat()
+            device["next_expected_at"] = next_at
+        device["updated_at"] = now.isoformat()
 
     def fetch_device_activity(self, user_id: int, since: datetime) -> dict:
         """The same as pond_device_activity (migration 0018)."""
