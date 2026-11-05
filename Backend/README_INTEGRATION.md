@@ -516,8 +516,10 @@ seeded from `tests/fixtures/pond_455.json` (passed to `create_app`, not
 patched in). The poller integration tests
 walk one pond through a sequence of events and must run in file order,
 which is pytest's default. `test_contract.py` reads
-`MobileUI/mobile_app/lib/utils/digital_twin_api.dart` relative to its own
-location, so it works from any working directory.
+`MobileUI/mobile_app/lib/utils/digital_twin_api.dart` and the model files it
+re-exports (`digital_twin_models.dart`, `algae_models.dart`,
+`pond_action.dart`) relative to its own location, so it works from any
+working directory.
 
 ## Still open
 

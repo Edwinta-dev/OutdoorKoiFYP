@@ -26,6 +26,8 @@ API = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..", "..", "..", "MobileUI", "mobile_app", "lib", "utils", "digital_twin_api.dart",
 )
+# digital_twin_api.dart re-exports the response models, which live beside it.
+API_MODEL_FILES = ("digital_twin_models.dart", "algae_models.dart", "pond_action.dart")
 DASHBOARD_API = os.path.join(os.path.dirname(API), "pond_dashboard.dart")
 PROFILE_API = os.path.join(os.path.dirname(API), "..", "data", "pond_profile.dart")
 # Dart class -> OpenAPI schema, where the names differ.
@@ -46,15 +48,24 @@ OUTLOOK = [
 T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
+def dart_source(path: str) -> str:
+    """A Dart file's text; for the DigitalTwin API, that of its model files too."""
+    paths = [path] + ([os.path.join(os.path.dirname(API), name) for name in API_MODEL_FILES]
+                      if path == API else [])
+    out = []
+    for part in paths:
+        with open(part, encoding="utf-8") as f:
+            out.append(f.read())
+    return "\n".join(out)
+
+
 def dart_classes(path: str) -> list:
-    with open(path, encoding="utf-8") as f:
-        return re.findall(r"^class (\w+)", f.read(), re.M)
+    return re.findall(r"^class (\w+)", dart_source(path), re.M)
 
 
 def dart_keys(path: str, class_name: str) -> set:
     """Pulls j['key'] / json['key'] literals out of one Dart class body."""
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
+    src = dart_source(path)
     match = re.search(rf"^class {class_name}\b", src, re.M)
     start = match.start() if match else -1
     if start == -1:
@@ -262,8 +273,7 @@ def test_rating_models_read_only_emitted_keys(rating_payloads):
         assert_dart_keys_present(class_name, payload, optional)
 
     # The Dart enum must cover exactly the wire values the server accepts.
-    with open(API) as f:
-        dart_src = f.read()
+    dart_src = dart_source(API)
     wire_values = set(re.findall(r"AlgaeSeverity\.\w+ => '(\w+)'", dart_src))
     server_values = set(algae_engine.SEVERITY_LEVELS + ["obstruction"])
     assert wire_values == server_values, \
