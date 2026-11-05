@@ -982,64 +982,67 @@ class MemoryStorage:
         with self._lock:
             now = self._clock().isoformat()
             counts: dict[str, Any] = {}
-            seen = {self._observation_key(r) for r in self._tables["weather_observation"]}
-            new_rows = []
-            for row in batch.get("observations") or []:
-                key = self._observation_key(row)
-                if key not in seen:
-                    seen.add(key)
-                    new_rows.append({**row, "series": row.get("series") or "station",
-                                     "provenance": row.get("provenance") or {}})
-            self._insert("ingest_weather_batch", "weather_observation", new_rows)
-            counts["observations"] = {"received": len(batch.get("observations") or []), "inserted": len(new_rows)}
+            counts["observations"] = self._insert_new_weather_rows(
+                "weather_observation", batch.get("observations") or [], self._observation_key,
+                lambda row: {**row, "series": row.get("series") or "station",
+                             "provenance": row.get("provenance") or {}})
+            counts["forecasts"] = self._insert_new_weather_rows(
+                "weather_forecast_issuance", batch.get("forecasts") or [], self._issuance_key,
+                lambda row: {**row, "available_at": weather_cache.available_at(row),
+                             "provenance": row.get("provenance") or {}})
 
-            seen = {self._issuance_key(r) for r in self._tables["weather_forecast_issuance"]}
-            new_rows = []
-            for row in batch.get("forecasts") or []:
-                key = self._issuance_key(row)
-                if key not in seen:
-                    seen.add(key)
-                    new_rows.append({**row, "available_at": weather_cache.available_at(row),
-                                     "provenance": row.get("provenance") or {}})
-            self._insert("ingest_weather_batch", "weather_forecast_issuance", new_rows)
-            counts["forecasts"] = {"received": len(batch.get("forecasts") or []), "inserted": len(new_rows)}
+            counts["telemetry_cache_updated"] = self._merge_cache_candidates(
+                self._tables["weather_telemetry"], batch.get("telemetry_cache") or [],
+                sort_key=lambda c: (c["station_id"], parse_timestamp(c["observed_at"])),
+                matches=lambda r, c: r["station_id"] == c["station_id"] and r["metric_type"] == "realtime_sensor",
+                apply=lambda current, cand: weather_cache.apply_telemetry_candidate(current, cand, now))
 
-            updated = 0
-            table = self._tables["weather_telemetry"]
-            for cand in sorted(batch.get("telemetry_cache") or [],
-                               key=lambda c: (c["station_id"], parse_timestamp(c["observed_at"]))):
-                index = next((i for i, r in enumerate(table) if r["station_id"] == cand["station_id"]
-                              and r["metric_type"] == "realtime_sensor"), None)
-                new = weather_cache.apply_telemetry_candidate(
-                    _copy(table[index]) if index is not None else None, cand, now)
-                if new is not None:
-                    if index is None:
-                        table.append(_copy(new))
-                    else:
-                        table[index] = _copy(new)
-                    updated += 1
-            counts["telemetry_cache_updated"] = updated
+            forecast_table = self._tables["weather_forecasts"]
 
-            updated = 0
-            table = self._tables["weather_forecasts"]
-            for cand in sorted(batch.get("forecast_cache") or [],
-                               key=lambda c: (c["forecast_type"], c["slot_id"], parse_timestamp(c["source_time"]))):
-                issued_4day = [parse_timestamp(r["source_issued_at"]) for r in table
+            def apply_forecast(current: Optional[dict], cand: dict) -> Optional[dict]:
+                issued_4day = [parse_timestamp(r["source_issued_at"]) for r in forecast_table
                                if r["forecast_type"] == "4day" and r.get("source_issued_at")]
                 newest = max(issued_4day).isoformat() if issued_4day else None
-                index = next((i for i, r in enumerate(table) if r["forecast_type"] == cand["forecast_type"]
-                              and r["slot_id"] == cand["slot_id"]), None)
-                new = weather_cache.apply_forecast_candidate(
-                    _copy(table[index]) if index is not None else None, cand, newest, now)
-                if new is not None:
-                    if index is None:
-                        table.append(_copy(new))
-                    else:
-                        table[index] = _copy(new)
-                    updated += 1
-            counts["forecast_cache_updated"] = updated
+                return weather_cache.apply_forecast_candidate(current, cand, newest, now)
+
+            counts["forecast_cache_updated"] = self._merge_cache_candidates(
+                forecast_table, batch.get("forecast_cache") or [],
+                sort_key=lambda c: (c["forecast_type"], c["slot_id"], parse_timestamp(c["source_time"])),
+                matches=lambda r, c: r["forecast_type"] == c["forecast_type"] and r["slot_id"] == c["slot_id"],
+                apply=apply_forecast)
             counts["stations_changed"] = sum(self._upsert_station(s) for s in batch.get("stations") or [])
             return _copy(counts)
+
+    def _insert_new_weather_rows(self, table_name: str, rows: list, key: Callable, decorate: Callable) -> dict:
+        """The rows of an ingest_weather_batch list whose key is not in the
+        table (or earlier in the list), inserted decorated; the counts."""
+        seen = {key(r) for r in self._tables[table_name]}
+        new_rows = []
+        for row in rows:
+            row_key = key(row)
+            if row_key not in seen:
+                seen.add(row_key)
+                new_rows.append(decorate(row))
+        self._insert("ingest_weather_batch", table_name, new_rows)
+        return {"received": len(rows), "inserted": len(new_rows)}
+
+    @staticmethod
+    def _merge_cache_candidates(table: list, candidates: list, *, sort_key: Callable, matches: Callable,
+                                apply: Callable) -> int:
+        """Applies each candidate, in sort_key order, to the cache row it
+        matches (or appends a new row); the number of rows changed."""
+        updated = 0
+        for cand in sorted(candidates, key=sort_key):
+            index = next((i for i, r in enumerate(table) if matches(r, cand)), None)
+            new = apply(_copy(table[index]) if index is not None else None, cand)
+            if new is None:
+                continue
+            if index is None:
+                table.append(_copy(new))
+            else:
+                table[index] = _copy(new)
+            updated += 1
+        return updated
 
     def _upsert_station(self, station: dict) -> int:
         """The station step of ingest_weather_batch; 1 when a row changed."""
