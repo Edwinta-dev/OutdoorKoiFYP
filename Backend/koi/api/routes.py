@@ -77,6 +77,12 @@ from koi.models import algae_engine as ae
 from koi.models import device_health, forecast_utils, ladder, uncertainty
 from koi.models import evaporation_engine as ev
 from koi.models.engine import EventKind, PondEvent, WaterChemistryEngine
+from koi.models.forecast_env import (
+    CACHED_HORIZON_DAYS,
+    algae_environment,
+    days_from_projection,
+    evaporation_environment,
+)
 from koi.models.hypoxia import algae_is_high, assess_hypoxia
 from koi.models.local_time import local_date
 from koi.models.profile import PROFILE_FIELDS, ProfileHistory
@@ -183,47 +189,12 @@ def _first(*values):
 
 def _evaporation_env(ctx) -> list:
     now = ctx["now"]
-    days = ctx["forecast_days"]
-    air = _first(now.get("air_temp_c"), 30.0)
-    hum = _first(now.get("humidity_pct"), 80.0)
-    wind = _first(now.get("wind_ms"), 2.0)
-    env = [
-        ev.DayEnvironment(
-            air_temp_c=float(_first(d.get("air_temp_c"), air)),
-            relative_humidity_pct=float(_first(d.get("humidity_pct"), hum)),
-            wind_speed_ms=float(_first(d.get("wind_ms"), wind)),
-            rain_category=d.get("rain_category", "unknown"),
-        )
-        for d in days
-    ]
-    if not env:
-        env = [
-            ev.DayEnvironment(
-                air_temp_c=float(air),
-                relative_humidity_pct=float(hum),
-                wind_speed_ms=float(wind),
-            )
-        ]
-    return env
+    return evaporation_environment(
+        ctx["forecast_days"], now.get("air_temp_c"), now.get("humidity_pct"), now.get("wind_ms"))
 
 
 def _algae_env(ctx, baseline_lux, baseline_temp, no3_series, no3_now) -> list:
-    days = ctx["forecast_days"]
-    env = [
-        ae.AlgaeDayEnvironment(
-            lux=baseline_lux * d.get("lux_multiplier", 0.85),
-            temp_c=float(_first(d.get("air_temp_c"), baseline_temp)),
-            no3_ppm=no3_series[i] if i < len(no3_series) else no3_now,
-        )
-        for i, d in enumerate(days)
-    ]
-    if not env:
-        env = [
-            ae.AlgaeDayEnvironment(
-                lux=baseline_lux, temp_c=baseline_temp, no3_ppm=no3_now
-            )
-        ]
-    return env
+    return algae_environment(ctx["forecast_days"], baseline_lux, baseline_temp, no3_series, no3_now)
 
 
 def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, ratings: int = 0) -> dict:
@@ -265,13 +236,10 @@ def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, rati
     _storage().push_evaluation(user_id, chem)
 
     # --- evaporation ---
-    evap_days = None
-    try:
-        evap_days = twin.evaporation.project_forward(
-            daily_environment=_evaporation_env(ctx), horizon_days=21
-        ).get("predicted_topup_days_from_now")
-    except Exception as exc:  # noqa: BLE001
-        log_event(log, "evaporation_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
+    evap_days = days_from_projection(
+        lambda: twin.evaporation.project_forward(
+            daily_environment=_evaporation_env(ctx), horizon_days=CACHED_HORIZON_DAYS),
+        "predicted_topup_days_from_now", "evaporation_projection_failed", pond_id=user_id)
     evap = provenance.stamp(EVAPORATION, twin.evaporation.assess(
         current_water_temp_c=float(water_temp), days_to_topup=evap_days
     ).to_dict())
@@ -280,16 +248,11 @@ def _recompute_and_push(user_id: int, twin, ctx, run: str, events: int = 0, rati
     # --- algae ---
     algae_dict = None
     if twin.algae.has_measurement:
-        algae_days = None
-        try:
-            algae_days = twin.algae.project_forward(
-                daily_environment=_algae_env(
-                    ctx, float(lux_now), float(water_temp), [], None
-                ),
-                horizon_days=21,
-            ).get("predicted_scrub_days_from_now")
-        except Exception as exc:  # noqa: BLE001
-            log_event(log, "algae_projection_failed", level=logging.WARNING, pond_id=user_id, error=str(exc))
+        algae_days = days_from_projection(
+            lambda: twin.algae.project_forward(
+                daily_environment=_algae_env(ctx, float(lux_now), float(water_temp), [], None),
+                horizon_days=CACHED_HORIZON_DAYS),
+            "predicted_scrub_days_from_now", "algae_projection_failed", pond_id=user_id)
         algae = twin.algae.assess(days_to_scrub=algae_days)
         if algae is not None:
             algae_dict = provenance.stamp(ALGAE, algae.to_dict())

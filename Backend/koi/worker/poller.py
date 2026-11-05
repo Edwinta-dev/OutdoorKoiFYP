@@ -146,6 +146,13 @@ from koi.models import device_health, forecast_utils
 from koi.models import evaporation_engine as ev
 from koi.models.engine import WaterChemistryEngine
 from koi.models.event_ledger import WINDOW
+from koi.models.forecast_env import (
+    CACHED_HORIZON_DAYS,
+    algae_environment,
+    days_from_projection,
+    evaporation_environment,
+    first_not_none,
+)
 from koi.models.hypoxia import assess_hypoxia
 from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
@@ -167,11 +174,6 @@ from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import StorageError, fail_soft
 from koi.worker import retention
-
-# How far ahead each cycle projects when writing the cached "days until
-# next intervention" figures into the evaluation rows. Kept modest - the
-# detail screens ask for a longer horizon on demand via /forecast/*.
-CACHED_HORIZON_DAYS = 21
 
 LEASE_NAME = "poller"
 
@@ -354,13 +356,13 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     # just elapsed; the forecast's first day fills anything telemetry
     # doesn't carry (NEA telemetry has no humidity field of its own).
     first_forecast = forecast_days[0] if forecast_days else {}
-    air_temp = _first_not_none(
+    air_temp = first_not_none(
         now_conditions.get("air_temp_c"), first_forecast.get("air_temp_c"), 30.0
     )
-    humidity = _first_not_none(
+    humidity = first_not_none(
         now_conditions.get("humidity_pct"), first_forecast.get("humidity_pct"), 80.0
     )
-    wind_ms = _first_not_none(
+    wind_ms = first_not_none(
         now_conditions.get("wind_ms"), first_forecast.get("wind_ms"), 2.0
     )
     rainfall_mm = now_conditions.get("rainfall_mm")
@@ -442,7 +444,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         water_temp = fresh_value(freshness, "temp")
         model_temp = water_temp if water_temp is not None else float(air_temp)
         light = fresh_value(freshness, "lux")
-        lux_now = _first_not_none(now_conditions.get("lux"), light, 10000.0)
+        lux_now = first_not_none(now_conditions.get("lux"), light, 10000.0)
 
         # Nitrate trajectory first: the algae engine's growth depends on
         # it, and it is a pure read off the chemistry engine.
@@ -492,30 +494,19 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         evap_days = None
         algae_days = None
 
-        evap_forecast_env = _evaporation_forecast_env(
-            forecast_days, air_temp, humidity, wind_ms
-        )
-        try:
-            evap_proj = twin.evaporation.project_forward(
-                daily_environment=evap_forecast_env,
-                horizon_days=CACHED_HORIZON_DAYS,
-            )
-            evap_days = evap_proj.get("predicted_topup_days_from_now")
-        except Exception as exc:  # noqa: BLE001
-            log_event(log, "evaporation_projection_failed", level=logging.WARNING, error=str(exc))
+        evap_days = days_from_projection(
+            lambda: twin.evaporation.project_forward(
+                daily_environment=evaporation_environment(forecast_days, air_temp, humidity, wind_ms),
+                horizon_days=CACHED_HORIZON_DAYS),
+            "predicted_topup_days_from_now", "evaporation_projection_failed")
 
         if twin.algae.has_measurement:
-            algae_forecast_env = _algae_forecast_env(
-                forecast_days, float(lux_now), float(model_temp), no3_series, no3_now
-            )
-            try:
-                algae_proj = twin.algae.project_forward(
-                    daily_environment=algae_forecast_env,
-                    horizon_days=CACHED_HORIZON_DAYS,
-                )
-                algae_days = algae_proj.get("predicted_scrub_days_from_now")
-            except Exception as exc:  # noqa: BLE001
-                log_event(log, "algae_projection_failed", level=logging.WARNING, error=str(exc))
+            algae_days = days_from_projection(
+                lambda: twin.algae.project_forward(
+                    daily_environment=algae_environment(
+                        forecast_days, float(lux_now), float(model_temp), no3_series, no3_now),
+                    horizon_days=CACHED_HORIZON_DAYS),
+                "predicted_scrub_days_from_now", "algae_projection_failed")
 
         # Re-assess with the projected day counts folded in, so the cached
         # rows carry both current status and next predicted intervention.
@@ -618,57 +609,6 @@ def _events_report(report: dict) -> dict:
         if report[key]:
             out[f"{key}_ids"] = list(report[key])
     return out
-
-
-# ---------------------------------------------------------------
-def _first_not_none(*values):
-    for v in values:
-        if v is not None:
-            return v
-    return None
-
-
-def _evaporation_forecast_env(forecast_days, air_temp, humidity, wind_ms):
-    """Builds the forward environment list, substituting live telemetry
-    for any field NEA's outlook omits."""
-    env = [
-        ev.DayEnvironment(
-            air_temp_c=_first_not_none(d.get("air_temp_c"), air_temp, 30.0),
-            relative_humidity_pct=_first_not_none(d.get("humidity_pct"), humidity, 80.0),
-            wind_speed_ms=_first_not_none(d.get("wind_ms"), wind_ms, 2.0),
-            rain_category=d.get("rain_category", "unknown"),
-        )
-        for d in forecast_days
-    ]
-    if not env:
-        env = [
-            ev.DayEnvironment(
-                air_temp_c=float(air_temp),
-                relative_humidity_pct=float(humidity),
-                wind_speed_ms=float(wind_ms),
-            )
-        ]
-    return env
-
-
-def _algae_forecast_env(forecast_days, baseline_lux, baseline_temp, no3_series, no3_now):
-    """NEA has no light forecast, so the pond's own current lux is scaled
-    by a cloud-cover multiplier derived from each day's forecast code."""
-    env = [
-        ae.AlgaeDayEnvironment(
-            lux=baseline_lux * d.get("lux_multiplier", 0.85),
-            temp_c=_first_not_none(d.get("air_temp_c"), baseline_temp),
-            no3_ppm=no3_series[i] if i < len(no3_series) else no3_now,
-        )
-        for i, d in enumerate(forecast_days)
-    ]
-    if not env:
-        env = [
-            ae.AlgaeDayEnvironment(
-                lux=baseline_lux, temp_c=baseline_temp, no3_ppm=no3_now
-            )
-        ]
-    return env
 
 
 # ---------------------------------------------------------------
