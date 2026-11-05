@@ -642,9 +642,7 @@ def gcc_zones(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> 
     if not grids:
         return None
     size = len(grids[-1][1])
-    objects = {i for i in config.object_cells if 0 <= i < size}
-    refs = [i for i in config.reference_cells if 0 <= i < size and i not in objects]
-    pond = [i for i in range(size) if i not in objects and i not in refs]
+    objects, refs, pond = _zone_cell_roles(size, config)
     by_day = config.run_unit == "day"
     result: dict[str, Any] = {"run_unit": config.run_unit, "reference_cells": refs, "pond_cells": pond,
               "object_cells": sorted(objects), "noise": None, "threshold": None,
@@ -653,6 +651,33 @@ def gcc_zones(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> 
         result["note"] = "no_reference_cells" if not refs else "no_pond_cells"
         return result
 
+    adjusted = _reference_adjusted_cells(grids, size, refs, pond, by_day)
+    series, baselines, spreads, residuals, result["insufficient"] = _cell_baselines(adjusted, pond, config)
+    if not series:
+        return result
+
+    unreliable, reliable, noise = _pooled_cell_noise(series, spreads, residuals, config)
+    threshold = config.cell_k * noise
+    result.update(noise=noise, threshold=threshold, unreliable=unreliable)
+    result["flagged"], result["pending"], spikes = _judge_cells(reliable, series, baselines, threshold, by_day, config)
+    result["spikes"] = sorted(spikes, key=lambda s: s["since"], reverse=True)[:MAX_REPORTED_SPIKES]
+    return result
+
+
+def _zone_cell_roles(size: int, config: GccSignalConfig) -> tuple[set, list, list]:
+    """(object cells, reference cells, pond cells) of a grid of size cells:
+    configured indices outside the grid are dropped, and an object cell is
+    never a reference."""
+    objects = {i for i in config.object_cells if 0 <= i < size}
+    refs = [i for i in config.reference_cells if 0 <= i < size and i not in objects]
+    pond = [i for i in range(size) if i not in objects and i not in refs]
+    return objects, refs, pond
+
+
+def _reference_adjusted_cells(grids: list, size: int, refs: list, pond: list, by_day: bool) -> dict:
+    """{pond cell: {local day (or frame time): [values]}} with each frame's
+    reference-cell mean subtracted, so a white-balance shift that moves all
+    cells together cancels."""
     adjusted: dict = {i: {} for i in pond}
     for local, cells in grids:
         if len(cells) != size:
@@ -665,34 +690,54 @@ def gcc_zones(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> 
         for i in pond:
             if cells[i] is not None:
                 adjusted[i].setdefault(key, []).append(cells[i] - shift)
+    return adjusted
 
+
+def _cell_baselines(adjusted: dict, pond: list, config: GccSignalConfig) -> tuple[dict, dict, dict, dict, list]:
+    """(series, baselines, spreads, residuals, insufficient) per pond cell.
+    A cell's baseline is the median of its values before the last cell_run
+    (the run being judged stays out of its own baseline); a cell with too
+    few of them is listed in insufficient and not judged."""
     series: dict[int, list] = {}
     baselines: dict[int, float] = {}
     spreads: dict[int, float] = {}
     residuals: dict[int, list] = {}
+    insufficient: list = []
     for i in pond:
         values = [(key, _median(v)) for key, v in adjusted[i].items()]
         base = [v for _, v in values[:-config.cell_run]]
         if len(base) < ZONE_MIN_BASELINE:
-            result["insufficient"].append(i)
+            insufficient.append(i)
             continue
         series[i] = values
         baselines[i] = _median(base)
         residuals[i] = [v - baselines[i] for v in base]
         spreads[i] = _robust_spread(base)
-    if not series:
-        return result
+    return series, baselines, spreads, residuals, insufficient
 
+
+def _pooled_cell_noise(series: dict, spreads: dict, residuals: dict,
+                       config: GccSignalConfig) -> tuple[list, list, float]:
+    """(unreliable, reliable, noise): the robust spread pooled over the
+    cells' baseline residuals, recomputed without the cells whose own spread
+    is above cell_unreliable_ratio x the pooled noise (something loose in
+    view) when any cell remains."""
     pooled = _robust_spread([r for i in series for r in residuals[i]])
     unreliable = [i for i in series if spreads[i] > config.cell_unreliable_ratio * max(pooled, ZONE_NOISE_FLOOR)]
     reliable = [i for i in series if i not in unreliable]
     if unreliable and reliable:
         pooled = _robust_spread([r for i in reliable for r in residuals[i]])
-    noise = max(pooled, ZONE_NOISE_FLOOR)
-    threshold = config.cell_k * noise
-    result.update(noise=noise, threshold=threshold, unreliable=unreliable)
+    return unreliable, reliable, max(pooled, ZONE_NOISE_FLOOR)
 
-    spikes = []
+
+def _judge_cells(reliable: list, series: dict, baselines: dict, threshold: float, by_day: bool,
+                 config: GccSignalConfig) -> tuple[list, list, list]:
+    """(flagged, pending, spikes): a cell flags when its excess stays above
+    the threshold for cell_run consecutive values; a shorter run that fell
+    back is a spike, and one still open is pending."""
+    flagged: list = []
+    pending: list = []
+    spikes: list = []
     for i in reliable:
         excess = [(key, value - baselines[i]) for key, value in series[i]]
         runs: list[list] = _runs(excess, threshold, by_day)
@@ -704,12 +749,11 @@ def gcc_zones(frames: list, config: GccSignalConfig = DEFAULT_SIGNAL_CONFIG) -> 
                 if len(run) < config.cell_run:
                     spikes.append(entry)
             elif len(run) >= config.cell_run:
-                result["flagged"].append({"index": i, "since": run[0][0], "run_length": len(run),
-                                          "latest_excess": round(excess[-1][1], 5)})
+                flagged.append({"index": i, "since": run[0][0], "run_length": len(run),
+                                "latest_excess": round(excess[-1][1], 5)})
             else:
-                result["pending"].append(entry)
-    result["spikes"] = sorted(spikes, key=lambda s: s["since"], reverse=True)[:MAX_REPORTED_SPIKES]
-    return result
+                pending.append(entry)
+    return flagged, pending, spikes
 
 
 # ============================================================
