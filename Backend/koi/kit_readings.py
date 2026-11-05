@@ -108,11 +108,7 @@ def fit_nitrification_scale(readings: list[dict], events: list[NitrogenEvent],
     and an ammonia or a nitrite value; fewer than min_readings, or no
     feeding logged before the newest of them, gives a pending result. The
     error is the in-sample RMSE beside the RMSE at scale 1.0."""
-    usable = sorted(
-        (r for r in readings
-         if r.get("taken_at") and parse_timestamp(r["taken_at"]) >= start + SPIN_UP
-         and (r.get("ammonia_mg_l") is not None or r.get("nitrite_mg_l") is not None)),
-        key=lambda r: (parse_timestamp(r["taken_at"]), r.get("id") or 0))
+    usable = _usable_readings(readings, start)
     if len(usable) < min_readings:
         return pending_calibration("not_enough_kit_readings", len(usable), required_readings=min_readings)
     times = [parse_timestamp(r["taken_at"]) for r in usable]
@@ -120,34 +116,58 @@ def fit_nitrification_scale(readings: list[dict], events: list[NitrogenEvent],
         return pending_calibration("no_feeding_logged", len(usable))
 
     def errors(scale: float) -> list[tuple[str, float]]:
-        out = []
-        for row, (tan, no2) in zip(usable, simulate_nitrogen(events, temp_at, volume_at, start, times, scale),
-                                   strict=True):
-            if row.get("ammonia_mg_l") is not None:
-                out.append(("ammonia_mg_l", tan - float(row["ammonia_mg_l"])))
-            if row.get("nitrite_mg_l") is not None:
-                out.append(("nitrite_mg_l", no2 - float(row["nitrite_mg_l"])))
-        return out
+        return _scale_errors(usable, times, events, temp_at, volume_at, start, scale)
 
-    def rmse(values: list[float]) -> Optional[float]:
-        return round(math.sqrt(sum(v * v for v in values) / len(values)), 5) if values else None
-
-    low, high = SCALE_BOUNDS
-    ratio = (high / low) ** (1 / (_SCALE_GRID_POINTS - 1))
-    grid = [round(low * ratio ** i, 4) for i in range(_SCALE_GRID_POINTS)]
+    grid = _scale_grid()
     scored = {scale: sum(e * e for _, e in errors(scale)) for scale in grid}
     scale = min(grid, key=lambda s: (scored[s], abs(math.log(s))))
     fitted, default = errors(scale), errors(1.0)
     return {
         "status": "fitted", "value": scale, "lag_hours": None, "sample_count": len(usable),
-        "error": {"unit": "mg/L", "training_rmse": rmse([e for _, e in fitted]),
-                  "default_rmse": rmse([e for _, e in default]),
-                  "by_analyte": {key: rmse([e for k, e in fitted if k == key])
+        "error": {"unit": "mg/L", "training_rmse": _rmse([e for _, e in fitted]),
+                  "default_rmse": _rmse([e for _, e in default]),
+                  "by_analyte": {key: _rmse([e for k, e in fitted if k == key])
                                  for key in ("ammonia_mg_l", "nitrite_mg_l")}},
         "training_from": times[0], "training_to": times[-1], "evaluation_from": None, "evaluation_to": None,
         "details": {"at_bound": scale in (grid[0], grid[-1]), "bounds": list(SCALE_BOUNDS),
                     "simulation_start": start.isoformat(), "reading_ids": [r.get("id") for r in usable]},
     }
+
+
+def _usable_readings(readings: list[dict], start: datetime) -> list[dict]:
+    """The readings with a taken_at at least SPIN_UP after start and an
+    ammonia or nitrite value, oldest first."""
+    return sorted(
+        (r for r in readings
+         if r.get("taken_at") and parse_timestamp(r["taken_at"]) >= start + SPIN_UP
+         and (r.get("ammonia_mg_l") is not None or r.get("nitrite_mg_l") is not None)),
+        key=lambda r: (parse_timestamp(r["taken_at"]), r.get("id") or 0))
+
+
+def _scale_errors(usable: list[dict], times: list[datetime], events: list[NitrogenEvent],
+                  temp_at: Callable[[datetime], float], volume_at: Callable[[datetime], float],
+                  start: datetime, scale: float) -> list[tuple[str, float]]:
+    """(analyte, simulated minus measured mg/L) for every measured value at
+    the given nitrification scale."""
+    out = []
+    for row, (tan, no2) in zip(usable, simulate_nitrogen(events, temp_at, volume_at, start, times, scale),
+                               strict=True):
+        if row.get("ammonia_mg_l") is not None:
+            out.append(("ammonia_mg_l", tan - float(row["ammonia_mg_l"])))
+        if row.get("nitrite_mg_l") is not None:
+            out.append(("nitrite_mg_l", no2 - float(row["nitrite_mg_l"])))
+    return out
+
+
+def _rmse(values: list[float]) -> Optional[float]:
+    return round(math.sqrt(sum(v * v for v in values) / len(values)), 5) if values else None
+
+
+def _scale_grid() -> list[float]:
+    """The log-spaced candidate scales inside SCALE_BOUNDS."""
+    low, high = SCALE_BOUNDS
+    ratio = (high / low) ** (1 / (_SCALE_GRID_POINTS - 1))
+    return [round(low * ratio ** i, 4) for i in range(_SCALE_GRID_POINTS)]
 
 
 def record(storage: Storage, settings: Settings, pond: int, reading: dict, at: Optional[datetime]) -> dict:
