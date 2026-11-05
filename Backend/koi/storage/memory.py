@@ -797,40 +797,54 @@ class MemoryStorage:
                 before = [r for r in mine if parse_timestamp(r["received_at"]) < since]
                 contacts += before[-1:] + [r for r in mine if parse_timestamp(r["received_at"]) >= since]
             sensor = sorted(self._select("SensorData", user_id), key=self._reading_key)
-            battery = [(parse_timestamp(r["created_at"]), r["id"], {"at": r["created_at"], "mv": r.get("data1"),
-                                                                    "low": None})
-                       for r in sensor
-                       if r.get("sensor_type") == "battery_mv" and parse_timestamp(r["created_at"]) >= since]
-            # Payload v2 (0028): one reading per cycle, timed by its reading time.
-            cycles: set = set()
-            for r in sensor:
-                at = self._latest_key(r)[0]
-                key = (r.get("device_id"), r.get("boot_id"), r.get("cycle_seq"), at)
-                if r.get("battery_mv") is None or at < since or key in cycles:
-                    continue
-                cycles.add(key)
-                flags = r.get("flags")
-                battery.append((at, r["id"], {"at": at.isoformat(), "mv": r["battery_mv"],
-                                              "low": None if flags is None else bool(flags & 16)}))  # battery_low
-            battery.sort(key=lambda b: (b[0], b[1]))
-            resets = [r for r in sensor if r.get("sensor_type") == "reset_reason"]
-            reset = ((parse_timestamp(resets[-1]["created_at"]),
-                      {"at": resets[-1]["created_at"], "code": resets[-1].get("data1"), "reason": None})
-                     if resets else None)
-            named = sorted((r for r in sensor if r.get("reset_reason") is not None), key=self._latest_key)
-            if named:
-                newest = named[-1]
-                at = self._latest_key(newest)[0]
-                boot = [self._latest_key(r)[0] for r in sensor
-                        if newest.get("boot_id") is not None and r.get("boot_id") == newest["boot_id"]
-                        and r.get("device_id") == newest.get("device_id")]
-                if reset is None or at > reset[0]:
-                    reset = (at, {"at": min(boot, default=at).isoformat(), "code": None,
-                                  "reason": newest["reset_reason"]})
+            battery = self._battery_readings(sensor, since)
+            reset = self._newest_reset(sensor)
         return {"devices": devices,
                 "contacts": [self._project(c, ("kind", "received_at", "expected_next_at")) for c in contacts],
                 "battery": [b for _, _, b in battery],
                 "reset": reset[1] if reset else None}
+
+    def _battery_readings(self, sensor: list, since: datetime) -> list:
+        """(time, row id, {"at", "mv", "low"}) for each battery reading
+        since `since`, oldest first: the v1 battery_mv rows, then the v2
+        battery_mv column once per cycle."""
+        battery = [(parse_timestamp(r["created_at"]), r["id"], {"at": r["created_at"], "mv": r.get("data1"),
+                                                                "low": None})
+                   for r in sensor
+                   if r.get("sensor_type") == "battery_mv" and parse_timestamp(r["created_at"]) >= since]
+        # Payload v2 (0028): one reading per cycle, timed by its reading time.
+        cycles: set = set()
+        for r in sensor:
+            at = self._latest_key(r)[0]
+            key = (r.get("device_id"), r.get("boot_id"), r.get("cycle_seq"), at)
+            if r.get("battery_mv") is None or at < since or key in cycles:
+                continue
+            cycles.add(key)
+            flags = r.get("flags")
+            battery.append((at, r["id"], {"at": at.isoformat(), "mv": r["battery_mv"],
+                                          "low": None if flags is None else bool(flags & 16)}))  # battery_low
+        battery.sort(key=lambda b: (b[0], b[1]))
+        return battery
+
+    def _newest_reset(self, sensor: list) -> Optional[tuple]:
+        """(time, {"at", "code", "reason"}) of the newest reset: the v1
+        reset_reason row, or a v2 row naming the reason when it is newer
+        (its "at" is the boot's first reading)."""
+        resets = [r for r in sensor if r.get("sensor_type") == "reset_reason"]
+        reset = ((parse_timestamp(resets[-1]["created_at"]),
+                  {"at": resets[-1]["created_at"], "code": resets[-1].get("data1"), "reason": None})
+                 if resets else None)
+        named = sorted((r for r in sensor if r.get("reset_reason") is not None), key=self._latest_key)
+        if named:
+            newest = named[-1]
+            at = self._latest_key(newest)[0]
+            boot = [self._latest_key(r)[0] for r in sensor
+                    if newest.get("boot_id") is not None and r.get("boot_id") == newest["boot_id"]
+                    and r.get("device_id") == newest.get("device_id")]
+            if reset is None or at > reset[0]:
+                reset = (at, {"at": min(boot, default=at).isoformat(), "code": None,
+                              "reason": newest["reset_reason"]})
+        return reset
 
     # --- pond config --------------------------------------------------
     def fetch_active_pond_configs(self) -> list[dict]:
