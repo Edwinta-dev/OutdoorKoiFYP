@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
+import 'forecast_card_parts.dart';
 
 class WaterBufferStatusCard extends ConsumerStatefulWidget {
   final int userId;
@@ -31,11 +32,13 @@ class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
       future: ref.watch(assessmentProvider(widget.userId).future),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _shell(child: _loadingState());
+          return OutcomeCardShell(
+            child: ForecastCardLoading(color: AppColors.of(context).info),
+          );
         }
         final assessment = snapshot.data;
         if (assessment == null) {
-          return _shell(child: _unavailableState());
+          return OutcomeCardShell(child: _unavailableState());
         }
         return _assessmentCard(assessment);
       },
@@ -45,22 +48,6 @@ class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
   // ------------------------------------------------------------------
   // States
   // ------------------------------------------------------------------
-
-  Widget _loadingState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.xxl),
-      child: Center(
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: AppColors.of(context).info,
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _unavailableState() => PondErrorState(
     title: 'Water Buffer & Nitrogen Cycle',
@@ -84,37 +71,14 @@ class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          AdaptiveRow(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: AdaptiveRow(
-                  children: [
-                    Icon(
-                      Icons.science_outlined,
-                      color: AppColors.of(context).info,
-                      size: 18,
-                    ),
-                    const SizedBox(width: AppSpace.sm),
-                    Expanded(
-                      child: Text(
-                        'Water Buffer & Nitrogen Cycle',
-                        style: AppType.style(
-                          color: AppColors.of(context).text,
-                          fontWeight: FontWeight.bold,
-                          fontSize: AppType.body,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              StatusChip(
-                status: PondStatus.fromWire(a.status),
-                label: a.category.toUpperCase(),
-              ),
-            ],
+          ForecastCardHeader(
+            icon: Icons.science_outlined,
+            iconColor: AppColors.of(context).info,
+            title: 'Water Buffer & Nitrogen Cycle',
+            trailing: StatusChip(
+              status: PondStatus.fromWire(a.status),
+              label: a.category.toUpperCase(),
+            ),
           ),
           const SizedBox(height: AppSpace.lg),
 
@@ -259,8 +223,6 @@ class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
   // Small building blocks
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
-
   Widget _metricBox(
     String label,
     String value,
@@ -271,11 +233,7 @@ class _WaterBufferStatusCardState extends ConsumerState<WaterBufferStatusCard> {
     value: value,
     color: valueColor,
     estimate: true,
-    status: valueColor == AppColors.of(context).danger
-        ? PondStatus.danger
-        : valueColor == AppColors.of(context).warning
-        ? PondStatus.warning
-        : null,
+    status: pondStatusForColor(AppColors.of(context), valueColor),
   );
 
   Widget _trendLine(String label, String value, IconData icon) {

@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
+import 'forecast_card_parts.dart';
 
 class EvaporationStatusCard extends ConsumerStatefulWidget {
   final int userId;
@@ -30,46 +31,16 @@ class _EvaporationStatusCardState extends ConsumerState<EvaporationStatusCard> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({EvaporationForecast? forecast, String? error})>(
+    return ForecastCard<EvaporationForecast>(
       future: ref.watch(evaporationForecastProvider(widget.userId).future),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _shell(child: _loadingState());
-        }
-        final f = snapshot.data?.forecast;
-        if (f == null) {
-          return _shell(
-            child: _unavailableState(
-              snapshot.data?.error ?? 'Forecast unavailable',
-            ),
-          );
-        }
-        return _forecastCard(f);
-      },
+      title: 'Evaporation & Feed Outlook',
+      loadingColor: AppColors.of(context).info,
+      onRetry: _retry,
+      builder: _forecastCard,
     );
   }
 
   // ------------------------------------------------------------------
-
-  Widget _loadingState() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpace.xxl),
-    child: Center(
-      child: SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.4,
-          color: AppColors.of(context).info,
-        ),
-      ),
-    ),
-  );
-
-  Widget _unavailableState(String reason) => PondErrorState(
-    title: 'Evaporation & Feed Outlook',
-    message: reason,
-    onRetry: _retry,
-  );
 
   // ------------------------------------------------------------------
 
@@ -82,34 +53,11 @@ class _EvaporationStatusCardState extends ConsumerState<EvaporationStatusCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AdaptiveRow(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: AdaptiveRow(
-                  children: [
-                    Icon(
-                      Icons.water_damage_outlined,
-                      color: AppColors.of(context).info,
-                      size: 18,
-                    ),
-                    const SizedBox(width: AppSpace.sm),
-                    Expanded(
-                      child: Text(
-                        'Evaporation & Feed Outlook',
-                        style: AppType.style(
-                          color: AppColors.of(context).text,
-                          fontWeight: FontWeight.bold,
-                          fontSize: AppType.body,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _pill(_urgencyLabel(days), accent),
-            ],
+          ForecastCardHeader(
+            icon: Icons.water_damage_outlined,
+            iconColor: AppColors.of(context).info,
+            title: 'Evaporation & Feed Outlook',
+            trailing: _pill(_urgencyLabel(days), accent),
           ),
           const SizedBox(height: AppSpace.lg),
 
@@ -365,14 +313,9 @@ class _EvaporationStatusCardState extends ConsumerState<EvaporationStatusCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
-
   Widget _pill(String text, Color color) => StatusChip(
-    status: color == AppColors.of(context).danger
-        ? PondStatus.danger
-        : color == AppColors.of(context).warning
-        ? PondStatus.warning
-        : PondStatus.healthy,
+    status:
+        pondStatusForColor(AppColors.of(context), color) ?? PondStatus.healthy,
     label: text,
   );
 
@@ -381,24 +324,15 @@ class _EvaporationStatusCardState extends ConsumerState<EvaporationStatusCard> {
     value: value,
     color: valueColor,
     estimate: true,
-    status: valueColor == AppColors.of(context).danger
-        ? PondStatus.danger
-        : valueColor == AppColors.of(context).warning
-        ? PondStatus.warning
-        : null,
+    status: pondStatusForColor(AppColors.of(context), valueColor),
   );
 
-  Color _urgencyColor(int? days) {
-    if (days == null) return AppColors.of(context).healthy;
-    if (days <= 0) return AppColors.of(context).danger;
-    if (days <= 3) return AppColors.of(context).warning;
-    return AppColors.of(context).info;
-  }
+  Color _urgencyColor(int? days) => forecastUrgencyColor(
+    AppColors.of(context),
+    days,
+    planned: AppColors.of(context).info,
+  );
 
-  String _urgencyLabel(int? days) {
-    if (days == null) return 'STABLE';
-    if (days <= 0) return 'DUE NOW';
-    if (days <= 3) return 'SOON';
-    return 'PLANNED';
-  }
+  String _urgencyLabel(int? days) =>
+      forecastUrgencyLabel(days, clear: 'STABLE');
 }

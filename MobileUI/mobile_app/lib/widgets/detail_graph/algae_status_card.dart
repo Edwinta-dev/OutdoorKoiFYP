@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers.dart';
 import '../../utils/digital_twin_api.dart';
+import 'forecast_card_parts.dart';
 
 class AlgaeStatusCard extends ConsumerStatefulWidget {
   final int userId;
@@ -31,46 +32,16 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({AlgaeForecast? forecast, String? error})>(
+    return ForecastCard<AlgaeForecast>(
       future: ref.watch(algaeForecastProvider(widget.userId).future),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _shell(child: _loadingState());
-        }
-        final f = snapshot.data?.forecast;
-        if (f == null) {
-          return _shell(
-            child: _unavailableState(
-              snapshot.data?.error ?? 'Forecast unavailable',
-            ),
-          );
-        }
-        return _forecastCard(f);
-      },
+      title: 'Algae Growth Outlook',
+      loadingColor: AppColors.of(context).water,
+      onRetry: _retry,
+      builder: _forecastCard,
     );
   }
 
   // ------------------------------------------------------------------
-
-  Widget _loadingState() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpace.xxl),
-    child: Center(
-      child: SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.4,
-          color: AppColors.of(context).water,
-        ),
-      ),
-    ),
-  );
-
-  Widget _unavailableState(String reason) => PondErrorState(
-    title: 'Algae Growth Outlook',
-    message: reason,
-    onRetry: _retry,
-  );
 
   // ------------------------------------------------------------------
 
@@ -83,34 +54,11 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AdaptiveRow(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: AdaptiveRow(
-                  children: [
-                    Icon(
-                      Icons.grass_outlined,
-                      color: AppColors.of(context).water,
-                      size: 18,
-                    ),
-                    const SizedBox(width: AppSpace.sm),
-                    Expanded(
-                      child: Text(
-                        'Algae Growth Outlook',
-                        style: AppType.style(
-                          color: AppColors.of(context).text,
-                          fontWeight: FontWeight.bold,
-                          fontSize: AppType.body,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _pill(_urgencyLabel(days), accent),
-            ],
+          ForecastCardHeader(
+            icon: Icons.grass_outlined,
+            iconColor: AppColors.of(context).water,
+            title: 'Algae Growth Outlook',
+            trailing: _pill(_urgencyLabel(days), accent),
           ),
           const SizedBox(height: AppSpace.lg),
 
@@ -381,14 +329,9 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
 
   // ------------------------------------------------------------------
 
-  Widget _shell({required Widget child}) => OutcomeCardShell(child: child);
-
   Widget _pill(String text, Color color) => StatusChip(
-    status: color == AppColors.of(context).danger
-        ? PondStatus.danger
-        : color == AppColors.of(context).warning
-        ? PondStatus.warning
-        : PondStatus.healthy,
+    status:
+        pondStatusForColor(AppColors.of(context), color) ?? PondStatus.healthy,
     label: text,
   );
 
@@ -396,24 +339,14 @@ class _AlgaeStatusCardState extends ConsumerState<AlgaeStatusCard> {
     label: label,
     value: value,
     color: valueColor,
-    status: valueColor == AppColors.of(context).danger
-        ? PondStatus.danger
-        : valueColor == AppColors.of(context).warning
-        ? PondStatus.warning
-        : null,
+    status: pondStatusForColor(AppColors.of(context), valueColor),
   );
 
-  Color _urgencyColor(int? days) {
-    if (days == null) return AppColors.of(context).healthy;
-    if (days <= 0) return AppColors.of(context).danger;
-    if (days <= 3) return AppColors.of(context).warning;
-    return AppColors.of(context).water;
-  }
+  Color _urgencyColor(int? days) => forecastUrgencyColor(
+    AppColors.of(context),
+    days,
+    planned: AppColors.of(context).water,
+  );
 
-  String _urgencyLabel(int? days) {
-    if (days == null) return 'CLEAR';
-    if (days <= 0) return 'DUE NOW';
-    if (days <= 3) return 'SOON';
-    return 'PLANNED';
-  }
+  String _urgencyLabel(int? days) => forecastUrgencyLabel(days, clear: 'CLEAR');
 }
