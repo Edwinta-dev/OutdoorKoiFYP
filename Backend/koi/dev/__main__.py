@@ -32,7 +32,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 from koi.dev import seed as seed_data
 from koi.dev.replay import fast_forward
@@ -97,59 +97,67 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = _parser()
-    args = parser.parse_args(argv)
-    if args.seed_only and (args.profile != "supabase" or args.check):
-        parser.error("--seed-only needs --profile supabase and no --check (memory data ends with the process)")
-    now = datetime.now(timezone.utc)
-    seed = seed_data.shift(seed_data.load(args.seed), now)
-    tables, ponds = seed["tables"], [int(p) for p in seed["ponds"]]
-    outcomes: list[Outcome] = []
+class _Setup(NamedTuple):
+    """The settings and storage a dev stack runs on, and what removes its
+    seeded rows afterwards (None when the data ends with the process)."""
+    settings: Settings
+    storage: Storage
+    cleanup: Optional[Callable[[Stack], None]]
+
+
+def _memory_setup(tables: dict, ponds: list[int], now: datetime) -> _Setup:
+    return _Setup(dev_settings("memory"), memory_storage(tables, ponds, now), None)
+
+
+def _supabase_setup(args: argparse.Namespace, tables: dict, ponds: list[int],
+                    outcomes: list[Outcome]) -> _Setup | int:
+    """Seeds the local Supabase stack. An exit code instead of a setup
+    when the stack is unavailable, is not the local one, or lacks a migration."""
+    from koi.dev import local_db
+
+    try:
+        stack_info = local_db.discover(dev_settings("supabase"))
+        conn = local_db.connect(stack_info)
+    except local_db.LocalStackUnavailable as exc:
+        _write(f"SKIP local Supabase stack not available: {exc}")
+        return EXIT_SKIP if args.check else 1
+    except ValueError as exc:  # not the local stack: refused
+        _write(f"FAIL {exc}")
+        return 1
+    missing = local_db.missing_migrations(conn)
+    outcomes.append(Outcome("local database at every migration", not missing,
+                            f"not applied: {', '.join(missing)}; run `supabase db reset`" if missing
+                            else f"{len(list(local_db.MIGRATIONS.glob('*.sql')))} migrations applied"))
+    if missing:
+        _write(outcomes[-1].line())
+        return 1
+    settings = dev_settings("supabase", supabase_url=stack_info.api_url,
+                            supabase_servicerole_key=stack_info.service_role_key)
+    from koi.dev.frames import upload_seed_frames
+    from koi.storage import SupabaseStorage
+
+    storage: Storage = SupabaseStorage(settings)
+    frame_count = upload_seed_frames(tables, storage, settings)
+    counts = local_db.seed(conn, tables, ponds)
+    counts["camera frames uploaded"] = frame_count
+    outcomes.append(Outcome("seed written to the local database", True,
+                            ", ".join(f"{t} {n}" for t, n in counts.items())))
     cleanup: Optional[Callable[[Stack], None]] = None
+    if args.check and not args.keep:
+        def cleanup(stack: Stack) -> None:
+            local_db.remove(conn, tables, ponds, worker_holder=stack.worker.holder)
+            from koi.dev.frames import remove_seed_frames
 
-    if args.profile == "supabase":
-        from koi.dev import local_db
+            remove_seed_frames(tables, storage, settings)
+    return _Setup(settings, storage, cleanup)
 
-        try:
-            stack_info = local_db.discover(dev_settings("supabase"))
-            conn = local_db.connect(stack_info)
-        except local_db.LocalStackUnavailable as exc:
-            _write(f"SKIP local Supabase stack not available: {exc}")
-            return EXIT_SKIP if args.check else 1
-        except ValueError as exc:  # not the local stack: refused
-            _write(f"FAIL {exc}")
-            return 1
-        missing = local_db.missing_migrations(conn)
-        outcomes.append(Outcome("local database at every migration", not missing,
-                                f"not applied: {', '.join(missing)}; run `supabase db reset`" if missing
-                                else f"{len(list(local_db.MIGRATIONS.glob('*.sql')))} migrations applied"))
-        if missing:
-            _write(outcomes[-1].line())
-            return 1
-        settings = dev_settings("supabase", supabase_url=stack_info.api_url,
-                                supabase_servicerole_key=stack_info.service_role_key)
-        from koi.dev.frames import upload_seed_frames
-        from koi.storage import SupabaseStorage
 
-        storage: Storage = SupabaseStorage(settings)
-        frame_count = upload_seed_frames(tables, storage, settings)
-        counts = local_db.seed(conn, tables, ponds)
-        counts["camera frames uploaded"] = frame_count
-        outcomes.append(Outcome("seed written to the local database", True,
-                                ", ".join(f"{t} {n}" for t, n in counts.items())))
-        if args.check and not args.keep:
-            def cleanup(stack: Stack) -> None:
-                local_db.remove(conn, tables, ponds, worker_holder=stack.worker.holder)
-                from koi.dev.frames import remove_seed_frames
-
-                remove_seed_frames(tables, storage, settings)
-    else:
-        settings = dev_settings("memory")
-        storage = memory_storage(tables, ponds, now)
-
-    replays = fast_forward(storage, tables, settings, ponds)
-    for r in replays:
+def _fast_forward_outcomes(args: argparse.Namespace, storage: Storage, tables: dict, settings: Settings,
+                           ponds: list[int], now: datetime) -> list[Outcome]:
+    """Replays the seeded history into the storage, and with --check on the
+    supabase profile compares each pond's dashboard with the memory profile's."""
+    outcomes: list[Outcome] = []
+    for r in fast_forward(storage, tables, settings, ponds):
         detail = f"{r.polls_ok} polls, {r.events_applied} interventions, {r.polls_skipped} skipped"
         if r.skip_reasons:
             detail += f" ({'; '.join(r.skip_reasons)})"
@@ -163,6 +171,26 @@ def main(argv: Optional[list[str]] = None) -> int:
                                comparable(dashboard_body(mirror, pond, now, settings)))
             outcomes.append(Outcome(f"pond {pond} dashboard: local database equals memory profile", not diff,
                                     "; ".join(diff[:5])))
+    return outcomes
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.seed_only and (args.profile != "supabase" or args.check):
+        parser.error("--seed-only needs --profile supabase and no --check (memory data ends with the process)")
+    now = datetime.now(timezone.utc)
+    seed = seed_data.shift(seed_data.load(args.seed), now)
+    tables, ponds = seed["tables"], [int(p) for p in seed["ponds"]]
+    outcomes: list[Outcome] = []
+
+    setup = _supabase_setup(args, tables, ponds, outcomes) if args.profile == "supabase" else _memory_setup(
+        tables, ponds, now)
+    if isinstance(setup, int):
+        return setup
+    settings, storage, cleanup = setup
+
+    outcomes += _fast_forward_outcomes(args, storage, tables, settings, ponds, now)
 
     if args.seed_only:
         for outcome in outcomes:
