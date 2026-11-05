@@ -137,7 +137,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from koi import notifications
 from koi.logs import log_event, pond_context
@@ -172,7 +172,7 @@ from koi.models.sensor_inputs import (
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
-from koi.storage import StorageError, fail_soft
+from koi.storage import Storage, StorageError, fail_soft
 from koi.worker import retention
 
 LEASE_NAME = "poller"
@@ -347,25 +347,11 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         [profile_from_userdata_config(config_row)])
 
     # --- environmental context ----------------------------------
-    now_conditions = forecast_utils.current_conditions(payload)
-    rain_incoming, rain_intensity = forecast_utils.today_rain_context(payload)
-    outlook = (payload.get("nea_forecasts") or {}).get("outlook_4day", [])
-    forecast_days = forecast_utils.daily_environment_from_outlook(outlook)
-
-    # Live telemetry is the best estimate of conditions over the interval
-    # just elapsed; the forecast's first day fills anything telemetry
-    # doesn't carry (NEA telemetry has no humidity field of its own).
-    first_forecast = forecast_days[0] if forecast_days else {}
-    air_temp = first_not_none(
-        now_conditions.get("air_temp_c"), first_forecast.get("air_temp_c"), 30.0
-    )
-    humidity = first_not_none(
-        now_conditions.get("humidity_pct"), first_forecast.get("humidity_pct"), 80.0
-    )
-    wind_ms = first_not_none(
-        now_conditions.get("wind_ms"), first_forecast.get("wind_ms"), 2.0
-    )
-    rainfall_mm = now_conditions.get("rainfall_mm")
+    weather = _weather_context(payload)
+    now_conditions, rain_incoming, rain_intensity = weather.now, weather.rain_incoming, weather.rain_intensity
+    forecast_days, air_temp, humidity, wind_ms = (
+        weather.forecast_days, weather.air_temp, weather.humidity, weather.wind_ms)
+    rainfall_mm = weather.rainfall_mm
     # Rolling 24-hour station rain from the observation history (#24),
     # for the chemistry rain term (#27). Unreadable leaves it unknown.
     observed_rain = fail_soft(lambda: forecast_utils.observed_rain_24h(
@@ -381,26 +367,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         rain_mm_measured=float(rainfall_mm) if rainfall_mm is not None else None,
     )
 
-    # --- camera frames since this twin last looked ---------------
-    # Fetched unconditionally but cheap: the engine's own watermark
-    # discards anything it has already assimilated, so a sleeping camera
-    # costs one small query per cycle and changes nothing.
-    camera_samples = []
-    image_rows = None
-    try:
-        image_rows = storage.fetch_image_history(user_id, limit=50)
-        camera_samples = ae.parse_image_rows(image_rows)
-    except Exception as exc:  # noqa: BLE001 - camera is optional
-        log_event(log, "camera_history_unavailable", level=logging.WARNING, error=str(exc))
-
-    # --- nitrate for the algae nutrient term ---------------------
-    # Needs the twin, so it is resolved inside the locked section below.
-    feeding_rows = []
-    try:
-        feeding_rows = storage.fetch_recent_feeding_events(user_id, limit=30)
-    except Exception as exc:  # noqa: BLE001
-        log_event(log, "feeding_history_unavailable", level=logging.WARNING, error=str(exc))
-    avg_tan = WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
+    camera_samples, image_rows, avg_tan = _optional_history(storage, user_id)
 
     # --- logged interventions of the window, for reconciliation ----
     intervention_rows = _intervention_rows(registry, user_id, now)
@@ -477,43 +444,11 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
             sensor_warnings=sensor_warnings,
             observed_rain=observed_rain,
         )
-        outcome["sensor"] = {
-            "inputs": len(provenance),
-            "late_inputs": sum(1 for p in provenance if p["late"]),
-            "replayed_inputs": sum(1 for p in provenance if p.get("replayed")),
-            "rows": len(discovery.ledger),
-            "time_basis": sorted({p["time_basis"] for p in provenance}) or [TIME_BASIS_INGESTION],
-            "newest_input_at": provenance[-1]["time"] if provenance else None,
-            "channels": {c: {k: f[k] for k in ("reading_at", "time_basis", "age_minutes", "fresh")}
-                         for c, f in freshness.items()},
-        }
+        outcome["sensor"] = _sensor_summary(provenance, discovery.ledger, freshness)
 
-        # --- forward projections, so the cached rows carry a
-        #     "next predicted intervention" the UI can show without
-        #     recomputing on every dashboard open ---
-        evap_days = None
-        algae_days = None
-
-        evap_days = days_from_projection(
-            lambda: twin.evaporation.project_forward(
-                daily_environment=evaporation_environment(forecast_days, air_temp, humidity, wind_ms),
-                horizon_days=CACHED_HORIZON_DAYS),
-            "predicted_topup_days_from_now", "evaporation_projection_failed")
-
-        if twin.algae.has_measurement:
-            algae_days = days_from_projection(
-                lambda: twin.algae.project_forward(
-                    daily_environment=algae_environment(
-                        forecast_days, float(lux_now), float(model_temp), no3_series, no3_now),
-                    horizon_days=CACHED_HORIZON_DAYS),
-                "predicted_scrub_days_from_now", "algae_projection_failed")
-
-        # Re-assess with the projected day counts folded in, so the cached
-        # rows carry both current status and next predicted intervention.
-        evap_assessment = twin.evaporation.assess(
-            current_water_temp_c=water_temp, days_to_topup=evap_days
-        )
-        algae_assessment = twin.algae.assess(days_to_scrub=algae_days)
+        evap_assessment, algae_assessment = _cached_assessments(
+            twin, forecast_days, (air_temp, humidity, wind_ms), water_temp, float(lux_now), float(model_temp),
+            no3_series, no3_now)
 
         # Night-time hypoxia risk from the pond's fresh readings (its own
         # light sensor, not NEA's), the profile in force now and the
@@ -536,17 +471,125 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
     sensor = outcome["sensor"]
     _record_sensor_contacts(registry, user_id, commit.get("received") or [], now)
 
-    # --- push evaluations (outside the lock: storage I/O is slow and
-    #     the twin is already durably snapshotted by with_twin). The
-    #     evaporation and algae logs are optional: a failed write loses
-    #     one cached row, and the forecasts compute from the snapshot.
-    #     Each row carries the run's provenance (koi/provenance.py); the
-    #     forecast issue times come from the cache rows, unknown when
-    #     they cannot be read. ---
+    _push_poll_evaluations(registry, user_id, now, payload, chem, evap, algae, outcome, image_rows)
+
+    log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
+              evaporation=evap.status if evap else None, algae=algae.status if algae else None,
+              hypoxia=hypoxia.level, hypoxia_raised_by=hypoxia.raised_by,
+              new_camera_frames=outcome.get("assimilated_camera_frames", 0),
+              sensor_inputs=sensor["inputs"], late_sensor_inputs=sensor["late_inputs"],
+              events_applied=outcome["events"].get("applied", 0), events_replayed=outcome["events"].get("replayed"))
+    times = [c["reading_at"] for c in sensor["channels"].values() if c["reading_at"]]
+    return PollResult(max(times, key=parse_timestamp) if times else "", sensor, outcome["events"])
+
+
+class _Weather(NamedTuple):
+    """The live conditions of one poll: NEA's current readings, the rain
+    context, the outlook days, and the air temperature, humidity and wind
+    the evaporation model uses over the interval just elapsed."""
+    now: dict
+    rain_incoming: Any
+    rain_intensity: Any
+    forecast_days: list
+    air_temp: float
+    humidity: float
+    wind_ms: float
+    rainfall_mm: Optional[float]
+
+
+def _weather_context(payload: dict) -> _Weather:
+    now_conditions = forecast_utils.current_conditions(payload)
+    rain_incoming, rain_intensity = forecast_utils.today_rain_context(payload)
+    outlook = (payload.get("nea_forecasts") or {}).get("outlook_4day", [])
+    forecast_days = forecast_utils.daily_environment_from_outlook(outlook)
+
+    # Live telemetry is the best estimate of conditions over the interval
+    # just elapsed; the forecast's first day fills anything telemetry
+    # doesn't carry (NEA telemetry has no humidity field of its own).
+    first_forecast = forecast_days[0] if forecast_days else {}
+    air_temp = first_not_none(now_conditions.get("air_temp_c"), first_forecast.get("air_temp_c"), 30.0)
+    humidity = first_not_none(now_conditions.get("humidity_pct"), first_forecast.get("humidity_pct"), 80.0)
+    wind_ms = first_not_none(now_conditions.get("wind_ms"), first_forecast.get("wind_ms"), 2.0)
+    return _Weather(now_conditions, rain_incoming, rain_intensity, forecast_days, air_temp, humidity, wind_ms,
+                    now_conditions.get("rainfall_mm"))
+
+
+def _optional_history(storage: Storage, user_id: int) -> tuple[list, Optional[list], Optional[float]]:
+    """(camera samples, the image rows they came from, average daily TAN
+    from recent feedings). Both reads are optional: a failure is logged and
+    leaves that input empty. Fetched unconditionally but cheap: the
+    engine's own watermark discards anything it has already assimilated, so
+    a sleeping camera costs one small query per cycle and changes nothing."""
+    camera_samples: list = []
+    image_rows = None
+    try:
+        image_rows = storage.fetch_image_history(user_id, limit=50)
+        camera_samples = ae.parse_image_rows(image_rows)
+    except Exception as exc:  # noqa: BLE001 - camera is optional
+        log_event(log, "camera_history_unavailable", level=logging.WARNING, error=str(exc))
+
+    # Nitrate for the algae nutrient term needs the twin, so it is resolved
+    # inside the locked section of the caller.
+    feeding_rows: list = []
+    try:
+        feeding_rows = storage.fetch_recent_feeding_events(user_id, limit=30)
+    except Exception as exc:  # noqa: BLE001
+        log_event(log, "feeding_history_unavailable", level=logging.WARNING, error=str(exc))
+    return camera_samples, image_rows, WaterChemistryEngine.estimate_avg_daily_tan_mg(feeding_rows)
+
+
+def _sensor_summary(provenance: list, ledger: list, freshness: dict) -> dict:
+    """The cycle report's "sensor": what was ingested and each channel's
+    newest reading."""
+    return {
+        "inputs": len(provenance),
+        "late_inputs": sum(1 for p in provenance if p["late"]),
+        "replayed_inputs": sum(1 for p in provenance if p.get("replayed")),
+        "rows": len(ledger),
+        "time_basis": sorted({p["time_basis"] for p in provenance}) or [TIME_BASIS_INGESTION],
+        "newest_input_at": provenance[-1]["time"] if provenance else None,
+        "channels": {c: {k: f[k] for k in ("reading_at", "time_basis", "age_minutes", "fresh")}
+                     for c, f in freshness.items()},
+    }
+
+
+def _cached_assessments(twin, forecast_days: list, live: tuple, water_temp, lux_now: float, model_temp: float,
+                        no3_series: list, no3_now):
+    """The evaporation and algae assessments with the projected days to
+    the next intervention folded in, so the cached rows carry both the
+    current status and the next predicted intervention the UI can show
+    without recomputing on every dashboard open."""
+    air_temp, humidity, wind_ms = live
+    evap_days = days_from_projection(
+        lambda: twin.evaporation.project_forward(
+            daily_environment=evaporation_environment(forecast_days, air_temp, humidity, wind_ms),
+            horizon_days=CACHED_HORIZON_DAYS),
+        "predicted_topup_days_from_now", "evaporation_projection_failed")
+    algae_days = None
+    if twin.algae.has_measurement:
+        algae_days = days_from_projection(
+            lambda: twin.algae.project_forward(
+                daily_environment=algae_environment(forecast_days, lux_now, model_temp, no3_series, no3_now),
+                horizon_days=CACHED_HORIZON_DAYS),
+            "predicted_scrub_days_from_now", "algae_projection_failed")
+    return (twin.evaporation.assess(current_water_temp_c=water_temp, days_to_topup=evap_days),
+            twin.algae.assess(days_to_scrub=algae_days))
+
+
+def _push_poll_evaluations(registry: EngineRegistry, user_id: int, now: datetime, payload: dict,
+                           chem, evap, algae, outcome: dict, image_rows) -> None:
+    """Pushes the cycle's evaluations and notifications, outside the twin
+    lock (storage I/O is slow and the twin is already durably snapshotted
+    by with_twin). The evaporation and algae logs are optional: a failed
+    write loses one cached row, and the forecasts compute from the
+    snapshot. Each row carries the run's provenance (koi/provenance.py);
+    the forecast issue times come from the cache rows, unknown when they
+    cannot be read."""
+    storage = registry.storage
     run = RunProvenance(
         run="poll", input_cutoff=outcome["input_cutoff"],
         forecasts=forecast_provenance(payload, fail_soft(lambda: storage.fetch_dashboard_sources(user_id), None)),
-        sensor_groups=sensor["inputs"], events=outcome["events"].get("applied", 0),
+        sensor_groups=outcome["sensor"]["inputs"], events=outcome["events"].get("applied", 0),
         camera_frames=outcome.get("assimilated_camera_frames", 0))
     # Read before this cycle's rows are pushed: the outbox's "turned red"
     # compares against them.
@@ -562,16 +605,7 @@ def _poll_user(registry: EngineRegistry, user_id: int, config_row: dict,
         storage, user_id, now,
         current={"chemistry": chem.to_dict(), "evaporation": evap.to_dict() if evap else None,
                  "algae": algae.to_dict() if algae else None},
-        previous=previous, image_rows=image_rows, default_sensor_interval=cadence)
-
-    log_event(log, "pond_polled", chemistry=f"{chem.status}/{chem.category}",
-              evaporation=evap.status if evap else None, algae=algae.status if algae else None,
-              hypoxia=hypoxia.level, hypoxia_raised_by=hypoxia.raised_by,
-              new_camera_frames=outcome.get("assimilated_camera_frames", 0),
-              sensor_inputs=sensor["inputs"], late_sensor_inputs=sensor["late_inputs"],
-              events_applied=outcome["events"].get("applied", 0), events_replayed=outcome["events"].get("replayed"))
-    times = [c["reading_at"] for c in sensor["channels"].values() if c["reading_at"]]
-    return PollResult(max(times, key=parse_timestamp) if times else "", sensor, outcome["events"])
+        previous=previous, image_rows=image_rows, default_sensor_interval=registry.sensor_ingest.cadence)
 
 
 def _record_sensor_contacts(registry: EngineRegistry, user_id: int, received: list, now: datetime) -> None:
