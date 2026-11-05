@@ -71,7 +71,8 @@ Section 2b has the results. Still open:
 ## 2a. Owner-reported firmware state
 
 Reported by the owner on 2026-10-01 and since confirmed: the owner's
-newest sensor sketch, committed as `Embedded/full_sketch/full_sketch.ino`,
+newest sensor sketch, committed as `Embedded/full_sketch/full_sketch.ino` (retired to
+`archive/pre-refactor/Embedded/full_sketch/` under issue #142),
 sends `userID` 455 with every `SensorData` reading, and every live row
 carries it (section 2b). `Embedded/sensor_node/sensor_node.ino` still shows
 the older payload without it.

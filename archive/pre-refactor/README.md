@@ -82,6 +82,7 @@ Moved into the new layout rather than archived (they had no refactored copy):
 | `x_working_refactor/Embedded/SensorNode_networked_PROPOSAL.ino` | `Embedded/sensor_node/sensor_node.ino` |
 | `x_working_refactor/Backend/DigitalTwin/*` | `Backend/DigitalTwin/*` |
 | `x_working_refactor/MobileUI/mobile_app/{lib,test,pubspec.yaml,pubspec.lock,analysis_options.yaml}` | `MobileUI/mobile_app/` |
+| `Embedded/full_sketch/` | retired (issue #142): superseded by `Embedded/sensor_node/`; it was never built by `tools/check.py` and still sent v1 payloads |
 
 `Backend/DigitalTwin/requirements.txt`, `Backend/DigitalTwin/README_INTEGRATION.md`,
 `MobileUI/mobile_app/README.md` and the Flutter platform folders stayed where they were.

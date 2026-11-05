@@ -162,7 +162,6 @@ Backend/koi/settings.py             Every environment value, typed (pydantic-set
 Backend/tests/                      Backend tests, mirroring the package
 Embedded/sensor_node/               ESP32 sensor node (uploads to Supabase); service mode with -DKOI_SERVICE_MODE
 Embedded/camera_node/               ESP32-CAM capture and upload
-Embedded/full_sketch/               Earlier single-file sensor sketch (see issue #142 for its status)
 Embedded/bench_tests/               Single-purpose pH bench sketches
 Embedded/libraries/koi_sensing/     Shared sensor maths (Arduino library)
 Embedded/tests/                     Host-side tests for koi_sensing

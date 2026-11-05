@@ -156,7 +156,8 @@ sensor node's direct insert, so the two go in separately:
 2. In the SQL editor: `select public.issue_device_token(<pond id>);` and put
    the token in the node's `secrets.h` as `SENSOR_DEVICE_TOKEN`. Flash the
    node and check new `SensorData` rows arrive and the serial log shows
-   `ingest_readings -> n stored` (`full_sketch`: `Supabase: n of m stored`).
+   `ingest_readings -> n stored` (the retired `full_sketch`, now under
+   `archive/pre-refactor/Embedded/`, logged `Supabase: n of m stored`).
 3. Restore the file (`git checkout -- supabase/migrations`), dry-run (only
    `0026`), push. No backend code changed and the API, worker and camera
    service use the secret key, so a redeploy is optional; check the
