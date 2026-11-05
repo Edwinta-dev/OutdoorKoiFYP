@@ -12,8 +12,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 
 from koi.models.event_ledger import EventLedger
-from koi.models.sensor_inputs import SensorInput, parse_timestamp
+from koi.models.sensor_inputs import SensorInput
 from koi.models.tds_steps import DEFAULT_BASELINE_READINGS, detect_steps, detection_floor
+from koi.values import parse_timestamp
 
 
 @dataclass(frozen=True)

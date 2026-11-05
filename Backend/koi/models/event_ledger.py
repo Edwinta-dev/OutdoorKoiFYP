@@ -88,7 +88,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from koi.models.engine import EventKind, PondEvent
-from koi.models.sensor_inputs import parse_timestamp
+from koi.values import parse_timestamp
 
 LEDGER_VERSION = 1
 

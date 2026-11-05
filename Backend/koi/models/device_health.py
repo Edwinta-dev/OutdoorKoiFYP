@@ -46,7 +46,8 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from koi.models.engine import _STALE_RUN_LENGTH
-from koi.models.sensor_inputs import CHANNELS, TIME_BASIS_INGESTION, TIME_BASIS_SAMPLE, parse_timestamp
+from koi.models.sensor_inputs import CHANNELS, TIME_BASIS_INGESTION, TIME_BASIS_SAMPLE
+from koi.values import parse_timestamp
 
 SENSOR = "sensor"
 CAMERA = "camera"

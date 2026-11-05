@@ -13,7 +13,7 @@ import pytest
 from koi.dev import seed as seed_data
 from koi.models.engine import EventKind
 from koi.storage import MemoryStorage
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 
 BACKEND = Path(__file__).resolve().parents[2]
 SGT = timezone(timedelta(hours=8))

@@ -83,7 +83,7 @@ from koi.models.profile import PROFILE_FIELDS, ProfileHistory
 from koi.provenance import ALGAE, CHEMISTRY, EVAPORATION, RunProvenance, forecast_provenance, model_version
 from koi.registry import EngineRegistry
 from koi.storage import DuplicateProfileError, Storage, fail_soft
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 from koi.weather.history import local_day_window
 from koi.worker import poller
 

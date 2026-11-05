@@ -76,7 +76,7 @@ from koi.dev import seed as seed_data
 from koi.models import evaporation_engine as ev
 from koi.models.profile import ProfileHistory, profile_from_row, profile_from_userdata_config
 from koi.storage import MemoryStorage
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 from koi.worker import poller
 
 ROOT = Path(__file__).resolve().parents[3]

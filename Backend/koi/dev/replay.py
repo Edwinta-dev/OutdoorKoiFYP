@@ -33,7 +33,7 @@ from koi.models.event_ledger import derived_event_id
 from koi.registry import EngineRegistry
 from koi.settings import Settings
 from koi.storage import Storage
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 from koi.worker import poller
 
 log = logging.getLogger("koi.dev")

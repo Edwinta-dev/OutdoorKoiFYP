@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from koi import __version__
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 

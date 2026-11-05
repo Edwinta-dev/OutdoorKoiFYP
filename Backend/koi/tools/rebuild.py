@@ -74,7 +74,8 @@ from koi.models.sensor_inputs import SENSOR_TYPES
 from koi.registry import EngineRegistry
 from koi.settings import Settings, get_settings
 from koi.storage import StaleSnapshotError, Storage, StorageError, build_storage
-from koi.storage.base import INTERVENTION_COLUMNS, parse_timestamp
+from koi.storage.base import INTERVENTION_COLUMNS
+from koi.values import parse_timestamp
 from koi.weather.history import local_day_window
 from koi.worker import poller
 

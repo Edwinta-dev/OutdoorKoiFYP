@@ -25,7 +25,8 @@ from typing import Callable, Iterable, Optional
 
 from koi.logs import log_event
 from koi.settings import Settings
-from koi.storage.base import Storage, StorageError, parse_timestamp
+from koi.storage.base import Storage, StorageError
+from koi.values import parse_timestamp
 from koi.weather import cache, nea
 from koi.weather.history import local_day_window
 

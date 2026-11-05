@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from jsonschema import validate
-from tests.storage.test_supabase_storage import FakeClient
 
 from conftest import USER, add_upload, api_client, make_settings, make_storage
 from koi.api import create_app, schemas
@@ -12,6 +11,7 @@ from koi.api.responses import TdsPromptAnswer, TdsPromptList
 from koi.models.pond_twin import PondTwin
 from koi.storage import SupabaseStorage
 from koi.worker.poller import _poll_user
+from tests.storage.test_supabase_storage import FakeClient
 
 
 def schema_for(model, document=None):

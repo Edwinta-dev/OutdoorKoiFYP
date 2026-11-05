@@ -73,8 +73,8 @@ from typing import Any, Optional, Protocol
 from koi.logs import log_event
 from koi.models import device_health, ladder
 from koi.models.local_time import DEFAULT_POND_TIME_ZONE, local_date, zone
-from koi.models.sensor_inputs import parse_timestamp
 from koi.storage.base import fail_soft
+from koi.values import parse_timestamp
 from koi.weather.history import local_day_window
 
 log = logging.getLogger(__name__)

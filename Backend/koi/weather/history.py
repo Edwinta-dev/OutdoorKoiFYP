@@ -28,8 +28,9 @@ from datetime import date, datetime, time, timedelta
 from typing import Iterable, Optional
 
 from koi.models.local_time import DEFAULT_POND_TIME_ZONE, zone
+from koi.values import parse_timestamp
 from koi.weather.cache import available_at
-from koi.weather.nea import instant, iso
+from koi.weather.nea import iso
 
 # Singapore daylight hours in which NEA publishes UV readings; outside
 # them a missing reading is expected, inside them it is missing data.
@@ -38,7 +39,7 @@ UV_DAY_END_HOUR = 19
 
 
 def _t(value: object) -> datetime:
-    return instant(value)
+    return parse_timestamp(value)
 
 
 def select_forecast_as_of(issuances: Iterable[dict], as_of: datetime,

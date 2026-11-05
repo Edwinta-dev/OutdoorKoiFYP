@@ -17,7 +17,7 @@ from datetime import date, datetime
 from typing import Any, Iterable, Optional
 
 from koi.models.local_time import local_date
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 
 # Detailed table and headline columns of each domain.
 DOMAIN_TABLES = {

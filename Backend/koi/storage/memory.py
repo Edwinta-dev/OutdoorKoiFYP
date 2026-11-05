@@ -47,7 +47,6 @@ from koi.storage.base import (
     StaleSnapshotError,
     StorageError,
     daily_stats,
-    parse_timestamp,
     pond_config_from_userdata_row,
     with_provenance,
 )
@@ -58,6 +57,7 @@ from koi.storage.evaluation_daily import (
     select_batch,
     summarize_group,
 )
+from koi.values import parse_timestamp
 from koi.weather import cache as weather_cache
 from koi.weather import history as weather_history
 

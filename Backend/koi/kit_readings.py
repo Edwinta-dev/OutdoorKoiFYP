@@ -18,8 +18,8 @@ from koi.models.evaporation_engine import pending_calibration
 from koi.models.pond_twin import PondTwin
 from koi.settings import Settings
 from koi.storage import Storage
-from koi.storage.base import parse_timestamp
 from koi.tools.rebuild import rebuild
+from koi.values import parse_timestamp
 
 ANALYTES = ("ammonia_mg_l", "nitrite_mg_l", "nitrate_mg_l", "ph", "kh_dkh")
 MODEL_FIELDS = {"ammonia_mg_l": "tan_ppm", "nitrite_mg_l": "no2_ppm", "nitrate_mg_l": "no3_ppm"}

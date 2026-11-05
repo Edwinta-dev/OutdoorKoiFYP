@@ -21,7 +21,7 @@ from typing import Any, Optional
 from koi.metrics import Metrics
 from koi.settings import Settings
 from koi.storage import Storage, StorageError
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 from koi.worker.poller import LEASE_NAME, lease_seconds
 
 

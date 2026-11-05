@@ -24,10 +24,11 @@ group by device, boot and cycle; legacy rows group by effective time.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Optional
+
+from koi.values import finite_number, parse_timestamp
 
 TIME_BASIS_INGESTION = "ingestion"
 TIME_BASIS_SAMPLE = "sample"
@@ -71,13 +72,6 @@ UNUSABLE = "unusable"
 OUT_OF_WINDOW = "out_of_window"
 
 
-def parse_timestamp(value: object) -> datetime:
-    """A timestamp column value (ISO string or datetime) as an aware
-    datetime; one without a zone is taken as UTC."""
-    dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
-
-
 def effective_sample_time(row: dict) -> tuple[datetime, str]:
     """(time, time_basis) of one SensorData row: its sample time when it
     carries one, else its insert time, labelled as ingestion time."""
@@ -92,12 +86,6 @@ def _group_key(row: dict) -> tuple:
     if device_id is not None and boot_id is not None and cycle_seq is not None:
         return ("cycle", str(device_id), str(boot_id), int(cycle_seq))
     return ("time", effective_sample_time(row)[0])
-
-
-def _number(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value) if math.isfinite(value) else None
 
 
 @dataclass(frozen=True)
@@ -171,7 +159,7 @@ def group_rows(rows: list[dict]) -> Discovery:
         # Highest id last, so it wins a channel that appears twice.
         for r in members:
             channel = _CHANNEL_OF[r["sensor_type"]]
-            value = _number(r.get("value"))
+            value = finite_number(r.get("value"))
             if value is None:
                 dispositions[int(r["id"])] = UNUSABLE
                 continue

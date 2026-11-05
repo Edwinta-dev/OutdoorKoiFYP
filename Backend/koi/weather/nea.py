@@ -40,6 +40,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from koi.models.local_time import zone
+from koi.values import finite_number
 
 SOURCE = "nea_v2"
 SINGAPORE = "Asia/Singapore"
@@ -259,24 +260,10 @@ def iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
-def instant(value: object) -> datetime:
-    """A stored timestamp (ISO string or datetime) as an aware datetime; a
-    value without a zone is UTC, as koi.storage.base.parse_timestamp reads
-    database values. (Kept here so koi.weather does not import storage.)"""
-    dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
-
-
 def normalise_unit(unit: Any) -> Optional[str]:
     if not isinstance(unit, str):
         return None
     return _UNITS.get(unit.strip().lower())
-
-
-def _number(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
 
 
 def rainfall_semantics(reading_type: Any) -> Optional[tuple[str, timedelta]]:
@@ -320,8 +307,8 @@ def parse_station_readings(product: str, pages: list[dict], fetched_at: datetime
             seen_stations.add(sid)
             location = station.get("location") or {}
             out.stations.append({"station_id": sid, "station_name": station.get("name"),
-                                 "latitude": _number(location.get("latitude")),
-                                 "longitude": _number(location.get("longitude")), "tag": spec.tag})
+                                 "latitude": finite_number(location.get("latitude")),
+                                 "longitude": finite_number(location.get("longitude")), "tag": spec.tag})
         for reading in data.get("readings") or []:
             entries = reading.get("data") if isinstance(reading, dict) else None
             ts = parse_time(reading.get("timestamp")) if isinstance(reading, dict) else None
@@ -333,7 +320,7 @@ def parse_station_readings(product: str, pages: list[dict], fetched_at: datetime
                 if unit != spec.unit:
                     out.reject(f"unit {data.get('readingUnit')!r} is not {spec.unit}")
                     continue
-                value = _number(entry.get("value")) if isinstance(entry, dict) else None
+                value = finite_number(entry.get("value")) if isinstance(entry, dict) else None
                 reading_station = entry.get("stationId") if isinstance(entry, dict) else None
                 if value is None or not reading_station:
                     out.reject("reading without a numeric value and station")
@@ -356,7 +343,7 @@ def parse_uv(pages: list[dict], fetched_at: datetime) -> Parsed:
             for item in (record.get("index") if isinstance(record, dict) else None) or []:
                 out.records += 1
                 hour = parse_time(item.get("hour")) if isinstance(item, dict) else None
-                value = _number(item.get("value")) if isinstance(item, dict) else None
+                value = finite_number(item.get("value")) if isinstance(item, dict) else None
                 if hour is None or value is None:
                     out.reject("UV entry without an hour and a numeric value")
                     continue
@@ -387,8 +374,8 @@ def parse_two_hour(pages: list[dict], fetched_at: datetime) -> Parsed:
             if isinstance(area, dict) and area.get("name"):
                 loc = area.get("label_location") or {}
                 out.stations.append({"station_id": None, "station_name": area["name"],
-                                     "latitude": _number(loc.get("latitude")),
-                                     "longitude": _number(loc.get("longitude")), "tag": AREA_TAG})
+                                     "latitude": finite_number(loc.get("latitude")),
+                                     "longitude": finite_number(loc.get("longitude")), "tag": AREA_TAG})
         for item in data.get("items") or []:
             if not isinstance(item, dict):
                 continue

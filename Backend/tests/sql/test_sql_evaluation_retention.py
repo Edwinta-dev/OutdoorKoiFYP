@@ -20,8 +20,8 @@ from urllib.parse import urlparse
 
 import pytest
 
-from koi.storage.base import parse_timestamp
 from koi.storage.evaluation_daily import DOMAIN_TABLES, merge_summary, summarize_group
+from koi.values import parse_timestamp
 
 psycopg = pytest.importorskip("psycopg")
 from psycopg import errors  # noqa: E402

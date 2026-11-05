@@ -13,7 +13,7 @@ from koi.dev.__main__ import memory_storage
 from koi.dev.replay import ReplayStorage, fast_forward
 from koi.models.engine import SensorChannel
 from koi.models.pond_twin import PondTwin
-from koi.storage.base import parse_timestamp
+from koi.values import parse_timestamp
 
 NOW = datetime(2026, 10, 4, 7, 42, 13, tzinfo=timezone.utc)
 

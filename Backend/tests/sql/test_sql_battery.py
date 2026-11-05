@@ -32,8 +32,8 @@ from test_sql_sensor_payload_v2 import (  # noqa: E402
 )
 
 from koi.models import device_health  # noqa: E402
-from koi.models.sensor_inputs import parse_timestamp  # noqa: E402
 from koi.storage.memory import MemoryStorage  # noqa: E402
+from koi.values import parse_timestamp  # noqa: E402
 
 POND_A, POND_B = 9421, 9422
 LOW = device_health.FLAG_BATTERY_LOW

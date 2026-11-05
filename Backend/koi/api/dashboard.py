@@ -32,14 +32,13 @@ no row changed.
 from __future__ import annotations
 
 import json
-import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from koi.api import responses as r
 from koi.models.hypoxia import HypoxiaThresholds, algae_is_high, assess_hypoxia
 from koi.models.local_time import zone
-from koi.storage.base import parse_timestamp
+from koi.values import finite_number, parse_timestamp
 from koi.weather.nea import SINGAPORE
 from koi.weather.nea import parse_time as _parse_nea_time
 
@@ -77,12 +76,6 @@ def _json(value: Any) -> Any:
     return value
 
 
-def _number(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value) if math.isfinite(value) else None
-
-
 def _db_time(value: Any) -> Optional[datetime]:
     """A timestamptz column value in UTC; None when absent or unreadable.
     Every time in the response is UTC, whatever offset the source used
@@ -106,7 +99,7 @@ def _range(block: Any, *path: str) -> tuple[Optional[float], Optional[float]]:
         block = block.get(key) if isinstance(block, dict) else None
     if not isinstance(block, dict):
         return None, None
-    return _number(block.get("low")), _number(block.get("high"))
+    return finite_number(block.get("low")), finite_number(block.get("high"))
 
 
 def _forecast_text(value: Any) -> tuple[Optional[str], Optional[str]]:
@@ -146,7 +139,7 @@ def _reading(channel: str, rows: list[dict], now: datetime) -> r.SensorReading:
                 sample_time=sampled, sample_time_basis="sample" if sampled is not None else "unknown",
                 flags=flags if isinstance(flags, int) and not isinstance(flags, bool) else None,
                 fresh_until=fresh_until)
-    value = _number(row.get("value"))
+    value = finite_number(row.get("value"))
     if value is None or (channel == "lux" and value < 0):
         note = ("The light sensor did not answer (the node stores -1)." if value is not None
                 else "The stored value is not a number.")
@@ -190,7 +183,7 @@ def _weather_value(metric: str, station: Optional[str], telemetry: list[dict], n
                 and isinstance(_json(t.get("data")), dict) and key in _json(t.get("data"))), None)
     if row is None:
         return r.WeatherValue.model_validate({**base, **missing, "note": f"No cached reading from station {station}."})
-    value = _number(_json(row["data"]).get(key))
+    value = finite_number(_json(row["data"]).get(key))
     times = _json(row.get("source_times"))
     observed = parse_time(times.get(key)) if isinstance(times, dict) else None
     ingested = _db_time(row.get("updated_at"))
@@ -217,7 +210,7 @@ def _uv_now(forecasts: list[dict], now: datetime) -> r.UvIndex:
         if hour is None or hour != hour_start:
             continue
         data = _json(row.get("data"))
-        value = _number(data.get("uv")) if isinstance(data, dict) else None
+        value = finite_number(data.get("uv")) if isinstance(data, dict) else None
         if value is None:
             break
         return r.UvIndex(status="ok", value=value, hour_start=hour_start.astimezone(timezone.utc), daylight=daylight,

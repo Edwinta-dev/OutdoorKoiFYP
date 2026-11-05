@@ -11,7 +11,7 @@ import pytest
 
 from conftest import USER, add_upload, api_client, make_settings, make_storage
 from koi.api import create_app, schemas
-from koi.models.sensor_inputs import parse_timestamp
+from koi.values import parse_timestamp
 from koi.worker import poller
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)

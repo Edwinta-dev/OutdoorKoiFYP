@@ -26,8 +26,8 @@ from koi.models.pond_twin import PondTwin
 from koi.models.profile import ProfileHistory, profile_from_userdata_config
 from koi.registry import EngineRegistry
 from koi.storage import MemoryStorage
-from koi.storage.base import parse_timestamp
 from koi.tools import rebuild as rb
+from koi.values import parse_timestamp
 from koi.weather import job
 from koi.weather.nea import SINGAPORE
 from koi.worker import poller

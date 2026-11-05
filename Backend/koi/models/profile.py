@@ -18,10 +18,11 @@ fields fall back to PondConfig's defaults.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from koi.models.engine import PondConfig
+from koi.values import parse_timestamp
 
 # The fields a profile row carries besides its pond, time and bookkeeping.
 PROFILE_FIELDS = ("volume_l", "depth_m", "biomass_g", "fish_type", "fish_count", "tap_tds_ppm",
@@ -97,13 +98,6 @@ class ProfileHistory:
         return self.profiles[-1]
 
 
-def _instant(value: object) -> datetime:
-    """A timestamptz value (ISO text or datetime) as an aware datetime;
-    no offset means UTC."""
-    dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
-
-
 def profile_from_row(row: dict) -> PondProfile:
     """A pond_profile row (as storage returns it) as a PondProfile."""
     def num(name: str) -> Optional[float]:
@@ -111,7 +105,7 @@ def profile_from_row(row: dict) -> PondProfile:
         return float(value) if value is not None else None
 
     return PondProfile(
-        effective_from=_instant(row["effective_from"]),
+        effective_from=parse_timestamp(row["effective_from"]),
         volume_l=float(row["volume_l"]),
         biomass_g=float(row["biomass_g"]),
         depth_m=num("depth_m"),

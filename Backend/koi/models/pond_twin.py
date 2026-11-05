@@ -73,8 +73,9 @@ from koi.models import event_ledger as el
 from koi.models.engine import EventKind, PondConfig, PondEvent, RawSample, WaterChemistryEngine, salt_tds_step
 from koi.models.local_time import as_aware, local_date
 from koi.models.profile import PondProfile, ProfileHistory
-from koi.models.sensor_inputs import SensorInput, merge_inputs, parse_timestamp
+from koi.models.sensor_inputs import SensorInput, merge_inputs
 from koi.models.tds_prompts import TdsPrompts
+from koi.values import parse_timestamp
 
 log = logging.getLogger(__name__)
 

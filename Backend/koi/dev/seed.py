@@ -24,7 +24,8 @@ from typing import Any, Optional
 
 from koi.models.engine import EventKind, PondEvent
 from koi.models.local_time import zone
-from koi.storage.base import IMAGE_COLUMNS, INTERVENTION_COLUMNS, parse_timestamp
+from koi.storage.base import IMAGE_COLUMNS, INTERVENTION_COLUMNS
+from koi.values import parse_timestamp
 from koi.weather.nea import SINGAPORE
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "demo_pond" / "seed.json"

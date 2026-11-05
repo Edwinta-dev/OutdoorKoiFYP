@@ -25,20 +25,21 @@ from datetime import datetime
 from typing import Optional
 
 from koi.models.local_time import zone
-from koi.weather.nea import OBSERVATION_PRODUCTS, REPORTING_INTERVAL, SINGAPORE, Parsed, instant, iso
+from koi.values import parse_timestamp
+from koi.weather.nea import OBSERVATION_PRODUCTS, REPORTING_INTERVAL, SINGAPORE, Parsed, iso
 
 _WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 
 
 def _sg(value: str) -> datetime:
-    return instant(value).astimezone(zone(SINGAPORE))
+    return parse_timestamp(value).astimezone(zone(SINGAPORE))
 
 
 def available_at(issuance: dict) -> str:
     """The issuance's provider time (latest of issued and revised), else
     its fetch time; the same rule as weather_forecast_issuance.available_at."""
-    times = [instant(issuance[k]) for k in ("issued_at", "source_updated_at") if issuance.get(k)]
-    return iso(max(times)) if times else iso(instant(issuance["fetched_at"]))
+    times = [parse_timestamp(issuance[k]) for k in ("issued_at", "source_updated_at") if issuance.get(k)]
+    return iso(max(times)) if times else iso(parse_timestamp(issuance["fetched_at"]))
 
 
 def telemetry_candidates(parsed: Parsed) -> list[dict]:
@@ -51,10 +52,10 @@ def telemetry_candidates(parsed: Parsed) -> list[dict]:
         if obs["semantics"] == "cumulative_total":
             continue
         current = latest.get(obs["station_id"])
-        if current is None or instant(obs["observed_to"]) > instant(current["observed_to"]):
+        if current is None or parse_timestamp(obs["observed_to"]) > parse_timestamp(current["observed_to"]):
             latest[obs["station_id"]] = obs
     return [{"station_id": sid, "metric": spec.cache_key, "value": obs["value"], "observed_at": obs["observed_to"],
-             "valid_until": iso(instant(obs["observed_to"]) + REPORTING_INTERVAL)}
+             "valid_until": iso(parse_timestamp(obs["observed_to"]) + REPORTING_INTERVAL)}
             for sid, obs in sorted(latest.items())]
 
 
@@ -65,7 +66,7 @@ def uv_candidates(parsed: Parsed) -> list[dict]:
         hour = _sg(obs["observed_to"])
         slot = hour.strftime("%H:00")
         current = by_slot.get(slot)
-        if current is None or instant(obs["observed_to"]) > instant(current["source_time"]):
+        if current is None or parse_timestamp(obs["observed_to"]) > parse_timestamp(current["source_time"]):
             by_slot[slot] = {"forecast_type": "uv", "slot_id": slot, "data": {"uv": obs["value"]},
                              "valid_period": {"hour": hour.isoformat()}, "source_time": obs["observed_to"]}
     return [by_slot[k] for k in sorted(by_slot)]
@@ -75,8 +76,8 @@ def _latest_issuance(rows: list[dict]) -> list[dict]:
     """The rows of the newest issuance among rows (by available_at)."""
     if not rows:
         return []
-    newest = max(instant(available_at(r)) for r in rows)
-    return [r for r in rows if instant(available_at(r)) == newest]
+    newest = max(parse_timestamp(available_at(r)) for r in rows)
+    return [r for r in rows if parse_timestamp(available_at(r)) == newest]
 
 
 def _window(row: dict) -> dict:
@@ -103,7 +104,7 @@ def forecast_candidates(parsed: Parsed, fetched_at: datetime) -> list[dict]:
         regions = sorted({r["slot_id"] for r in latest if r["slot_id"] != "GENERAL"})
         for region in regions:
             periods = sorted((r for r in latest if r["slot_id"] == region),
-                             key=lambda r: instant(r["valid_from"]))
+                             key=lambda r: parse_timestamp(r["valid_from"]))
             chosen = _period_in_force(periods, fetched_at)
             out.append({"forecast_type": "24hr", "slot_id": region, "data": chosen["payload"],
                         "valid_period": _window(chosen), "source_time": available_at(chosen)})
@@ -119,9 +120,9 @@ def forecast_candidates(parsed: Parsed, fetched_at: datetime) -> list[dict]:
 def _period_in_force(periods: list[dict], at: datetime) -> dict:
     """The period containing at, else the next one to start, else the last."""
     for r in periods:
-        if instant(r["valid_from"]) <= at < instant(r["valid_to"]):
+        if parse_timestamp(r["valid_from"]) <= at < parse_timestamp(r["valid_to"]):
             return r
-    upcoming = [r for r in periods if instant(r["valid_from"]) > at]
+    upcoming = [r for r in periods if parse_timestamp(r["valid_from"]) > at]
     return upcoming[0] if upcoming else periods[-1]
 
 
@@ -130,7 +131,7 @@ def _period_in_force(periods: list[dict], at: datetime) -> dict:
 # ---------------------------------------------------------------------
 def apply_telemetry_candidate(row: Optional[dict], cand: dict, now: str) -> Optional[dict]:
     """The weather_telemetry row after cand, or None to leave it as is."""
-    observed = instant(cand["observed_at"])
+    observed = parse_timestamp(cand["observed_at"])
     if row is None:
         return {"station_id": cand["station_id"], "metric_type": "realtime_sensor",
                 "data": {cand["metric"]: cand["value"]}, "valid_start": cand["observed_at"],
@@ -138,14 +139,14 @@ def apply_telemetry_candidate(row: Optional[dict], cand: dict, now: str) -> Opti
                 "source_times": {cand["metric"]: cand["observed_at"]}}
     times = row.get("source_times")
     prev = (times or {}).get(cand["metric"])
-    if prev is not None and observed <= instant(prev):
+    if prev is not None and observed <= parse_timestamp(prev):
         return None
-    if times is None and observed < instant(row["valid_start"]):
+    if times is None and observed < parse_timestamp(row["valid_start"]):
         return None
     new_times = {**(times or {}), cand["metric"]: cand["observed_at"]}
-    valid_end = max(instant(row["valid_end"]), instant(cand["valid_until"]))
+    valid_end = max(parse_timestamp(row["valid_end"]), parse_timestamp(cand["valid_until"]))
     return {**row, "data": {**row["data"], cand["metric"]: cand["value"]}, "source_times": new_times,
-            "valid_start": iso(min(instant(t) for t in new_times.values())),
+            "valid_start": iso(min(parse_timestamp(t) for t in new_times.values())),
             "valid_end": iso(valid_end), "updated_at": now}
 
 
@@ -153,14 +154,14 @@ def apply_forecast_candidate(row: Optional[dict], cand: dict, newest_4day: Optio
                              now: str) -> Optional[dict]:
     """The weather_forecasts row after cand, or None to leave it as is.
     newest_4day is the newest source_issued_at of any '4day' row."""
-    source = instant(cand["source_time"])
-    if cand["forecast_type"] == "4day" and newest_4day is not None and source < instant(newest_4day):
+    source = parse_timestamp(cand["source_time"])
+    if cand["forecast_type"] == "4day" and newest_4day is not None and source < parse_timestamp(newest_4day):
         return None
     if row is not None:
         issued = row.get("source_issued_at")
-        if issued is not None and source <= instant(issued):
+        if issued is not None and source <= parse_timestamp(issued):
             return None
-        if issued is None and row.get("updated_at") is not None and source < instant(row["updated_at"]):
+        if issued is None and row.get("updated_at") is not None and source < parse_timestamp(row["updated_at"]):
             return None
     return {"forecast_type": cand["forecast_type"], "slot_id": cand["slot_id"], "data": cand["data"],
             "valid_period": cand["valid_period"], "updated_at": now, "source_issued_at": cand["source_time"]}

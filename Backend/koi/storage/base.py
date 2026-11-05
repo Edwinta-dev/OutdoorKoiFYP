@@ -22,7 +22,7 @@ the as-of reads over weather history (migration 0009).
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any, Callable, Optional, Protocol, TypeVar
 
 from koi.logs import log_event
@@ -461,10 +461,3 @@ def daily_stats(rows: list[dict]) -> Optional[dict]:
         "max": max(maxs) if maxs else None,
         "sample_days": len(rows),
     }
-
-
-def parse_timestamp(value: object) -> datetime:
-    """A timestamp column value (ISO string or datetime) as an aware
-    datetime; dates without a zone are taken as UTC."""
-    dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
