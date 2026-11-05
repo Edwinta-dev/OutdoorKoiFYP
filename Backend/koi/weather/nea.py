@@ -298,42 +298,58 @@ def parse_station_readings(product: str, pages: list[dict], fetched_at: datetime
                     out.reject(f"rainfall readingType {data.get('readingType')!r} is not a known total")
                 continue
             semantics, interval = found
-        for station in data.get("stations") or []:
-            if not isinstance(station, dict) or not station.get("id"):
-                continue
-            sid = str(station["id"])
-            if sid in seen_stations or spec.tag is None:
-                continue
-            seen_stations.add(sid)
-            location = station.get("location") or {}
-            out.stations.append({"station_id": sid, "station_name": station.get("name"),
-                                 "latitude": finite_number(location.get("latitude")),
-                                 "longitude": finite_number(location.get("longitude")), "tag": spec.tag})
+        _collect_stations(data, spec, seen_stations, out)
         for reading in data.get("readings") or []:
             entries = reading.get("data") if isinstance(reading, dict) else None
             ts = parse_time(reading.get("timestamp")) if isinstance(reading, dict) else None
             for entry in entries or []:
                 out.records += 1
-                if ts is None:
-                    out.reject("reading without a valid timestamp")
-                    continue
-                if unit != spec.unit:
-                    out.reject(f"unit {data.get('readingUnit')!r} is not {spec.unit}")
-                    continue
-                value = finite_number(entry.get("value")) if isinstance(entry, dict) else None
-                reading_station = entry.get("stationId") if isinstance(entry, dict) else None
-                if value is None or not reading_station:
-                    out.reject("reading without a numeric value and station")
-                    continue
-                out.observations.append({
-                    "source": SOURCE, "series": "station", "station_id": str(reading_station), "metric": spec.metric,
-                    "value": value, "unit": unit, "semantics": semantics,
-                    "observed_from": iso(ts - interval), "observed_to": iso(ts),
-                    "fetched_at": iso(fetched_at), "regime_id": None,
-                    "provenance": {"product": product, "reading_type": data.get("readingType"),
-                                   "reading_unit": data.get("readingUnit")},
-                })
+                observation, reason = _station_observation(
+                    entry, ts, unit, spec, semantics, interval, data, product, fetched_at)
+                if observation is None:
+                    out.reject(reason or "")
+                else:
+                    out.observations.append(observation)
     return out
+
+
+def _collect_stations(data: dict, spec: ObservationSpec, seen_stations: set, out: Parsed) -> None:
+    """The page's stations not seen before, for the station lookup (only
+    for products that carry a measurement tag)."""
+    for station in data.get("stations") or []:
+        if not isinstance(station, dict) or not station.get("id"):
+            continue
+        sid = str(station["id"])
+        if sid in seen_stations or spec.tag is None:
+            continue
+        seen_stations.add(sid)
+        location = station.get("location") or {}
+        out.stations.append({"station_id": sid, "station_name": station.get("name"),
+                             "latitude": finite_number(location.get("latitude")),
+                             "longitude": finite_number(location.get("longitude")), "tag": spec.tag})
+
+
+def _station_observation(entry: Any, ts: Optional[datetime], unit: Optional[str], spec: ObservationSpec, semantics: str,
+                         interval: timedelta, data: dict, product: str,
+                         fetched_at: datetime) -> tuple[Optional[dict], Optional[str]]:
+    """(observation row, None) for one reading entry, or (None, the reason
+    it is rejected)."""
+    if ts is None:
+        return None, "reading without a valid timestamp"
+    if unit != spec.unit:
+        return None, f"unit {data.get('readingUnit')!r} is not {spec.unit}"
+    value = finite_number(entry.get("value")) if isinstance(entry, dict) else None
+    reading_station = entry.get("stationId") if isinstance(entry, dict) else None
+    if value is None or not reading_station:
+        return None, "reading without a numeric value and station"
+    return {
+        "source": SOURCE, "series": "station", "station_id": str(reading_station), "metric": spec.metric,
+        "value": value, "unit": unit, "semantics": semantics,
+        "observed_from": iso(ts - interval), "observed_to": iso(ts),
+        "fetched_at": iso(fetched_at), "regime_id": None,
+        "provenance": {"product": product, "reading_type": data.get("readingType"),
+                       "reading_unit": data.get("readingUnit")},
+    }, None
 
 
 def parse_uv(pages: list[dict], fetched_at: datetime) -> Parsed:
@@ -367,15 +383,20 @@ def _issuance(product: str, slot: str, issued: Optional[datetime], updated: Opti
             "fetched_at": iso(fetched_at), "provenance": provenance}
 
 
+def _collect_areas(data: dict, out: Parsed) -> None:
+    """The page's forecast areas, for the station lookup."""
+    for area in data.get("area_metadata") or []:
+        if isinstance(area, dict) and area.get("name"):
+            loc = area.get("label_location") or {}
+            out.stations.append({"station_id": None, "station_name": area["name"],
+                                 "latitude": finite_number(loc.get("latitude")),
+                                 "longitude": finite_number(loc.get("longitude")), "tag": AREA_TAG})
+
+
 def parse_two_hour(pages: list[dict], fetched_at: datetime) -> Parsed:
     out = Parsed("two-hr-forecast")
     for data in pages:
-        for area in data.get("area_metadata") or []:
-            if isinstance(area, dict) and area.get("name"):
-                loc = area.get("label_location") or {}
-                out.stations.append({"station_id": None, "station_name": area["name"],
-                                     "latitude": finite_number(loc.get("latitude")),
-                                     "longitude": finite_number(loc.get("longitude")), "tag": AREA_TAG})
+        _collect_areas(data, out)
         for item in data.get("items") or []:
             if not isinstance(item, dict):
                 continue
@@ -404,36 +425,48 @@ def parse_twenty_four_hour(pages: list[dict], fetched_at: datetime) -> Parsed:
             if not isinstance(record, dict):
                 continue
             issued, updated = parse_time(record.get("timestamp")), parse_time(record.get("updatedTimestamp"))
-            general = record.get("general")
             out.records += 1
-            if isinstance(general, dict):
-                valid = general.get("validPeriod") or {}
-                start, end = parse_time(valid.get("start")), parse_time(valid.get("end"))
-                if start is not None and end is not None and start < end:
-                    payload = {k: v for k, v in general.items() if k != "validPeriod"}
-                    out.forecasts.append(_issuance("24hr", "GENERAL", issued, updated, start, end, payload,
-                                                   fetched_at, {"product": "twenty-four-hr-forecast",
-                                                                "valid_text": valid.get("text")}))
-                else:
-                    out.reject("24-hour general forecast without a validity window")
-            else:
-                out.reject("24-hour record without a general forecast")
+            _general_forecast(record, issued, updated, fetched_at, out)
             for period in record.get("periods") or []:
-                tp = (period.get("timePeriod") if isinstance(period, dict) else None) or {}
-                start, end = parse_time(tp.get("start")), parse_time(tp.get("end"))
-                regions = (period.get("regions") if isinstance(period, dict) else None) or {}
-                for region, block in regions.items():
-                    out.records += 1
-                    if isinstance(block, str):
-                        block = {"text": block}
-                    if start is None or end is None or start >= end or not isinstance(block, dict):
-                        out.reject("24-hour regional forecast without a validity window")
-                        continue
-                    out.forecasts.append(_issuance(
-                        "24hr", f"REG_{str(region).upper()}", issued, updated, start, end,
-                        {k: block.get(k) for k in ("code", "text") if k in block}, fetched_at,
-                        {"product": "twenty-four-hr-forecast", "valid_text": tp.get("text")}))
+                _regional_forecasts(period, issued, updated, fetched_at, out)
     return out
+
+
+def _general_forecast(record: dict, issued: Optional[datetime], updated: Optional[datetime],
+                      fetched_at: datetime, out: Parsed) -> None:
+    """The record's general forecast as an issuance row, or a reject."""
+    general = record.get("general")
+    if not isinstance(general, dict):
+        out.reject("24-hour record without a general forecast")
+        return
+    valid = general.get("validPeriod") or {}
+    start, end = parse_time(valid.get("start")), parse_time(valid.get("end"))
+    if start is not None and end is not None and start < end:
+        payload = {k: v for k, v in general.items() if k != "validPeriod"}
+        out.forecasts.append(_issuance("24hr", "GENERAL", issued, updated, start, end, payload,
+                                       fetched_at, {"product": "twenty-four-hr-forecast",
+                                                    "valid_text": valid.get("text")}))
+    else:
+        out.reject("24-hour general forecast without a validity window")
+
+
+def _regional_forecasts(period: Any, issued: Optional[datetime], updated: Optional[datetime],
+                        fetched_at: datetime, out: Parsed) -> None:
+    """One issuance row per region of a time period, or a reject each."""
+    tp = (period.get("timePeriod") if isinstance(period, dict) else None) or {}
+    start, end = parse_time(tp.get("start")), parse_time(tp.get("end"))
+    regions = (period.get("regions") if isinstance(period, dict) else None) or {}
+    for region, block in regions.items():
+        out.records += 1
+        if isinstance(block, str):
+            block = {"text": block}
+        if start is None or end is None or start >= end or not isinstance(block, dict):
+            out.reject("24-hour regional forecast without a validity window")
+            continue
+        out.forecasts.append(_issuance(
+            "24hr", f"REG_{str(region).upper()}", issued, updated, start, end,
+            {k: block.get(k) for k in ("code", "text") if k in block}, fetched_at,
+            {"product": "twenty-four-hr-forecast", "valid_text": tp.get("text")}))
 
 
 def parse_four_day(pages: list[dict], fetched_at: datetime) -> Parsed:
