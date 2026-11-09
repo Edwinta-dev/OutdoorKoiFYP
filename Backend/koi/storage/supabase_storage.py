@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from koi.settings import Settings
 from koi.storage.base import (
+    CAMERA_CARD_MASK_COLUMNS,
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
@@ -588,6 +589,27 @@ class SupabaseStorage:
             if regions is not None:
                 params["p_regions"] = regions
             res = self._db().rpc("save_camera_mask", params).execute()
+            return res.data[0]
+
+    def fetch_camera_card_masks(self, user_id: int | str) -> Optional[dict]:
+        with _operation("fetch_camera_card_masks"):
+            res = (self._db().table("camera_card_masks").select(", ".join(CAMERA_CARD_MASK_COLUMNS))
+                   .eq("pond_id", user_id).order("version", desc=True).limit(1).execute())
+            return res.data[0] if res.data else None
+
+    def fetch_camera_card_mask_versions(self, user_id: int | str) -> list[dict]:
+        with _operation("fetch_camera_card_mask_versions"):
+            res = (self._db().table("camera_card_masks").select(", ".join(CAMERA_CARD_MASK_COLUMNS))
+                   .eq("pond_id", user_id).order("version").execute())
+            return list(res.data or [])
+
+    def save_camera_card_masks(self, user_id: int, placements: dict,
+                               reference_image_id: Optional[int] = None) -> dict:
+        with _operation("save_camera_card_masks"):
+            res = self._db().rpc("save_camera_card_masks", {
+                "p_pond_id": user_id, "p_placements": placements,
+                "p_reference_image_id": reference_image_id,
+            }).execute()
             return res.data[0]
 
     # --- device health (migration 0018) ----------------------------------

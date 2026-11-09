@@ -629,6 +629,13 @@ class CardPatches(_Closed):
     patches: list[CardPatch]
 
 
+class CameraCardMasksResponse(_Closed):
+    version: Optional[int]
+    placements: Optional[dict[str, dict[str, float]]] = None
+    reference_image_id: Optional[int] = None
+    patches: Optional[list[CardPatch]] = None
+
+
 class CameraMaskResponse(_Closed):
     pond_id: int
     mask: Optional[list[list[float]]] = Field(description="null: the whole frame is analysed.")

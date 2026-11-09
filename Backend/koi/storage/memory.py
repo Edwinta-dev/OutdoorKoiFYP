@@ -36,6 +36,7 @@ from koi.models.event_ledger import derived_event_id
 from koi.models.local_time import local_date
 from koi.storage.base import (
     CALIBRATION_COLUMNS,
+    CAMERA_CARD_MASK_COLUMNS,
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
@@ -103,6 +104,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
                    "baseline_reset", "quality", "thumbnail_path", "gcc", "colour", "regions"),
     "camera_config": CAMERA_CONFIG_COLUMNS,
     "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
+    "camera_card_masks": CAMERA_CARD_MASK_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
@@ -157,6 +159,7 @@ USER_COLUMN = {
     "pond_profile": "pond_id",
     "camera_config": "pond_id",
     "camera_mask_version": "pond_id",
+    "camera_card_masks": "pond_id",
 }
 
 DAILY_COLUMNS = ("avg_value", "min_value", "max_value", "record_date")
@@ -182,6 +185,7 @@ _STAMPED = {
     "UserData": "created_at",
     "pond_profile": "created_at",
     "camera_mask_version": "created_at",
+    "camera_card_masks": "created_at",
     "weather_observation": "created_at",
     "weather_forecast_issuance": "created_at",
 }
@@ -741,6 +745,27 @@ class MemoryStorage:
             return self._insert("save_camera_mask", "camera_config", [{
                 "pond_id": user_id, "mask": mask, "regions": regions, "mask_version": version,
                 "updated_at": self._clock().isoformat()}])[0]
+
+    def fetch_camera_card_masks(self, user_id: int | str) -> Optional[dict]:
+        self._check("fetch_camera_card_masks")
+        rows = sorted(self._select("camera_card_masks", user_id), key=lambda r: r["version"])
+        return self._project(rows[-1], CAMERA_CARD_MASK_COLUMNS) if rows else None
+
+    def fetch_camera_card_mask_versions(self, user_id: int | str) -> list[dict]:
+        self._check("fetch_camera_card_mask_versions")
+        rows = sorted(self._select("camera_card_masks", user_id), key=lambda r: r["version"])
+        return [self._project(r, CAMERA_CARD_MASK_COLUMNS) for r in rows]
+
+    def save_camera_card_masks(self, user_id: int, placements: dict,
+                               reference_image_id: Optional[int] = None) -> dict:
+        self._check("save_camera_card_masks")
+        with self._lock:
+            versions = self._select("camera_card_masks", user_id)
+            version = max((row["version"] for row in versions), default=0) + 1
+            return self._insert("save_camera_card_masks", "camera_card_masks", [{
+                "pond_id": user_id, "version": version, "placements": placements,
+                "reference_image_id": reference_image_id,
+            }])[0]
 
     # --- device health --------------------------------------------------
     def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:

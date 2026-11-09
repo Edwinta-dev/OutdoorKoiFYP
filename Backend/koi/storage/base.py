@@ -283,6 +283,13 @@ class Storage(Protocol):
         step (save_camera_mask). Returns the new camera_config row."""
         ...
 
+    def fetch_camera_card_masks(self, user_id: int | str) -> Optional[dict]: ...
+
+    def fetch_camera_card_mask_versions(self, user_id: int | str) -> list[dict]: ...
+
+    def save_camera_card_masks(self, user_id: int, placements: dict,
+                               reference_image_id: Optional[int] = None) -> dict: ...
+
     # --- device health (devices, device_contact, migration 0018) -------
     def record_device_contacts(self, user_id: int, kind: str, contacts: list[dict]) -> Optional[dict]:
         """Records contacts ([{received_at, expected_next_at}], ISO 8601)
@@ -396,6 +403,7 @@ IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL",
 # camera_config and camera_mask_version columns (migration 0010; regions 0023).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "regions", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "regions", "created_at")
+CAMERA_CARD_MASK_COLUMNS = ("pond_id", "version", "placements", "reference_image_id", "created_at")
 
 # pondInterventions columns the ledger reads (event_id: migration 0015).
 INTERVENTION_COLUMNS = ("id", "event_id", "event_type", "event_timestamp", "volume_percentage", "volume_litres",

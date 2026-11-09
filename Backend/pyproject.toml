@@ -52,6 +52,7 @@ wsgi = ["gunicorn>=22.0"]
 
 [tool.setuptools.package-data]
 "koi.models" = ["uncertainty.json"]
+"koi.camera" = ["card_template.json"]
 
 [tool.setuptools.packages.find]
 include = ["koi*"]

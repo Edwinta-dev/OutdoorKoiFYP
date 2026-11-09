@@ -71,7 +71,7 @@ from koi.api.auth import authenticate, require_pond
 from koi.api.dashboard import build_dashboard, build_readings
 from koi.api.health import readiness
 from koi.api.spec import after_request, route
-from koi.camera import card_patches
+from koi.camera import card_masks, card_patches
 from koi.errors import ApiError, PondNotConfigured, error_response
 from koi.logs import log_event
 from koi.models import algae_engine as ae
@@ -1204,11 +1204,46 @@ def _camera_mask_response(user_id: int) -> dict:
         "versions": _storage().fetch_camera_mask_versions(user_id),
     }
     # Colour-card patches (koi/camera/card_patches.py): only when configured.
-    patches = card_patches.patches_for_pond(
-        current_app.config["KOI_SETTINGS"].camera_card_patches_file, user_id)
+    saved_card_masks = _storage().fetch_camera_card_masks(user_id)
+    patches: Optional[dict]
+    if saved_card_masks:
+        patches = {"version": saved_card_masks["version"],
+                   "patches": card_masks.CardPlacements.validate(saved_card_masks["placements"]).patches()}
+    else:
+        patches = card_patches.patches_for_pond(
+            current_app.config["KOI_SETTINGS"].camera_card_patches_file, user_id)
     if patches:
         body["card_patches"] = patches
     return body
+
+
+def _camera_card_masks_response(user_id: int) -> dict:
+    saved = _storage().fetch_camera_card_masks(user_id)
+    if saved is None:
+        return {"version": None}
+    placements = card_masks.CardPlacements.validate(saved["placements"])
+    return {"version": saved["version"], "placements": placements.to_json(),
+            "reference_image_id": saved["reference_image_id"], "patches": placements.patches()}
+
+
+@route(bp, "GET", "/v1/ponds/<int:user_id>/camera/card-masks", summary="Camera colour-card masks",
+       tag="pond", response=res.CameraCardMasksResponse, errors=(401, 403, 503))
+def get_camera_card_masks(user_id):
+    return jsonify(_camera_card_masks_response(user_id)), 200
+
+
+@route(bp, "PUT", "/v1/ponds/<int:user_id>/camera/card-masks", summary="Save camera colour-card masks",
+       tag="pond", body=schemas.CameraCardMasksUpdate, response=res.CameraCardMasksResponse,
+       errors=(400, 401, 403, 404, 503))
+def put_camera_card_masks(user_id):
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        raise ApiError("The request body must be a JSON object.", code="invalid_body")
+    update = schemas.CameraCardMasksUpdate.model_validate(body)
+    if update.reference_image_id is not None and not _storage().fetch_image_by_id(user_id, update.reference_image_id):
+        raise ApiError("The reference image must belong to this pond.", status=400, code="reference_image_invalid")
+    _storage().save_camera_card_masks(user_id, update.placements, update.reference_image_id)
+    return jsonify(_camera_card_masks_response(user_id)), 200
 
 
 @route(bp, "GET", "/v1/ponds/<int:user_id>/camera/mask", summary="Camera water mask", tag="pond",

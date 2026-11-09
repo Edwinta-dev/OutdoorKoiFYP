@@ -27,6 +27,7 @@ as written here.
 | `UserData` | pond profile | select, insert, update, delete | same as `anon` | select, update, delete own row (`auth_uid = auth.uid()`); insert with `auth_uid` null, then linked; `anon` none | all |
 | `pondInterventions` | pond events | select, insert | same as `anon` | select, insert own pond's rows (`"userID"` of a pond the caller owns); `anon` none | all |
 | `imageTable` | camera frames | select | same as `anon` | select own pond's rows (`"user_ID"`); `anon` none. Inserts stay backend (camera service, #86) | all |
+| `camera_card_masks` | versioned card placements | none | select, insert | select, insert own pond's rows; `anon` none | all |
 | `Fish_Database` | shared reference | select | select | select for `anon` and `authenticated` (public reference data, no owner column) | all |
 | `weather_telemetry`, `weather_forecasts` | shared NEA caches | select (existing public read policies) | select | unchanged: public read, no owner column | all |
 | `SensorData` | readings | none | none | none; reads go through the API | all |
@@ -53,6 +54,7 @@ owner rule.
 | `get_bundled_dashboard_payload`, `get_pond_telemetry_history`, `pond_dashboard_sources` | invoker | none | none | none | execute |
 | `aggregate_daily_sensor_data(p_from, p_to, p_pond_id)`, `reconcile_daily_sensor_averages`, `sensor_channel` (#17), `resolve_closest_station`, `summarize_evaluation_days` and its merge helpers | invoker (internal) | none | none | none | execute |
 | `take_worker_lease`, `save_pond_snapshot`, `save_pond_snapshot_with_ingest` (#8) | invoker | none | none | none | execute |
+| `camera_card_placements_are_valid` | immutable check helper | none | execute | execute | execute |
 | other backend RPCs (`sensor_ingest_*`, `record_device_contacts`, `pond_device_activity`, `save_camera_mask`, weather `*_as_of`, `ingest_weather_batch`, `enqueue_notification`, ...) | invoker | none | none | none | execute |
 | `auth_session_active` | definer | none | none | none | execute |
 | `link_pond_to_account`, `issue_device_token`, `revoke_device_token` | owner tools | none | none | none | none (owner, SQL editor) |

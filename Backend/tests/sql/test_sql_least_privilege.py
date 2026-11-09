@@ -364,7 +364,10 @@ def test_matrix_app_role_table_grants_are_exactly_the_apps_calls(db, role):
     grants: dict[str, set[str]] = {}
     for r in db.fetchall():
         grants.setdefault(r["table_name"], set()).add(r["privilege_type"])
-    assert grants == APP_TABLE_GRANTS
+    expected = dict(APP_TABLE_GRANTS)
+    if role == "authenticated":
+        expected["camera_card_masks"] = {"SELECT", "INSERT"}
+    assert grants == expected
     db.execute("select table_name from information_schema.role_table_grants "
                "where table_schema = 'public' and grantee = 'PUBLIC'")
     assert db.fetchall() == []
@@ -379,6 +382,9 @@ def test_matrix_app_role_sequence_and_function_grants(db, role):
     db.execute("select p.proname from pg_proc p where p.pronamespace = 'public'::regnamespace "
                "and has_function_privilege(%s, p.oid, 'execute') order by 1", (role,))
     expected = ["get_historical_graph_payload"] + (["ingest_readings"] if role == "anon" else [])
+    if role == "authenticated":
+        expected.append("camera_card_placements_are_valid")
+        expected.sort()
     assert [r["proname"] for r in db.fetchall()] == expected
 
 

@@ -17,6 +17,7 @@ from typing import Callable, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from koi.camera import card_masks
 from koi.camera import mask as camera_mask
 from koi.models import algae_engine as ae
 from koi.models import event_ledger
@@ -282,6 +283,19 @@ class CameraMaskUpdate(_Body):
         if self.polygon is None and self.regions is None:
             raise PydanticCustomError("mask_empty", "Send a polygon, regions or both.")
         return self
+
+
+class CameraCardMasksUpdate(_Body):
+    placements: dict
+    reference_image_id: Optional[int] = Field(default=None, gt=0)
+
+    @field_validator("placements")
+    @classmethod
+    def _valid_placements(cls, value: dict) -> dict:
+        try:
+            return card_masks.CardPlacements.validate(value).to_json()
+        except ValueError as exc:
+            raise PydanticCustomError("placements_invalid", "{reason}", {"reason": str(exc)}) from None
 
 
 @cache
