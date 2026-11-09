@@ -2,6 +2,8 @@ import 'package:mobile_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/providers.dart';
+import '../config/twin_address.dart';
+import 'package:http/http.dart' as http;
 
 import 'onboarding_screen.dart';
 import '../utils/app_log.dart';
@@ -44,6 +46,18 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               ),
               value: detailed,
               onChanged: displayMode.hasValue ? _setDetailed : null,
+            ),
+            ListTile(
+              key: const ValueKey('twinAddressTile'),
+              leading: Icon(Icons.lan, color: AppColors.of(context).water),
+              title: const Text('Digital twin address'),
+              subtitle: Text(
+                TwinAddress.override == null
+                    ? '${TwinAddress.current} (build default)'
+                    : TwinAddress.current,
+              ),
+              trailing: const Icon(Icons.edit, size: 16),
+              onTap: _editTwinAddress,
             ),
             const SizedBox(height: AppSpace.lg),
             // 2. The Menu Section Title
@@ -96,6 +110,90 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
         ),
       ),
     );
+  }
+
+  Future<void> _editTwinAddress() async {
+    final controller = TextEditingController(text: TwinAddress.current);
+    String? error;
+    String? status;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialog) => AlertDialog(
+          title: const Text('Digital twin address'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: const ValueKey('twinAddressField'),
+                controller: controller,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  hintText: '192.168.1.5 or http://host:8080',
+                  helperText:
+                      'Port 8080 is added when left out. '
+                      'Empty uses the build default.',
+                  errorText: error,
+                ),
+              ),
+              if (status != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpace.sm),
+                  child: Text(status!),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final url = TwinAddress.normalize(controller.text);
+                if (url == null) {
+                  setDialog(() => error = 'Not an address');
+                  return;
+                }
+                setDialog(() {
+                  error = null;
+                  status = 'Testing...';
+                });
+                String result;
+                try {
+                  final r = await http
+                      .get(Uri.parse('$url/health'))
+                      .timeout(const Duration(seconds: 5));
+                  result = r.statusCode == 200
+                      ? 'Reachable'
+                      : 'Answered ${r.statusCode}';
+                } catch (_) {
+                  result = 'Not reachable from this phone';
+                }
+                setDialog(() => status = result);
+              },
+              child: const Text('Test'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const ValueKey('twinAddressSave'),
+              onPressed: () async {
+                try {
+                  await TwinAddress.save(controller.text);
+                } on FormatException {
+                  setDialog(() => error = 'Not an address');
+                  return;
+                }
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (mounted) setState(() {});
   }
 
   Future<void> _setDetailed(bool detailed) async {

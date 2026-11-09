@@ -17,7 +17,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../config/app_config.dart';
+import '../config/twin_address.dart';
 
 /// The message from a DigitalTwin error body. The service sends
 /// {"error": {"code", "message", "details"}}; a service not yet
@@ -1011,7 +1011,9 @@ class PondAction {
 }
 
 class DigitalTwinApi {
-  final String _digitalTwinBaseUrl;
+  /// A fixed base URL (tests); null follows [TwinAddress.current], so an
+  /// address changed in Settings applies to the next request.
+  final String? _fixedBaseUrl;
   final http.Client client;
   final String? Function() accessToken;
   DigitalTwinApi({
@@ -1019,12 +1021,10 @@ class DigitalTwinApi {
     String? baseUrl,
     String? Function()? accessToken,
   }) : client = client ?? http.Client(),
-       _digitalTwinBaseUrl =
-           (baseUrl ?? AppConfig.environment.digitalTwinBaseUrl).replaceFirst(
-             RegExp(r'/+$'),
-             '',
-           ),
+       _fixedBaseUrl = baseUrl?.replaceFirst(RegExp(r'/+$'), ''),
        accessToken = accessToken ?? (() => null);
+
+  String get _digitalTwinBaseUrl => _fixedBaseUrl ?? TwinAddress.current;
 
   Map<String, String> get headers => {
     'Content-Type': 'application/json',

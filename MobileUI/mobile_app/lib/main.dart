@@ -6,6 +6,7 @@ import 'data/providers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Updated import for Supabase Flutter
 import 'config/app_config.dart';
 import 'config/error_tracking.dart';
+import 'config/twin_address.dart';
 import 'screens/config_error_screen.dart';
 // Import your screens
 import 'screens/onboarding_screen.dart';
@@ -29,6 +30,7 @@ Future<void> _startApp() async {
     url: config.supabaseUrl,
     publishableKey: config.supabasePublishableKey,
   );
+  await TwinAddress.load();
   final repository = PreferencesProfileRepository();
   final profile = await repository.load();
   runApp(
