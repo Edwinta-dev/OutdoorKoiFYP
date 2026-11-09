@@ -1,3 +1,5 @@
+import 'card_placement.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'card_patch.dart';
 import 'rating_card_data.dart';
 import '../utils/pond_camera_storage.dart';
@@ -177,10 +179,37 @@ final cameraFrameProvider = FutureProvider.family(
 
 /// Colour-card patches for the rating card's sampled-areas overlay. A failed
 /// read is the same as none: the photo shows without dots.
+/// The colour card's fixed shape (lib/assets/card_template.json).
+final cardTemplateProvider = FutureProvider<CardTemplate>(
+  (ref) async =>
+      CardTemplate.parse(await rootBundle.loadString(cardTemplateAsset)),
+);
+const cardTemplateAsset = 'lib/assets/card_template.json';
+
+/// Where the user placed the three card masks on this pond's frame (this phone only),
+/// or null when it was never placed.
+final cardPlacementProvider = FutureProvider.family<CardPlacements?, int>((
+  ref,
+  pond,
+) async {
+  final profile = await ref.watch(localProfileProvider.future);
+  return CardPlacements.tryParse(profile.values[cardPlacementKey(pond)]);
+});
+
+/// The card patches the overlay draws: the user's placement of the card when
+/// there is one, else the patches the digital twin serves.
 final cameraCardPatchesProvider = FutureProvider.family<List<CardPatch>, int>((
   ref,
   pond,
 ) async {
+  try {
+    final placement = await ref.watch(cardPlacementProvider(pond).future);
+    if (placement != null) {
+      return placement.patches(await ref.watch(cardTemplateProvider.future));
+    }
+  } catch (_) {
+    // A broken placement or template falls back to the served patches.
+  }
   try {
     return await ref
         .watch(cameraFramesRepositoryProvider)

@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../utils/pond_camera_storage.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/shared/pond_widgets.dart';
+import 'card_placement_screen.dart';
 import 'water_mask_editor_screen.dart';
 
 String _time(DateTime? time) {
@@ -80,6 +81,16 @@ class _CameraGalleryScreenState extends ConsumerState<CameraGalleryScreen> {
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => WaterMaskEditorScreen(userId: widget.userId),
+              ),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('card-placement-button'),
+            tooltip: 'Place colour card',
+            icon: const Icon(Icons.style_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CardPlacementScreen(userId: widget.userId),
               ),
             ),
           ),

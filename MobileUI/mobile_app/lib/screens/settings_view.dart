@@ -59,6 +59,18 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               trailing: const Icon(Icons.edit, size: 16),
               onTap: _editTwinAddress,
             ),
+            ListTile(
+              key: const ValueKey('pondIdTile'),
+              leading: Icon(Icons.tag, color: AppColors.of(context).water),
+              title: const Text('Pond ID'),
+              subtitle: Text(
+                ref.watch(localProfileProvider).asData?.value.pondId
+                        ?.toString() ??
+                    'Not set',
+              ),
+              trailing: const Icon(Icons.edit, size: 16),
+              onTap: _editPondId,
+            ),
             const SizedBox(height: AppSpace.lg),
             // 2. The Menu Section Title
             Padding(
@@ -193,6 +205,51 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       ),
     );
     controller.dispose();
+    if (mounted) setState(() {});
+  }
+
+  /// Points the app at another pond: saves userID and invalidates every
+  /// pond-keyed provider by refreshing the local profile.
+  Future<void> _editPondId() async {
+    final current = ref.read(localProfileProvider).asData?.value.pondId;
+    final controller = TextEditingController(text: current?.toString() ?? '');
+    String? error;
+    final saved = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialog) => AlertDialog(
+          title: const Text('Pond ID'),
+          content: TextField(
+            key: const ValueKey('pondIdField'),
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(errorText: error),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const ValueKey('pondIdSave'),
+              onPressed: () {
+                final id = int.tryParse(controller.text.trim());
+                if (id == null || id <= 0) {
+                  setDialog(() => error = 'Enter a positive whole number');
+                  return;
+                }
+                Navigator.of(dialogContext).pop(id);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (saved == null) return;
+    await ref.read(localProfileRepositoryProvider).save({'userID': saved});
+    ref.invalidate(localProfileProvider);
     if (mounted) setState(() {});
   }
 
