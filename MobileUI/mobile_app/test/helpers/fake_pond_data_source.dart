@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:mobile_app/data/card_patch.dart';
+import 'package:mobile_app/data/camera_card_reading.dart';
 import 'package:mobile_app/data/pond_profile.dart';
 // A PondDataSource for tests. Each call answers from the fields below,
 // so a test sets up exactly the state it wants:
@@ -88,6 +89,7 @@ class FakePondDataSource extends PondDataSource {
 
   List<List<double>>? cameraMask;
   Map<String, dynamic> cameraCardMasks = const {};
+  CameraCardReading? cameraCardReading;
   PondCameraFrame? referenceFrame;
 
   @override
@@ -104,6 +106,10 @@ class FakePondDataSource extends PondDataSource {
   @override
   Future<Map<String, dynamic>> fetchCameraCardMasks(int userId) =>
       _answer('fetchCameraCardMasks', {'userId': userId}, cameraCardMasks);
+
+  @override
+  Future<CameraCardReading?> fetchCameraCardReading(int userId) =>
+      _answer('fetchCameraCardReading', {'userId': userId}, cameraCardReading);
 
   @override
   Future<void> saveCameraCardMasks(

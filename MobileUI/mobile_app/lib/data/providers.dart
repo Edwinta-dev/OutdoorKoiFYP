@@ -1,6 +1,7 @@
 import 'card_placement.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'card_patch.dart';
+import 'camera_card_reading.dart';
 import 'rating_card_data.dart';
 import '../utils/pond_camera_storage.dart';
 import 'telemetry_history.dart';
@@ -176,6 +177,12 @@ final cameraFrameProvider = FutureProvider.family(
   (ref, int pond) =>
       ref.watch(cameraFramesRepositoryProvider).fetchLatestFrame(pond),
 );
+final cameraCardReadingProvider =
+    FutureProvider.family<CameraCardReading?, int>(
+      (ref, pond) => ref
+          .watch(cameraFramesRepositoryProvider)
+          .fetchCameraCardReading(pond),
+    );
 
 /// Colour-card patches for the rating card's sampled-areas overlay. A failed
 /// read is the same as none: the photo shows without dots.

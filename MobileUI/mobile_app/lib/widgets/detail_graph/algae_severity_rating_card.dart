@@ -347,6 +347,16 @@ class _AlgaeSeverityRatingCardState
     final patches =
         ref.watch(cameraCardPatchesProvider(widget.userId)).value ?? const [];
     final hasAreas = url != null && patches.isNotEmpty;
+    final storedReading = ref
+        .watch(cameraCardReadingProvider(widget.userId))
+        .asData
+        ?.value;
+    final rejectedPatches = <String>{
+      for (final entry
+          in storedReading?.patches.entries ??
+              const <MapEntry<String, Map<String, dynamic>>>[])
+        if ((entry.value['dots_used'] as num?)?.toInt() == 0) entry.key,
+    };
     final imageBox = ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Stack(
@@ -461,7 +471,11 @@ class _AlgaeSeverityRatingCardState
           // a row below the photo.
           if (hasAreas && _showSamples)
             Positioned.fill(
-              child: SampleOverlay(patches: patches, image: NetworkImage(url)),
+              child: SampleOverlay(
+                patches: patches,
+                image: NetworkImage(url),
+                rejectedPatches: rejectedPatches,
+              ),
             ),
 
           // Frame metadata overlay - makes it unambiguous WHICH reading

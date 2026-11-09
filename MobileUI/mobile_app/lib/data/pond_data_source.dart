@@ -1,4 +1,5 @@
 import 'card_patch.dart';
+import 'camera_card_reading.dart';
 import 'pond_profile.dart';
 import 'dart:typed_data';
 import 'repositories.dart';
@@ -107,6 +108,17 @@ class LivePondDataSource extends PondDataSource {
   @override
   Future<Map<String, dynamic>> fetchCameraCardMasks(int userId) =>
       api.request('GET', '/v1/ponds/$userId/camera/card-masks');
+
+  @override
+  Future<CameraCardReading?> fetchCameraCardReading(int userId) async {
+    try {
+      return CameraCardReading.fromJson(
+        await api.request('GET', '/v1/ponds/$userId/camera/card-reading'),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<void> saveCameraCardMasks(

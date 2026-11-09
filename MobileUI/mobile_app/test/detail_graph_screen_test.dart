@@ -78,6 +78,21 @@ void main() {
         });
       });
 
+      if (metric == 'lux') {
+        testWidgets('refresh reloads the camera card reading', (tester) async {
+          final fake = await pumpScreen(
+            tester,
+            DetailGraphScreen(metricType: metric, title: title),
+            source: _fullSource(),
+          );
+          await settle(tester);
+          expect(fake.callsTo('fetchCameraCardReading'), hasLength(1));
+          await tester.tap(find.byIcon(Icons.refresh));
+          await settle(tester);
+          expect(fake.callsTo('fetchCameraCardReading'), hasLength(2));
+        });
+      }
+
       testWidgets('empty: placeholder instead of a chart', (tester) async {
         await pumpScreen(
           tester,

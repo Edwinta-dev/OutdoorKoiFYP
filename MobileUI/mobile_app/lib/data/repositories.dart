@@ -1,4 +1,5 @@
 import 'card_patch.dart';
+import 'camera_card_reading.dart';
 import 'pond_profile.dart';
 import 'dart:typed_data';
 import '../utils/digital_twin_api.dart';
@@ -37,6 +38,7 @@ abstract interface class CameraFramesRepository {
   /// has none. Drawn by the sampled-areas overlay.
   Future<List<CardPatch>> fetchCameraCardPatches(int userId);
   Future<Map<String, dynamic>> fetchCameraCardMasks(int userId);
+  Future<CameraCardReading?> fetchCameraCardReading(int userId);
   Future<void> saveCameraCardMasks(
     int userId,
     Map<String, dynamic> placements,

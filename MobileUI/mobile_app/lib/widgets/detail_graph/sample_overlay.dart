@@ -112,7 +112,11 @@ class PixelProbe {
     final px = (x * width).floor().clamp(0, width - 1);
     final py = (y * height).floor().clamp(0, height - 1);
     final i = (py * width + px) * 4;
-    final v = [rgba[i], rgba[i + 1], rgba[i + 2]].reduce((a, b) => a > b ? a : b);
+    final v = [
+      rgba[i],
+      rgba[i + 1],
+      rgba[i + 2],
+    ].reduce((a, b) => a > b ? a : b);
     return v <= clipLowV || v >= clipHighV;
   }
 }
@@ -122,6 +126,7 @@ class SampleOverlayPainter extends CustomPainter {
   final Color color;
   final Color rejectedColor;
   final PixelProbe? probe;
+  final Set<String> rejectedPatches;
   final double aspect;
   final double radius;
 
@@ -130,6 +135,7 @@ class SampleOverlayPainter extends CustomPainter {
     required this.color,
     required this.rejectedColor,
     this.probe,
+    this.rejectedPatches = const {},
     this.aspect = frameAspect,
     this.radius = sampleDotRadius,
   });
@@ -144,7 +150,11 @@ class SampleOverlayPainter extends CustomPainter {
     if (all.isEmpty) return;
     final ok = <Offset>[], bad = <Offset>[];
     for (final d in all) {
-      (probe?.rejected(d.frame.dx, d.frame.dy) == true ? bad : ok).add(d.at);
+      (rejectedPatches.contains(d.patch) ||
+                  probe?.rejected(d.frame.dx, d.frame.dy) == true
+              ? bad
+              : ok)
+          .add(d.at);
     }
     void draw(List<Offset> points, Color c) {
       if (points.isEmpty) return;
@@ -168,6 +178,7 @@ class SampleOverlayPainter extends CustomPainter {
       old.color != color ||
       old.rejectedColor != rejectedColor ||
       old.probe != probe ||
+      old.rejectedPatches != rejectedPatches ||
       old.aspect != aspect ||
       old.radius != radius;
 }
@@ -179,11 +190,13 @@ class SampleOverlay extends StatefulWidget {
   final List<CardPatch> patches;
   final ImageProvider? image;
   final PixelProbe? probe;
+  final Set<String> rejectedPatches;
   const SampleOverlay({
     super.key,
     required this.patches,
     this.image,
     this.probe,
+    this.rejectedPatches = const {},
   });
 
   @override
@@ -262,6 +275,7 @@ class _SampleOverlayState extends State<SampleOverlay> {
           color: colors.samplePoint,
           rejectedColor: colors.sampleRejected,
           probe: widget.probe ?? _probe,
+          rejectedPatches: widget.rejectedPatches,
         ),
       ),
     );

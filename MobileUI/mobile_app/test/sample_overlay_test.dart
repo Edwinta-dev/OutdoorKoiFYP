@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/data/card_patch.dart';
+import 'package:mobile_app/data/camera_card_reading.dart';
 import 'package:mobile_app/data/providers.dart';
 import 'package:mobile_app/utils/pond_camera_storage.dart';
 import 'package:mobile_app/widgets/detail_graph/algae_severity_rating_card.dart';
@@ -247,6 +248,35 @@ void main() {
       expect(painters(tester), 0);
       expect(find.byKey(const ValueKey('sample-overlay-toggle')), findsNothing);
       expect(find.text('Show sampled areas'), findsNothing);
+    });
+
+    testWidgets('stored patch result marks fully rejected patch dots', (
+      tester,
+    ) async {
+      final fake = source([_bare]);
+      fake.cameraCardReading = const CameraCardReading(
+        quality: 'usable',
+        ph: null,
+        nh3: null,
+        usableDots: 1,
+        totalDots: 3,
+        turbidityIndex: null,
+        agreement: null,
+        frameAgreement: null,
+        patches: {
+          'ph_ref_1': {'dots_used': 0, 'dots_total': 3},
+        },
+      );
+      await pumpScreen(tester, card(), source: fake);
+      await settle(tester);
+      final painter =
+          tester
+                  .widget<CustomPaint>(
+                    find.byKey(const ValueKey('sample-overlay-painter')),
+                  )
+                  .painter!
+              as SampleOverlayPainter;
+      expect(painter.rejectedPatches, contains('ph_ref_1'));
     });
 
     testWidgets('a failed patches read still shows the photo card', (

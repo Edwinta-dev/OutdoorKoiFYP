@@ -6,6 +6,7 @@ import '../data/providers.dart';
 import 'camera_gallery_screen.dart';
 import '../widgets/detail_graph/algae_severity_rating_card.dart';
 import '../widgets/detail_graph/algae_status_card.dart';
+import '../widgets/detail_graph/camera_card_reading_card.dart';
 import '../widgets/detail_graph/evaporation_status_card.dart';
 import '../widgets/detail_graph/historical_line_chart.dart';
 import '../widgets/detail_graph/intervention_legend.dart';
@@ -51,6 +52,8 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
     // A patch read that failed while the service was down must not stick
     // for the session: a refresh asks again.
     ref.invalidate(cameraCardPatchesProvider(_userId));
+    ref.invalidate(cameraCardReadingProvider(_userId));
+    ref.invalidate(cameraCardMasksProvider(_userId));
   }
 
   List<String> _getTargetSensorTypes() {
@@ -230,6 +233,8 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
                         }
                       },
                     ),
+                    const SizedBox(height: AppSpace.md),
+                    CameraCardReadingCard(userId: _userId),
                     const SizedBox(height: AppSpace.xl),
                     AlgaeStatusCard(
                       key: ValueKey(
