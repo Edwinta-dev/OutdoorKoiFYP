@@ -95,6 +95,31 @@ def test_upload_stores_card_reading_when_masks_exist(storage, monkeypatch):
     assert resp.get_json().keys() == {"status", "state", "sleep_sec", "reason", "next_at"}
 
 
+def test_three_accepted_unusable_card_frames_enqueue_once_and_usable_rearms(storage, monkeypatch):
+    from koi.camera.card_masks import home_placements
+    storage.save_camera_card_masks(15, home_placements().to_json())
+    monkeypatch.setattr(camera_routes.quality, "assess", lambda *args, **kwargs: {
+        "status": "pass", "reasons": [], "metrics": {}})
+
+    def sample(*args):
+        return {"white_rgb": [200, 200, 200], "patches": {}, "ph": None, "nh3": None,
+                "usable_dots": 0, "total_dots": 8, "quality": "unusable"}
+
+    monkeypatch.setattr(camera_routes.card_reader, "read_frame", sample)
+    client = _client(storage)
+    for _ in range(4):
+        assert client.post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"}).status_code == 200
+    assert len(storage.rows("notification_outbox")) == 1
+    monkeypatch.setattr(camera_routes.card_reader, "read_frame", lambda *args: {
+        "white_rgb": [200, 200, 200], "patches": {}, "ph": None, "nh3": None,
+        "usable_dots": 8, "total_dots": 8, "quality": "usable"})
+    assert client.post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"}).status_code == 200
+    monkeypatch.setattr(camera_routes.card_reader, "read_frame", sample)
+    for _ in range(3):
+        assert client.post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"}).status_code == 200
+    assert len(storage.rows("notification_outbox")) == 2
+
+
 def test_card_reader_failure_still_stores_frame(storage, monkeypatch):
     from koi.camera.card_masks import home_placements
     storage.save_camera_card_masks(15, home_placements().to_json())

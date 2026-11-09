@@ -1,4 +1,4 @@
-"""Local-only checks for migration 0033."""
+"""Local-only checks for migrations 0033 and 0034."""
 from __future__ import annotations
 
 import uuid
@@ -12,12 +12,17 @@ pytest_plugins = ("tests.sql.test_sql_camera_card_masks",)
 def test_card_reading_table_has_expected_columns(conn, db):
     db.execute("select to_regclass('public.camera_card_readings') as table_name")
     if db.fetchone()['table_name'] is None:
-        pytest.skip("local database is not at migration 0033; run `supabase db reset`")
+        pytest.skip("local database is not at migration 0034; run `supabase db reset`")
     db.execute("select column_name from information_schema.columns where table_schema='public' "
                "and table_name='camera_card_readings'")
     columns = {row['column_name'] for row in db.fetchall()}
+    if 'turbidity_index' not in columns:
+        pytest.skip("local database is before migration 0034; apply the repository migrations locally")
     assert {'image_id', 'pond_id', 'card_masks_version', 'white_rgb', 'patches', 'ph', 'nh3',
-            'usable_dots', 'total_dots', 'quality', 'created_at'} <= columns
+            'usable_dots', 'total_dots', 'quality', 'created_at', 'turbidity_index', 'turbidity_channels',
+            'turbidity_a',
+            'turbidity_b', 'turbidity_r2', 'turbidity_reason', 'turbidity_patches_used', 'agreement',
+            'frame_agreement', 'unusable_streak', 'unusable_alerted'} <= columns
 
 
 def test_card_reading_owner_rls_limits_authenticated_reads_to_own_pond(db):

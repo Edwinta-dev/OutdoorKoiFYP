@@ -9,6 +9,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from koi.camera import turbidity
+
 PATCH_RADIUS = 4
 GLARE_FRACTION = 0.20
 GLARE_LUMINANCE = 1.10
@@ -101,10 +103,45 @@ def read_frame(frame: np.ndarray, patches: list[dict], version: int | None = Non
             'quality': 'unusable' if totals == 0 or usable * 2 < totals else 'usable'}
 
 
+def compare_reference(current: dict, reference: dict | None) -> dict:
+    """Attach the fit and compare the two disc classifications."""
+    fit = turbidity.analyse(current, reference)
+    current["turbidity"] = fit
+    agreements = {}
+    if fit["reason"] is None and reference:
+        gain = np.mean(reference["white_rgb"]) / np.maximum(np.asarray(reference["white_rgb"], float), 1)
+        for prefix in ("ph", "nh3"):
+            raw = current.get(prefix)
+            corrected = fit["corrected"].get(prefix)
+            rows = []
+            if corrected:
+                for name, item in (reference.get("patches") or {}).items():
+                    rgb = item.get("median_rgb")
+                    if name.startswith(prefix + "_ref_") and rgb:
+                        rows.append((float(np.linalg.norm(_lab(np.clip(corrected, 0, 255))[1:] -
+                                                           _lab(np.clip(np.asarray(rgb) * gain, 0, 255))[1:])), name))
+            corrected_segment = min(rows)[1] if rows else None
+            agreements[prefix] = bool(raw and raw.get("segment") and corrected_segment == raw["segment"])
+            if current.get(prefix):
+                current[prefix]["corrected_segment"] = corrected_segment
+                current[prefix]["agreement"] = agreements[prefix]
+    else:
+        agreements = {"ph": False, "nh3": False}
+        for prefix in agreements:
+            if current.get(prefix):
+                current[prefix]["corrected_segment"] = None
+                current[prefix]["agreement"] = False
+    current["agreement"] = agreements
+    current["frame_agreement"] = "clear" if all(agreements.values()) else "disagree"
+    return current
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('frames', type=Path)
     ap.add_argument('--pond', required=True, type=int)
+    ap.add_argument('--reference-frame', type=Path,
+                    help='clear-water reference image path; defaults to reference_frame in the pond masks JSON')
     args = ap.parse_args()
     from koi.camera.card_masks import CardPlacements, home_placements
     saved_path = args.frames / f'pond_{args.pond}_card_masks.json'
@@ -116,6 +153,13 @@ def main() -> None:
     else:
         patches = home_placements().patches()
         version = None
+    reference_path = args.reference_frame or (args.frames / saved['reference_frame']
+                    if saved_path.exists() and saved.get('reference_frame') else None)
+    reference_result = None
+    if reference_path is not None:
+        reference_bgr = cv2.imread(str(reference_path))
+        if reference_bgr is not None:
+            reference_result = read_frame(cv2.cvtColor(reference_bgr, cv2.COLOR_BGR2RGB), patches, version=version)
     for path in sorted(args.frames.glob('*')):
         if path.suffix.lower() not in {'.jpg', '.jpeg', '.png'}:
             continue
@@ -123,7 +167,8 @@ def main() -> None:
         if bgr is None:
             sys.stdout.write(json.dumps({'frame': path.name, 'error': 'unreadable image'}) + '\n')
             continue
-        result = read_frame(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), patches, version=version)
+        result = compare_reference(read_frame(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), patches, version=version),
+                                   reference_result)
         sys.stdout.write(json.dumps({'frame': path.name, 'pond': args.pond, **result}) + '\n')
 
 

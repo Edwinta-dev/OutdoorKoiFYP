@@ -405,7 +405,10 @@ _BIOMASS_KG_TO_GRAMS = 1000.0
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
                  "quality", "thumbnail_path", "gcc", "colour", "regions")
 CAMERA_CARD_READING_COLUMNS = ("image_id", "pond_id", "card_masks_version", "white_rgb", "patches", "ph", "nh3",
-                               "usable_dots", "total_dots", "quality", "created_at")
+                               "usable_dots", "total_dots", "quality", "created_at", "turbidity_index",
+                               "turbidity_a", "turbidity_b", "turbidity_r2", "agreement", "unusable_streak",
+                               "unusable_alerted", "turbidity_reason", "turbidity_patches_used", "frame_agreement",
+                               "turbidity_channels")
 # camera_config and camera_mask_version columns (migration 0010; regions 0023).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "regions", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "regions", "created_at")

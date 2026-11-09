@@ -146,6 +146,7 @@ def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWa
 # Baseline reset reason stored in imageTable.baseline_reset (migration 0010).
 RESET_MASK_CHANGED = "mask_changed"
 RESET_OBSTRUCTION_PERSISTED = "obstruction_persisted"  # issue #80
+UNUSABLE_ALERT_FRAMES = 3
 
 
 # Rows searched for the newest frame that did not fail the quality gate.
@@ -218,7 +219,14 @@ def measure_cards(img, user_id: str) -> tuple[dict | None, int | None]:
             return None, None
         placements = card_masks.CardPlacements.validate(saved["placements"])
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        return card_reader.read_frame(rgb, placements.patches(), saved["version"]), int(saved["version"])
+        reading = card_reader.read_frame(rgb, placements.patches(), saved["version"])
+        reference = (_storage().fetch_camera_card_reading(user_id, saved["reference_image_id"])
+                     if saved.get("reference_image_id") is not None else None)
+        if reference and reference.get("quality") == "usable":
+            reading = card_reader.compare_reference(reading, reference)
+        else:
+            reading = card_reader.compare_reference(reading, None)
+        return reading, int(saved["version"])
     except Exception as exc:  # noqa: BLE001 - optional observation
         log_event(log, "camera_card_reading_failed", level=logging.WARNING, error=str(exc))
         return None, None
@@ -396,11 +404,37 @@ def upload_image():
                               frame_quality, thumb_path, gcc, colour, region_values)
             if card_values is not None and image_id is not None:
                 try:
+                    previous_card = _storage().fetch_camera_card_reading(user_id)
+                    previous_streak = int((previous_card or {}).get("unusable_streak") or 0)
+                    previous_alerted = bool((previous_card or {}).get("unusable_alerted"))
+                    unusable_streak = (previous_streak + 1 if card_values["quality"] == "unusable"
+                                       else 0) if passed else previous_streak
+                    alerted = (previous_alerted if not passed or unusable_streak else False)
+                    should_alert = unusable_streak >= UNUSABLE_ALERT_FRAMES and not alerted
+                    if should_alert:
+                        queued = _storage().enqueue_notification(int(user_id), {
+                            "kind": "camera_obstructed", "severity": "info",
+                            "title": "Camera card view is blocked",
+                            "body": ("The colour cards appear covered or the camera view is blocked. "
+                                     "Check the cards and lens."),
+                            "data": {"state": "card_view_unusable"},
+                            "dedupe_key": f"camera_card_view_unusable:{image_id}"}, 31536000)
+                        should_alert = queued is not None
                     _storage().insert_camera_card_reading({"image_id": image_id, "pond_id": int(user_id),
                         "card_masks_version": card_version, "white_rgb": card_values["white_rgb"],
                         "patches": card_values["patches"], "ph": card_values["ph"], "nh3": card_values["nh3"],
                         "usable_dots": card_values["usable_dots"], "total_dots": card_values["total_dots"],
-                        "quality": card_values["quality"]})
+                        "quality": card_values["quality"],
+                        "turbidity_index": (card_values.get("turbidity") or {}).get("index"),
+                        "turbidity_channels": (card_values.get("turbidity") or {}).get("index_channels"),
+                        "turbidity_a": (card_values.get("turbidity") or {}).get("a"),
+                        "turbidity_b": (card_values.get("turbidity") or {}).get("b"),
+                        "turbidity_r2": (card_values.get("turbidity") or {}).get("r2"),
+                        "turbidity_reason": (card_values.get("turbidity") or {}).get("reason"),
+                        "turbidity_patches_used": (card_values.get("turbidity") or {}).get("patches_used", 0),
+                        "agreement": card_values.get("agreement"), "unusable_streak": unusable_streak,
+                        "unusable_alerted": alerted or should_alert,
+                        "frame_agreement": card_values.get("frame_agreement")})
                 except Exception as exc:  # noqa: BLE001 - frame is already committed
                     log_event(log, "camera_card_reading_store_failed", level=logging.WARNING, error=str(exc))
         except StorageError:

@@ -3217,6 +3217,58 @@ components:
         quality:
           title: Quality
           type: string
+        turbidity_index:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Turbidity Index
+        turbidity_channels:
+          anyOf:
+          - items:
+              type: number
+            type: array
+          - type: 'null'
+          default: null
+          title: Turbidity Channels
+        turbidity_a:
+          anyOf:
+          - items:
+              type: number
+            type: array
+          - type: 'null'
+          default: null
+          title: Turbidity A
+        turbidity_b:
+          anyOf:
+          - items:
+              type: number
+            type: array
+          - type: 'null'
+          default: null
+          title: Turbidity B
+        turbidity_r2:
+          anyOf:
+          - items:
+              type: number
+            type: array
+          - type: 'null'
+          default: null
+          title: Turbidity R2
+        agreement:
+          anyOf:
+          - additionalProperties:
+              type: boolean
+            type: object
+          - type: 'null'
+          default: null
+          title: Agreement
+        frame_agreement:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Frame Agreement
       required:
       - pond_id
       - card_masks_version

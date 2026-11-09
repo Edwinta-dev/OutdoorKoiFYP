@@ -641,6 +641,13 @@ class CameraCardReadingResponse(_Open):
     pond_id: int
     card_masks_version: int
     quality: str
+    turbidity_index: float | None = None
+    turbidity_channels: list[float] | None = None
+    turbidity_a: list[float] | None = None
+    turbidity_b: list[float] | None = None
+    turbidity_r2: list[float] | None = None
+    agreement: dict[str, bool] | None = None
+    frame_agreement: str | None = None
 
 
 class CameraMaskResponse(_Closed):
