@@ -39,11 +39,11 @@ def test_thumbnail_memory_delete_removes_objects():
 def test_quality_supabase_insert_sends_quality_and_thumbnail_path():
     storage, client = supabase_storage()
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u", quality=QUALITY, thumbnail_path="15/1_photo_thumb.jpg")
-    [(method, (row,), _)] = client.queries[-1].calls
+    [(method, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert method == "insert"
     assert row["quality"] == QUALITY and row["thumbnail_path"] == "15/1_photo_thumb.jpg"
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u")
-    [(_, (row,), _)] = client.queries[-1].calls
+    [(_, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert "quality" not in row and "thumbnail_path" not in row
     assert "gcc" not in row and "colour" not in row
 
@@ -74,7 +74,7 @@ def test_colour_insert_sends_optional_observations(adapter):
     if isinstance(storage, MemoryStorage):
         row = storage.fetch_image_history(15)[0]
     else:
-        [(_, (row,), _)] = client.queries[-1].calls
+        [(_, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert row["gcc"] == 1 / 3 and row["colour"] == colour
 
 

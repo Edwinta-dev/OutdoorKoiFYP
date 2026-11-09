@@ -36,6 +36,7 @@ LOOPBACK = ("127.0.0.1", "localhost", "::1", "host.docker.internal")
 
 # Pond tables and their pond column, children before parents (foreign keys).
 POND_TABLES = (
+    ("camera_card_readings", "pond_id"),
     ("camera_card_masks", "pond_id"),
     ("algae_severity_ratings", "userid"),
     ("imageTable", "user_ID"),

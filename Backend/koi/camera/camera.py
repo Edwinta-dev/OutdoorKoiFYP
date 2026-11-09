@@ -83,7 +83,7 @@ import cv2
 from flask import Blueprint as RouteGroup
 from flask import current_app, jsonify, request
 
-from koi.camera import hsvEngine, imageSchedule, quality
+from koi.camera import card_masks, card_reader, hsvEngine, imageSchedule, quality
 from koi.errors import STORAGE_RETRY_AFTER_SEC, error_response
 from koi.logs import log_event
 from koi.metrics import Counter, Histogram, Metrics
@@ -210,6 +210,18 @@ def measure_regions(img, regions: dict | None) -> dict | None:
         return None
 
 
+def measure_cards(img, user_id: str) -> tuple[dict | None, int | None]:
+    """Optional card observation; failures never affect frame storage."""
+    try:
+        saved = _storage().fetch_camera_card_masks(user_id)
+        if not saved:
+            return None, None
+        placements = card_masks.CardPlacements.validate(saved["placements"])
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        return card_reader.read_frame(rgb, placements.patches(), saved["version"]), int(saved["version"])
+    except Exception as exc:  # noqa: BLE001 - optional observation
+        log_event(log, "camera_card_reading_failed", level=logging.WARNING, error=str(exc))
+        return None, None
 def carried_state(prev_state, prev_green_ratio) -> list:
     """The state a failed frame stores: the previous accepted frame's
     [label, baseline, raised, stable] unchanged, so it is shown as the
@@ -252,7 +264,7 @@ def push_current_data(green_ratio: float, user_id: str, state, public_url: str,
                       frame_quality: dict | None = None, thumbnail_path: str | None = None,
                       gcc: float | None = None, colour: dict | None = None, regions: dict | None = None):
     """Raises StorageError when the row cannot be written."""
-    _storage().insert_image(user_id, green_ratio, state, public_url, mask_version=mask_version,
+    return _storage().insert_image(user_id, green_ratio, state, public_url, mask_version=mask_version,
                             baseline_reset=baseline_reset, quality=frame_quality, thumbnail_path=thumbnail_path,
                             gcc=gcc, colour=colour, regions=regions)
 
@@ -309,6 +321,7 @@ def upload_image():
     except Exception as e:
         return error_reply(422, "image_unreadable", f"Image analysis failed: {e}")
     region_values = measure_regions(img, regions)
+    card_values, card_version = measure_cards(img, user_id)
     analysis_time = time.perf_counter() - started
     passed = frame_quality["status"] != quality.FAIL
 
@@ -379,8 +392,17 @@ def upload_image():
         # 6. Save the reading to imageTable. Without a row, the objects
         # just stored are removed again.
         try:
-            push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset,
+            image_id = push_current_data(green_ratio, user_id, state, public_url, mask_version, baseline_reset,
                               frame_quality, thumb_path, gcc, colour, region_values)
+            if card_values is not None and image_id is not None:
+                try:
+                    _storage().insert_camera_card_reading({"image_id": image_id, "pond_id": int(user_id),
+                        "card_masks_version": card_version, "white_rgb": card_values["white_rgb"],
+                        "patches": card_values["patches"], "ph": card_values["ph"], "nh3": card_values["nh3"],
+                        "usable_dots": card_values["usable_dots"], "total_dots": card_values["total_dots"],
+                        "quality": card_values["quality"]})
+                except Exception as exc:  # noqa: BLE001 - frame is already committed
+                    log_event(log, "camera_card_reading_store_failed", level=logging.WARNING, error=str(exc))
         except StorageError:
             discard_objects(bucket, [filename] + ([thumb_path] if thumb_path else []))
             raise
@@ -404,4 +426,3 @@ def upload_image():
             details={"operation": e.operation, "retry_after_sec": STORAGE_RETRY_AFTER_SEC},
             headers={"Retry-After": str(STORAGE_RETRY_AFTER_SEC)},
         )
-

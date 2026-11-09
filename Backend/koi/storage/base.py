@@ -252,7 +252,7 @@ class Storage(Protocol):
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
                      gcc: Optional[float] = None, colour: Optional[dict] = None,
-                     regions: Optional[dict] = None) -> None:
+                     regions: Optional[dict] = None) -> Optional[int]:
         """mask_version and baseline_reset (migration 0010), quality and
         thumbnail_path (migration 0011), gcc and colour (migration 0021),
         regions (migration 0023) are left out when None, preserving inserts without observations."""
@@ -282,6 +282,10 @@ class Storage(Protocol):
         pond's next mask version and makes it the one in force, in one
         step (save_camera_mask). Returns the new camera_config row."""
         ...
+
+    def insert_camera_card_reading(self, row: dict) -> dict: ...
+
+    def fetch_camera_card_reading(self, pond_id: int | str, image_id: int | None = None) -> Optional[dict]: ...
 
     def fetch_camera_card_masks(self, user_id: int | str) -> Optional[dict]: ...
 
@@ -400,6 +404,8 @@ _BIOMASS_KG_TO_GRAMS = 1000.0
 # quality, thumbnail_path: 0011; gcc, colour: 0021; regions: 0023).
 IMAGE_COLUMNS = ("id", "created_at", "green_ratio", "current_state", "imageURL", "mask_version", "baseline_reset",
                  "quality", "thumbnail_path", "gcc", "colour", "regions")
+CAMERA_CARD_READING_COLUMNS = ("image_id", "pond_id", "card_masks_version", "white_rgb", "patches", "ph", "nh3",
+                               "usable_dots", "total_dots", "quality", "created_at")
 # camera_config and camera_mask_version columns (migration 0010; regions 0023).
 CAMERA_CONFIG_COLUMNS = ("pond_id", "mask", "regions", "mask_version", "updated_at")
 CAMERA_MASK_VERSION_COLUMNS = ("pond_id", "mask_version", "mask", "regions", "created_at")

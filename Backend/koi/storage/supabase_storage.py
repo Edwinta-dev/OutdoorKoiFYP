@@ -528,7 +528,7 @@ class SupabaseStorage:
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
                      gcc: Optional[float] = None, colour: Optional[dict] = None,
-                     regions: Optional[dict] = None) -> None:
+                     regions: Optional[dict] = None) -> Optional[int]:
         with _operation("insert_image"):
             row = {
                 "user_ID": user_id,
@@ -543,7 +543,23 @@ class SupabaseStorage:
                 "colour": colour,
                 "regions": regions,
             }
-            self._db().table("imageTable").insert({k: v for k, v in row.items() if v is not None}).execute()
+            res = (self._db().table("imageTable")
+                   .insert({k: v for k, v in row.items() if v is not None}).select("id").execute())
+            return int(res.data[0]["id"]) if res.data else None
+
+    def insert_camera_card_reading(self, row: dict) -> dict:
+        with _operation("insert_camera_card_reading"):
+            return self._db().table("camera_card_readings").insert(row).execute().data[0]
+
+    def fetch_camera_card_reading(self, pond_id: int | str, image_id: int | None = None) -> Optional[dict]:
+        with _operation("fetch_camera_card_reading"):
+            query = self._db().table("camera_card_readings").select("*").eq("pond_id", pond_id)
+            if image_id is not None:
+                query = query.eq("image_id", image_id)
+            else:
+                query = query.order("created_at", desc=True)
+            rows = query.limit(1).execute().data
+            return rows[0] if rows else None
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         """Stores a JPEG and returns its public URL."""

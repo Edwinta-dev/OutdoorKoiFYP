@@ -367,6 +367,7 @@ def test_matrix_app_role_table_grants_are_exactly_the_apps_calls(db, role):
     expected = dict(APP_TABLE_GRANTS)
     if role == "authenticated":
         expected["camera_card_masks"] = {"SELECT", "INSERT"}
+        expected["camera_card_readings"] = {"SELECT"}
     assert grants == expected
     db.execute("select table_name from information_schema.role_table_grants "
                "where table_schema = 'public' and grantee = 'PUBLIC'")

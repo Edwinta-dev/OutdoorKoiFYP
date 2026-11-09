@@ -1246,6 +1246,23 @@ def put_camera_card_masks(user_id):
     return jsonify(_camera_card_masks_response(user_id)), 200
 
 
+@route(bp, "GET", "/v1/ponds/<int:user_id>/camera/card-reading", summary="Latest camera colour-card reading",
+       tag="pond", response=res.CameraCardReadingResponse, errors=(401, 403, 404, 503))
+def get_camera_card_reading(user_id):
+    """Latest card reading, or ?image_id=N for one frame."""
+    raw_id = request.args.get("image_id")
+    try:
+        image_id = int(raw_id) if raw_id is not None else None
+        if image_id is not None and image_id < 1:
+            raise ValueError
+    except ValueError as exc:
+        raise ApiError("image_id must be a positive integer", code="invalid_query") from exc
+    reading = _storage().fetch_camera_card_reading(user_id, image_id)
+    if reading is None:
+        raise ApiError("No camera card reading is available.", status=404, code="camera_card_reading_not_found")
+    return jsonify(reading), 200
+
+
 @route(bp, "GET", "/v1/ponds/<int:user_id>/camera/mask", summary="Camera water mask", tag="pond",
        response=res.CameraMaskResponse, errors=(401, 403, 503))
 def get_camera_mask(user_id):

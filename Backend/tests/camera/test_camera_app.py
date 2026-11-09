@@ -77,6 +77,36 @@ def test_upload_stores_frame_in_configured_bucket_and_returns_test_mode_sleep(st
     assert row["user_ID"] == "15"
     assert row["imageURL"].startswith("memory://frames/15/")
     assert row["current_state"] == body["state"]
+    assert storage.rows("camera_card_readings") == []
+
+
+def test_upload_stores_card_reading_when_masks_exist(storage, monkeypatch):
+    from koi.camera.card_masks import home_placements
+    storage.save_camera_card_masks(15, home_placements().to_json())
+    result = {"white_rgb": [200, 200, 200], "patches": {}, "ph": None, "nh3": None,
+              "usable_dots": 2, "total_dots": 2, "quality": "usable"}
+    monkeypatch.setattr(camera_routes.card_reader, "read_frame", lambda *args: result)
+    resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+    assert resp.status_code == 200
+    [image] = storage.rows("imageTable")
+    [reading] = storage.rows("camera_card_readings")
+    assert reading["image_id"] == image["id"]
+    assert reading["pond_id"] == 15
+    assert resp.get_json().keys() == {"status", "state", "sleep_sec", "reason", "next_at"}
+
+
+def test_card_reader_failure_still_stores_frame(storage, monkeypatch):
+    from koi.camera.card_masks import home_placements
+    storage.save_camera_card_masks(15, home_placements().to_json())
+
+    def fail(*args):
+        raise ValueError("broken card sample")
+
+    monkeypatch.setattr(camera_routes.card_reader, "read_frame", fail)
+    resp = _client(storage).post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+    assert resp.status_code == 200
+    assert len(storage.rows("imageTable")) == 1
+    assert storage.rows("camera_card_readings") == []
 
 
 def test_upload_reads_the_previous_frame_state(storage):

@@ -28,3 +28,24 @@ def test_card_mask_supabase_reads_latest_and_calls_versioned_rpc():
     assert storage.save_camera_card_masks(15, PLACEMENTS) == row
     assert client.queries[-1].calls == [("rpc", ("save_camera_card_masks", {
         "p_pond_id": 15, "p_placements": PLACEMENTS, "p_reference_image_id": None}), {})]
+
+
+def test_camera_card_reading_memory_fetches_latest_or_selected_frame():
+    storage = MemoryStorage()
+    older = {"image_id": 11, "pond_id": 15, "card_masks_version": 1, "white_rgb": [1, 1, 1],
+             "patches": {}, "ph": None, "nh3": None, "usable_dots": 0, "total_dots": 1, "quality": "unusable"}
+    newer = {**older, "image_id": 12}
+    storage.insert_camera_card_reading(older)
+    storage.insert_camera_card_reading(newer)
+    assert storage.fetch_camera_card_reading(15)["image_id"] == 12
+    assert storage.fetch_camera_card_reading(15, 11)["image_id"] == 11
+
+
+def test_camera_card_reading_supabase_is_scoped_to_pond_and_image():
+    row = {"image_id": 12, "pond_id": 15, "card_masks_version": 1, "white_rgb": [1, 1, 1],
+           "patches": {}, "ph": None, "nh3": None, "usable_dots": 0, "total_dots": 1,
+           "quality": "unusable", "created_at": "2026-11-10T00:00:00+00:00"}
+    storage, client = supabase_storage(data={"camera_card_readings": [row]})
+    assert storage.fetch_camera_card_reading(15, 12) == row
+    assert ("eq", ("pond_id", 15), {}) in client.queries[-1].calls
+    assert ("eq", ("image_id", 12), {}) in client.queries[-1].calls

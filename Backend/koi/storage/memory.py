@@ -37,6 +37,7 @@ from koi.models.local_time import local_date
 from koi.storage.base import (
     CALIBRATION_COLUMNS,
     CAMERA_CARD_MASK_COLUMNS,
+    CAMERA_CARD_READING_COLUMNS,
     CAMERA_CONFIG_COLUMNS,
     CAMERA_MASK_VERSION_COLUMNS,
     IMAGE_COLUMNS,
@@ -105,6 +106,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "camera_config": CAMERA_CONFIG_COLUMNS,
     "camera_mask_version": CAMERA_MASK_VERSION_COLUMNS,
     "camera_card_masks": CAMERA_CARD_MASK_COLUMNS,
+    "camera_card_readings": CAMERA_CARD_READING_COLUMNS,
     "UserData": ("userID", "created_at", "volume", "biomass", "latitude", "longitude",
                  "manualpostallocation", "ClosestStations", "auth_uid"),
     "pondInterventions": (
@@ -160,6 +162,7 @@ USER_COLUMN = {
     "camera_config": "pond_id",
     "camera_mask_version": "pond_id",
     "camera_card_masks": "pond_id",
+    "camera_card_readings": "pond_id",
 }
 
 DAILY_COLUMNS = ("avg_value", "min_value", "max_value", "record_date")
@@ -186,6 +189,7 @@ _STAMPED = {
     "pond_profile": "created_at",
     "camera_mask_version": "created_at",
     "camera_card_masks": "created_at",
+    "camera_card_readings": "created_at",
     "weather_observation": "created_at",
     "weather_forecast_issuance": "created_at",
 }
@@ -701,14 +705,25 @@ class MemoryStorage:
                      mask_version: Optional[int] = None, baseline_reset: Optional[str] = None,
                      quality: Optional[dict] = None, thumbnail_path: Optional[str] = None,
                      gcc: Optional[float] = None, colour: Optional[dict] = None,
-                     regions: Optional[dict] = None) -> None:
+                     regions: Optional[dict] = None) -> int:
         self._check("insert_image")
         row = {"user_ID": user_id, "green_ratio": green_ratio, "current_state": current_state,
                "imageURL": image_url}
         optional = {"mask_version": mask_version, "baseline_reset": baseline_reset, "quality": quality,
                     "thumbnail_path": thumbnail_path, "gcc": gcc, "colour": colour, "regions": regions}
         row.update({k: v for k, v in optional.items() if v is not None})
-        self._insert("insert_image", "imageTable", [row])
+        return self._insert("insert_image", "imageTable", [row])[0]["id"]
+
+    def insert_camera_card_reading(self, row: dict) -> dict:
+        return self._insert("insert_camera_card_reading", "camera_card_readings", [row])[0]
+
+    def fetch_camera_card_reading(self, pond_id: int | str, image_id: int | None = None) -> Optional[dict]:
+        rows = self._select("camera_card_readings", pond_id)
+        if image_id is not None:
+            rows = [row for row in rows if row.get("image_id") == image_id]
+        else:
+            rows = sorted(rows, key=lambda r: r["created_at"], reverse=True)
+        return self._project(rows[0], CAMERA_CARD_READING_COLUMNS) if rows else None
 
     def upload_image(self, bucket: str, path: str, data: bytes) -> str:
         self._check("upload_image")

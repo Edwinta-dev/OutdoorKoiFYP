@@ -64,10 +64,10 @@ def test_mask_supabase_image_insert_leaves_out_unset_mask_columns():
     so the upload still works against a database without the migration."""
     storage, client = supabase_storage()
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u")
-    [(method, (row,), _)] = client.queries[-1].calls
+    [(method, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert method == "insert" and set(row) == {"user_ID", "green_ratio", "current_state", "imageURL"}
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u", mask_version=2, baseline_reset="mask_changed")
-    [(_, (row,), _)] = client.queries[-1].calls
+    [(_, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert row["mask_version"] == 2 and row["baseline_reset"] == "mask_changed"
 
 
@@ -106,5 +106,5 @@ def test_regions_supabase_reads_and_writes_the_regions_columns():
     [select] = [args[0] for method, args, _ in client.queries[-1].calls if method == "select"]
     assert "regions" in select
     storage.insert_image(15, 0.1, ["base", 0.1, 0, 0], "u", regions={"version": 1})
-    [(_, (row,), _)] = client.queries[-1].calls
+    [(_, (row,), _)] = [call for call in client.queries[-1].calls if call[0] == "insert"]
     assert row["regions"] == {"version": 1}

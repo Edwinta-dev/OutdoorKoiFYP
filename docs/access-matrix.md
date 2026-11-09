@@ -28,6 +28,7 @@ as written here.
 | `pondInterventions` | pond events | select, insert | same as `anon` | select, insert own pond's rows (`"userID"` of a pond the caller owns); `anon` none | all |
 | `imageTable` | camera frames | select | same as `anon` | select own pond's rows (`"user_ID"`); `anon` none. Inserts stay backend (camera service, #86) | all |
 | `camera_card_masks` | versioned card placements | none | select, insert | select, insert own pond's rows; `anon` none | all |
+| `camera_card_readings` | image-linked colour-card observations | none | select | select own pond's rows; `anon` none | all |
 | `Fish_Database` | shared reference | select | select | select for `anon` and `authenticated` (public reference data, no owner column) | all |
 | `weather_telemetry`, `weather_forecasts` | shared NEA caches | select (existing public read policies) | select | unchanged: public read, no owner column | all |
 | `SensorData` | readings | none | none | none; reads go through the API | all |
