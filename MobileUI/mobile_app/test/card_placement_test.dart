@@ -14,6 +14,7 @@ import 'package:mobile_app/data/card_placement.dart';
 import 'package:mobile_app/data/local_profile_repository.dart';
 import 'package:mobile_app/data/providers.dart';
 import 'package:mobile_app/screens/card_placement_screen.dart';
+import 'package:mobile_app/utils/pond_camera_storage.dart';
 import 'package:mobile_app/widgets/detail_graph/sample_overlay.dart';
 
 import 'helpers/fake_pond_data_source.dart';
@@ -134,11 +135,14 @@ void main() {
       ],
     );
 
-    ProviderContainer container(Map<String, Object> prefs) {
+    ProviderContainer container(
+      Map<String, Object> prefs, {
+      FakePondDataSource? source,
+    }) {
       final c = ProviderContainer(
         overrides: [
           pondDataSourceProvider.overrideWithValue(
-            FakePondDataSource()..cameraCardPatches = [served],
+            (source ?? FakePondDataSource())..cameraCardPatches = [served],
           ),
           localProfileRepositoryProvider.overrideWithValue(
             FakeLocalProfileRepository(prefs),
@@ -176,10 +180,40 @@ void main() {
       final c = container({...onboardedPrefs, cardPlacementKey(7): ''});
       expect(await c.read(cameraCardPatchesProvider(7).future), [served]);
     });
+
+    test('server copy wins over phone copy', () async {
+      final phone = template.home;
+      final twin = template.home.withMask(
+        'white',
+        template.home['white'].copyWith(cx: .3),
+      );
+      final c = container(
+        {...onboardedPrefs, cardPlacementKey(7): phone.encode()},
+        source: FakePondDataSource()
+          ..cameraCardMasks = {'placements': jsonDecode(twin.encode())},
+      );
+      expect((await c.read(cardPlacementProvider(7).future))!['white'].cx, .3);
+    });
+
+    test('failed server read falls back to phone copy', () async {
+      final phone = template.home;
+      final source = FakePondDataSource(failing: {'fetchCameraCardMasks'});
+      final c = container({
+        ...onboardedPrefs,
+        cardPlacementKey(7): phone.encode(),
+      }, source: source);
+      expect(
+        (await c.read(cardPlacementProvider(7).future))!['white'].toJson(),
+        phone['white'].toJson(),
+      );
+    });
   });
 
   group('screen', () {
-    Future<FakeLocalProfileRepository> pump(WidgetTester tester) async {
+    Future<FakeLocalProfileRepository> pump(
+      WidgetTester tester, {
+      FakePondDataSource? source,
+    }) async {
       final repo = FakeLocalProfileRepository(onboardedPrefs);
       tester.view.physicalSize = phoneSize;
       tester.view.devicePixelRatio = 1;
@@ -188,7 +222,9 @@ void main() {
         ProviderScope(
           retry: (_, _) => null,
           overrides: [
-            pondDataSourceProvider.overrideWithValue(FakePondDataSource()),
+            pondDataSourceProvider.overrideWithValue(
+              source ?? FakePondDataSource(),
+            ),
             localProfileRepositoryProvider.overrideWithValue(repo),
             cardTemplateProvider.overrideWith((_) async => template),
           ],
@@ -262,6 +298,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(CardPlacements.tryParse(repo.values[cardPlacementKey(7)]), isNull);
     });
+
+    testWidgets(
+      'save failure keeps local copy and retry succeeds with reference',
+      (tester) async {
+        final source = FakePondDataSource(
+          failing: {'saveCameraCardMasks'},
+          frame: PondCameraFrame(
+            id: 42,
+            imageUrl: 'memory:',
+            greenRatio: null,
+            capturedAt: DateTime(2026, 1, 2),
+            state: null,
+          ),
+        );
+        final repo = await pump(tester, source: source);
+        await tester.tap(
+          find.byKey(const ValueKey('card-clear-water-reference')),
+        );
+        await tester.pump();
+        expect(find.text('Clear-water reference: 2026-01-02'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('card-save')));
+        await tester.pumpAndSettle();
+        expect(find.text('Not saved to the digital twin yet'), findsOneWidget);
+        expect(find.byKey(const ValueKey('card-save-retry')), findsOneWidget);
+        expect(
+          CardPlacements.tryParse(repo.values[cardPlacementKey(7)]),
+          isNotNull,
+        );
+        expect(
+          source.callsTo('saveCameraCardMasks').last.args['referenceImageId'],
+          42,
+        );
+        source.failing.remove('saveCameraCardMasks');
+        await tester.tap(find.byKey(const ValueKey('card-save-retry')));
+        await tester.pumpAndSettle();
+        expect(find.text('Saved'), findsOneWidget);
+      },
+    );
   });
 }
 

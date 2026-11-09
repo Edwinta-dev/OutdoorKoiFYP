@@ -8,6 +8,7 @@
 // place of the patches the digital twin serves.
 
 import 'dart:math' as math;
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/card_placement.dart';
 import '../data/providers.dart';
 import '../theme/app_theme.dart';
+import '../utils/pond_camera_storage.dart';
 import '../widgets/detail_graph/sample_overlay.dart';
 
 class CardPlacementScreen extends ConsumerStatefulWidget {
@@ -40,6 +42,10 @@ class _CardPlacementScreenState extends ConsumerState<CardPlacementScreen> {
   bool _loading = true;
   String? _error;
   String? _notice;
+  PondCameraFrame? _shownFrame;
+  PondCameraFrame? _referenceFrame;
+  int? _referenceImageId;
+  bool _saving = false;
 
   // The active mask's placement when a gesture began.
   CardPlacement? _start;
@@ -60,19 +66,41 @@ class _CardPlacementScreenState extends ConsumerState<CardPlacementScreen> {
     try {
       final template = await ref.read(cardTemplateProvider.future);
       final saved = await ref.read(cardPlacementProvider(widget.userId).future);
+      final masks = await ref.read(
+        cameraCardMasksProvider(widget.userId).future,
+      );
+      final referenceId = (masks['reference_image_id'] as num?)?.toInt();
+      final frame = await ref
+          .read(cameraFramesRepositoryProvider)
+          .fetchLatestFrame(widget.userId);
       ImageProvider? image = widget.imageProvider;
+      final shownFrame = frame.frame;
       if (image == null) {
-        final frame = await ref
-            .read(cameraFramesRepositoryProvider)
-            .fetchLatestFrame(widget.userId);
-        final url = frame.frame?.imageUrl;
+        final url = shownFrame?.imageUrl;
         if (url == null) throw StateError('No latest camera image');
         image = NetworkImage(url);
+      }
+      PondCameraFrame? reference;
+      if (referenceId != null) {
+        if (referenceId == shownFrame?.id) {
+          reference = shownFrame;
+        } else {
+          try {
+            reference = await ref
+                .read(cameraFramesRepositoryProvider)
+                .fetchCameraFrame(widget.userId, referenceId);
+          } catch (_) {
+            // Keep editing available if the reference frame's date is unavailable.
+          }
+        }
       }
       if (!mounted) return;
       setState(() {
         _placements = saved ?? template.home;
         _image = image;
+        _shownFrame = shownFrame;
+        _referenceImageId = referenceId;
+        _referenceFrame = reference;
         _loading = false;
       });
     } catch (_) {
@@ -97,14 +125,39 @@ class _CardPlacementScreenState extends ConsumerState<CardPlacementScreen> {
       _set(_current.copyWith(scale: _current.scale * factor));
 
   Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _notice = null;
+    });
+    final placements = _placements!;
     await ref.read(localProfileRepositoryProvider).save({
-      cardPlacementKey(widget.userId): _placements!.encode(),
+      cardPlacementKey(widget.userId): placements.encode(),
     });
     ref.invalidate(localProfileProvider);
-    ref.invalidate(cameraCardPatchesProvider(widget.userId));
-    if (mounted) {
-      setState(() => _notice = 'Mask positions saved on this phone.');
+    try {
+      await ref
+          .read(cameraFramesRepositoryProvider)
+          .saveCameraCardMasks(
+            widget.userId,
+            jsonDecode(placements.encode()) as Map<String, dynamic>,
+            _referenceImageId,
+          );
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _notice = 'Saved';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _notice = 'Not saved to the digital twin yet';
+        });
+      }
     }
+    ref.invalidate(cameraCardPatchesProvider(widget.userId));
   }
 
   Future<void> _remove() async {
@@ -209,9 +262,31 @@ class _CardPlacementScreenState extends ConsumerState<CardPlacementScreen> {
               const SizedBox(height: AppSpace.md),
               FilledButton(
                 key: const ValueKey('card-save'),
-                onPressed: _save,
+                onPressed: _saving ? null : _save,
                 child: const Text('Save mask positions'),
               ),
+              TextButton(
+                key: const ValueKey('card-clear-water-reference'),
+                onPressed: _shownFrame?.id == null
+                    ? null
+                    : () => setState(() {
+                        _referenceImageId = _shownFrame!.id;
+                        _referenceFrame = _shownFrame;
+                        _notice = null;
+                      }),
+                child: const Text('Use this frame as clear-water reference'),
+              ),
+              if (_referenceImageId != null)
+                Text(
+                  'Clear-water reference: ${_referenceFrame?.capturedAt?.toLocal().toString().split(' ').first ?? 'frame $_referenceImageId'}',
+                  key: const ValueKey('card-reference-date'),
+                ),
+              if (_notice == 'Not saved to the digital twin yet')
+                TextButton(
+                  key: const ValueKey('card-save-retry'),
+                  onPressed: _saving ? null : _save,
+                  child: const Text('Retry'),
+                ),
               TextButton(
                 key: const ValueKey('card-reset'),
                 onPressed: template == null

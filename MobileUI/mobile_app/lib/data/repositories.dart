@@ -36,6 +36,13 @@ abstract interface class CameraFramesRepository {
   /// segments, reading pads) with their sample points; empty when the pond
   /// has none. Drawn by the sampled-areas overlay.
   Future<List<CardPatch>> fetchCameraCardPatches(int userId);
+  Future<Map<String, dynamic>> fetchCameraCardMasks(int userId);
+  Future<void> saveCameraCardMasks(
+    int userId,
+    Map<String, dynamic> placements,
+    int? referenceImageId,
+  );
+  Future<PondCameraFrame?> fetchCameraFrame(int userId, int imageId);
   Future<List<PondCameraFrame>> fetchFramesForDay(int userId, DateTime day);
   Future<({PondCameraFrame? frame, String? error})> fetchLatestFrame(
     int userId,

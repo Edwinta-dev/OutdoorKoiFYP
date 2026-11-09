@@ -200,9 +200,10 @@ class CardPlacements {
 
   /// Null for anything but a saved set of all three masks.
   static CardPlacements? tryParse(Object? raw) {
-    if (raw is! String) return null;
     try {
-      final m = jsonDecode(raw) as Map<String, dynamic>;
+      final m = raw is String
+          ? jsonDecode(raw) as Map<String, dynamic>
+          : (raw as Map).cast<String, dynamic>();
       return CardPlacements({
         for (final id in cardMaskIds)
           id: CardPlacement.fromJson((m[id] as Map).cast<String, dynamic>()),

@@ -87,6 +87,8 @@ class FakePondDataSource extends PondDataSource {
   final List<FakeCall> calls = [];
 
   List<List<double>>? cameraMask;
+  Map<String, dynamic> cameraCardMasks = const {};
+  PondCameraFrame? referenceFrame;
 
   @override
   Future<List<List<double>>?> fetchCameraMask(int userId) =>
@@ -98,6 +100,28 @@ class FakePondDataSource extends PondDataSource {
   @override
   Future<List<CardPatch>> fetchCameraCardPatches(int userId) =>
       _answer('fetchCameraCardPatches', {'userId': userId}, cameraCardPatches);
+
+  @override
+  Future<Map<String, dynamic>> fetchCameraCardMasks(int userId) =>
+      _answer('fetchCameraCardMasks', {'userId': userId}, cameraCardMasks);
+
+  @override
+  Future<void> saveCameraCardMasks(
+    int userId,
+    Map<String, dynamic> placements,
+    int? referenceImageId,
+  ) => _answer('saveCameraCardMasks', {
+    'userId': userId,
+    'placements': placements,
+    'referenceImageId': referenceImageId,
+  }, null);
+
+  @override
+  Future<PondCameraFrame?> fetchCameraFrame(int userId, int imageId) => _answer(
+    'fetchCameraFrame',
+    {'userId': userId, 'imageId': imageId},
+    referenceFrame,
+  );
 
   @override
   Future<void> saveCameraMask(int userId, List<List<double>> polygon) =>

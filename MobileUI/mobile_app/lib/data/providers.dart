@@ -188,12 +188,25 @@ const cardTemplateAsset = 'lib/assets/card_template.json';
 
 /// Where the user placed the three card masks on this pond's frame (this phone only),
 /// or null when it was never placed.
+final cameraCardMasksProvider =
+    FutureProvider.family<Map<String, dynamic>, int>((ref, pond) async {
+      try {
+        return await ref
+            .watch(cameraFramesRepositoryProvider)
+            .fetchCameraCardMasks(pond);
+      } catch (_) {
+        return const {};
+      }
+    });
+
 final cardPlacementProvider = FutureProvider.family<CardPlacements?, int>((
   ref,
   pond,
 ) async {
   final profile = await ref.watch(localProfileProvider.future);
-  return CardPlacements.tryParse(profile.values[cardPlacementKey(pond)]);
+  final local = CardPlacements.tryParse(profile.values[cardPlacementKey(pond)]);
+  final server = await ref.watch(cameraCardMasksProvider(pond).future);
+  return CardPlacements.tryParse(server['placements']) ?? local;
 });
 
 /// The card patches the overlay draws: the user's placement of the card when

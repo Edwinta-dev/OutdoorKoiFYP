@@ -144,6 +144,21 @@ class PondCameraStorage {
     }
   }
 
+  static Future<PondCameraFrame?> fetchFrame({
+    required int userId,
+    required int imageId,
+    SupabaseClient? client,
+  }) async {
+    final rows = await (client ?? Supabase.instance.client)
+        .from(tableName)
+        .select('id, created_at, green_ratio, gcc, current_state, "imageURL"')
+        .eq('user_ID', userId)
+        .eq('id', imageId)
+        .limit(1);
+    final list = (rows as List).cast<Map<String, dynamic>>();
+    return list.isEmpty ? null : _frameFromRow(list.first, client);
+  }
+
   // ------------------------------------------------------------------
 
   static PondCameraFrame _frameFromRow(
