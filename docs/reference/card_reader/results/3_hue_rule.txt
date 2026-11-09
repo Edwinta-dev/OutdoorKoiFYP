@@ -1,0 +1,23 @@
+=== pH  segment colour summary (card-white WB, clean band, glare removed)
+  seg1 top-left                L 56.8  a 11.3 b 10.9  hue  44.0  chroma 15.7
+  seg2 top-right               L 61.4  a  7.5 b 12.7  hue  59.5  chroma 14.8
+  seg3 right                   L 58.2  a  8.6 b 10.8  hue  51.5  chroma 13.8
+  seg4 lower-right             L 65.0  a  4.8 b 13.0  hue  69.6  chroma 13.9
+  seg5 bottom (yellow)         L 62.0  a  3.1 b 13.0  hue  76.7  chroma 13.4
+  seg6 bottom-left (magenta)   L 51.8  a 14.2 b  2.5  hue  10.0  chroma 14.4
+  seg7 left-lower              L 51.0  a 15.2 b  2.4  hue   9.1  chroma 15.4
+  seg8 left-upper              L 51.1  a 12.8 b  5.7  hue  24.0  chroma 14.1
+  SENSOR                       L 55.6  a 11.6 b  8.1  hue  34.7  chroma 14.2
+  hue order (low->high): seg7(9) < seg6(10) < seg8(24) < seg1(44) < seg3(52) < seg2(59) < seg4(70) < seg5(77)
+  hue-only sub-patch accuracy 72%; errors to hue-neighbour 16, to non-neighbour 2
+  sensor hue 34.7 -> seg1 top-left (dHue 9.3), runner-up seg8 left-upper (dHue 10.7)
+
+=== NH3  segment colour summary (card-white WB, clean band, glare removed)
+  yellow (bottom)              L 76.4  a -2.0 b 12.8  hue  98.7  chroma 13.0
+  green (right)                L 56.0  a -3.3 b  2.5  hue 142.8  chroma  4.2
+  teal (top)                   L 67.0  a -3.7 b -4.7  hue -128.1  chroma  5.9
+  blue (left)                  L 51.6  a  2.1 b-11.1  hue -79.5  chroma 11.3
+  SENSOR                       L 63.9  a -1.9 b  8.3  hue 103.0  chroma  8.5
+  hue order (low->high): teal(-128) < blue(-79) < yellow(99) < green(143)
+  hue-only sub-patch accuracy 100%; errors to hue-neighbour 0, to non-neighbour 0
+  sensor hue 103.0 -> yellow (bottom) (dHue 4.2), runner-up green (right) (dHue 39.8)

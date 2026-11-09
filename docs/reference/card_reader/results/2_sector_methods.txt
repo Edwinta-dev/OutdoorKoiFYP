@@ -1,0 +1,22 @@
+
+=== pH: sector sampling r45-68 +/-14 deg, 8 sub-patches per segment
+  method                                         sep  sub acc margin  sensor match (ratio)
+  A raw RGB                                     0.62      80%   2.60  seg1 top-left (1.98)
+  B global contrast stretch                     0.62      80%   2.63  seg1 top-left (2.01)
+  C card-white WB + Lab chroma                  1.09      73%   2.69  seg8 left-upper (1.07)
+  D flat-field RGB                              0.72      80%   2.46  seg1 top-left (1.58)
+  E flat-field + Lab chroma                     0.84      73%   2.63  seg1 top-left (1.13)
+  F raw + decorrelation stretch                 0.72      73%   2.51  seg1 top-left (1.20)
+  G flat-field + decorrelation stretch          0.63      70%   2.25  seg1 top-left (1.27)
+  H flat-field + Lab chroma + decorrelation     0.75      70%   3.63  seg1 top-left (1.08)
+
+=== NH3: sector sampling r42-68 +/-22 deg, 8 sub-patches per segment
+  method                                         sep  sub acc margin  sensor match (ratio)
+  A raw RGB                                     1.46      84%   3.63  teal (top) (1.28)
+  B global contrast stretch                     1.46      84%   3.64  teal (top) (1.26)
+  C card-white WB + Lab chroma                  3.87     100%   6.09  yellow (bottom) (1.41)
+  D flat-field RGB                              1.41      84%   3.65  teal (top) (1.29)
+  E flat-field + Lab chroma                     3.72     100%   5.84  yellow (bottom) (1.43)
+  F raw + decorrelation stretch                 3.18     100%   4.71  yellow (bottom) (1.51)
+  G flat-field + decorrelation stretch          3.09     100%   4.67  yellow (bottom) (1.39)
+  H flat-field + Lab chroma + decorrelation     3.30     100%   5.96  yellow (bottom) (1.97)

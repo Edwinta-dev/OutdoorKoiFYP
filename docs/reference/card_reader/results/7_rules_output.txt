@@ -1,0 +1,47 @@
+
+== pH ==  sensor hue 36.7 deg
+  reading                       angle    hue chroma   dHue    px
+  seg6 bottom-left (magenta)      121    8.4   19.3   28.3   643
+  seg7 left-lower                 165    8.6   19.3   28.1   635
+  seg8 left-upper                -156   19.7   18.6   17.0   634
+  seg1 top-left                  -112   44.4   19.7    7.7   591
+  seg3 right                      -14   52.4   17.3   15.7   645
+  seg2 top-right                  -66   56.1   18.9   19.4   546
+  seg4 lower-right                 26   71.9   18.0   35.2   423
+  seg5 bottom (yellow)             75   75.6   16.7   38.9   635
+  ! seg2 top-right and seg3 right differ by only 3.7 deg hue in this view - cannot be told apart reliably
+  ! seg4 lower-right and seg5 bottom (yellow) differ by only 3.7 deg hue in this view - cannot be told apart reliably
+  ! seg6 bottom-left (magenta) and seg7 left-lower differ by only 0.2 deg hue in this view - cannot be told apart reliably
+  -> {"reading": "seg1 top-left", "sensor_hue": 36.7, "best_dhue": 7.7, "runner_up": "seg3 right", "ratio": 2.03, "between": ["seg1 top-left", "seg8 left-upper"], "fraction_toward_second": 0.31, "confidence": "clear"}
+
+== NH3 ==  sensor hue 103.0 deg
+  reading                       angle    hue chroma   dHue    px
+  teal (top)                      -90 -149.0    5.7  108.0  1097
+  blue (left)                     180  -81.2   12.9  175.8  1097
+  yellow (bottom)                  90  100.0   16.2    3.0  1097
+  green (right)                     0  148.8    4.5   45.8  1097
+  -> {"reading": "yellow (bottom)", "sensor_hue": 103.0, "best_dhue": 3.0, "runner_up": "green (right)", "ratio": 15.33, "confidence": "clear"}
+
+{
+ "pH": {
+  "reading": "seg1 top-left",
+  "sensor_hue": 36.7,
+  "best_dhue": 7.7,
+  "runner_up": "seg3 right",
+  "ratio": 2.03,
+  "between": [
+   "seg1 top-left",
+   "seg8 left-upper"
+  ],
+  "fraction_toward_second": 0.31,
+  "confidence": "clear"
+ },
+ "NH3": {
+  "reading": "yellow (bottom)",
+  "sensor_hue": 103.0,
+  "best_dhue": 3.0,
+  "runner_up": "green (right)",
+  "ratio": 15.33,
+  "confidence": "clear"
+ }
+}

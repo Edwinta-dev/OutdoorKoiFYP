@@ -1,0 +1,49 @@
+
+===== pH: 10 wheels analysed
+  image           acc adjErr/err noise° minGap° sepPairs order  sensor -> match (ratio)
+  sample2.jpg     70%   19/19       3.3     4.0      43%   86%  hue   39.7 -> P4 (1.28)
+  sample4.jpg     75%   16/16       2.2     0.8      57%   86%  hue   41.4 -> P3 (1.88)
+  sample8.jpg     89%    7/7        1.1     1.8      71%  100%  hue   42.4 -> P4 (1.74)
+  sample9.jpg     92%    5/5        1.0     2.4      86%  100%  hue   39.4 -> P3 (2.01)
+  sample10.jpg    84%   10/10       1.3     0.4      71%  100%  hue   43.8 -> P3 (1.93)
+  sample11.jpg    78%   14/14       1.4     0.7      71%  100%  hue   48.8 -> P3 (1.11)
+  sample12.jpg    73%   17/17       1.6     1.6      57%  100%  hue   50.1 -> P4 (1.24)
+  sample13.jpg    86%    9/9        1.7     2.0      57%  100%  hue   45.5 -> P3 (2.12)
+  sample14.jpg    56%   25/28       3.5     0.8      43%   86%  hue   50.3 -> P3 (1.09)
+  sample15.jpg    78%   10/14       2.7     1.3      43%   71%  hue   46.6 -> P3 (1.58)
+  AVERAGE within-image sub-patch accuracy 78%  (errors to adjacent segment: 132/139); mean separable adjacent pairs 60%
+  cross-image hue per segment id (mean ± sd over images):
+    P1         19.7 ±  6.6   (n=10)
+    P2         25.4 ±  7.9   (n=10)
+    P3         40.8 ±  8.6   (n=10)
+    P4         54.6 ±  5.4   (n=10)
+    P5         59.8 ±  4.0   (n=10)
+    P6         64.4 ±  9.0   (n=10)
+    P7         80.5 ±  4.7   (n=10)
+    P8         83.6 ±  2.6   (n=10)
+  fixed-palette (leave-one-image-out) segment accuracy: 41/80 = 51%
+  sensor matches across images: P3x7, P4x3
+
+===== NH3: 13 wheels analysed
+  image           acc adjErr/err noise° minGap° sepPairs order  sensor -> match (ratio)
+  sample2.jpg    100%    0/0       71.7    41.9       0%  True  hue  106.5 -> yellow (7.64)
+  sample3.jpg    100%    0/0        7.3    42.3     100%  True  hue  109.2 -> yellow (2.55)
+  sample5.jpg     75%    8/8       77.7    69.0       0%  True  hue  112.4 -> yellow (4.37)
+  sample6.jpg     94%    2/2       79.6    38.6       0%  True  hue  118.1 -> green (1.12)
+  sample7.jpg     91%    3/3       83.6    33.6       0%  True  hue  120.2 -> green (1.39)
+  sample8.jpg    100%    0/0        5.7    46.7     100%  True  hue  116.7 -> yellow (1.07)
+  sample9.jpg    100%    0/0        5.2    47.3     100%  True  hue  109.2 -> yellow (3.04)
+  sample10.jpg   100%    0/0        6.6    52.3     100%  True  hue  108.1 -> yellow (5.64)
+  sample11.jpg    94%    2/2       11.5    45.9     100%  True  hue  107.2 -> yellow (1.62)
+  sample12.jpg   100%    0/0        4.9    47.3     100%  True  hue  114.3 -> yellow (1.58)
+  sample13.jpg   100%    0/0        3.7    52.1     100%  True  hue  106.7 -> yellow (2.36)
+  sample14.jpg   100%    0/0        6.6    51.0     100%  True  hue  110.2 -> yellow (2.36)
+  sample15.jpg   100%    0/0        3.8    54.3     100%  True  hue  110.4 -> yellow (4.47)
+  AVERAGE within-image sub-patch accuracy 96%  (errors to adjacent segment: 15/15); mean separable adjacent pairs 69%
+  cross-image hue per segment id (mean ± sd over images):
+    blue      -77.7 ±  3.6   (n=13)
+    teal     -144.6 ± 17.9   (n=13)
+    green     145.7 ±  9.4   (n=13)
+    yellow     96.9 ±  3.4   (n=13)
+  fixed-palette (leave-one-image-out) segment accuracy: 52/52 = 100%
+  sensor matches across images: greenx2, yellowx11

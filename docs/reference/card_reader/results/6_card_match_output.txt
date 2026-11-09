@@ -1,0 +1,38 @@
+
+== pH ==  card white RGB [145, 150, 144]   sensor RGB [157, 129, 117] (324 px)
+  reading                       angle              RGB  dChroma   dE76
+  seg1 top-left                  -112  [150, 124, 112]      0.8    2.3
+  seg3 right                      -14  [160, 137, 120]      3.2    4.0
+  seg2 top-right                  -66  [150, 132, 117]      4.5    4.5
+  seg8 left-upper                -156  [142, 117, 113]      4.6    6.6
+  seg7 left-lower                 165  [143, 115, 116]      7.2    8.8
+  seg4 lower-right                 26  [166, 152, 128]      8.2   10.8
+  seg6 bottom-left (magenta)      121  [137, 113, 116]      8.6   10.6
+  seg5 bottom (yellow)             75  [160, 150, 127]      9.2   10.9
+  -> seg1 top-left   (runner-up is 3.9x further: clear)
+  jitter +/-6 px (25 shifts): seg1 top-left 92%, seg2 top-right 8%
+
+== NH3 ==  card white RGB [170, 176, 174]   sensor RGB [155, 158, 138] (324 px)
+  reading                       angle              RGB  dChroma   dE76
+  yellow (bottom)                  90  [189, 189, 162]      3.9   12.2
+  green (right)                     0  [126, 137, 131]      8.1   11.6
+  teal (top)                      -90  [140, 158, 162]     14.3   14.3
+  blue (left)                     180  [113, 124, 145]     23.0   26.2
+  -> yellow (bottom)   (runner-up is 2.1x further: clear)
+  jitter +/-6 px (25 shifts): yellow (bottom) 100%
+
+Annotated spots: frame_annotated.png   (lime = matched segment, cyan = sensor, white = white ref)
+{
+ "pH": {
+  "reading": "seg1 top-left",
+  "ratio": 3.92,
+  "confidence": "clear",
+  "jitter_agreement": 0.92
+ },
+ "NH3": {
+  "reading": "yellow (bottom)",
+  "ratio": 2.1,
+  "confidence": "clear",
+  "jitter_agreement": 1.0
+ }
+}
