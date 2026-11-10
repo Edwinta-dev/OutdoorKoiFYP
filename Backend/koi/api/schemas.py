@@ -210,6 +210,18 @@ class ForecastQuery(_Query):
     horizon_days: int = Field(default=21, ge=1, le=MAX_HORIZON_DAYS)
 
 
+# The raw-reading window GET .../sensors/recent serves.
+MAX_RECENT_MINUTES = 180
+MAX_RECENT_READINGS = 500
+
+
+class RecentSensorQuery(_Query):
+    """sensor is the SensorData sensor_type, in the node's spelling."""
+
+    sensor: Literal["pH", "temp", "TDS", "LUX"] = "pH"
+    minutes: int = Field(default=60, ge=1, le=MAX_RECENT_MINUTES)
+
+
 class ProfileUpdate(_Body):
     """PUT /v1/ponds/{pond}/profile: the pond's whole profile from
     effective_from (default: now). A field left out is unknown, not
@@ -319,5 +331,6 @@ class EvaporationForecastQuery(_Query):
 
 
 __all__ = ["AlgaeRatingEvent", "AlgaeRatingUndo", "AlgalScrubEvent", "CameraMaskUpdate", "EvaporationForecastQuery",
-           "EventBody", "FeedingEvent", "ForecastQuery", "MAX_EVENT_AGE", "MAX_EVENT_LEAD", "ProfileUpdate",
+           "EventBody", "FeedingEvent", "ForecastQuery", "MAX_EVENT_AGE", "MAX_EVENT_LEAD", "MAX_RECENT_MINUTES",
+           "MAX_RECENT_READINGS", "ProfileUpdate", "RecentSensorQuery",
            "VolumeEvent", "on_pond_path", "parse_event_time"]

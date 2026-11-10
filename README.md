@@ -300,6 +300,7 @@ Every route is under `/v1`; the full description is
 | `GET`, `PUT` | `/v1/ponds/{pond}/profile` | Pond profile (volume, depth, fish, tap water, aeration); PUT adds a row effective now or at `effective_from`, earlier rows are kept |
 | `GET`, `PUT` | `/v1/ponds/{pond}/camera/mask` | Water mask for the camera's green ratio: a polygon of `[x, y]` points as fractions of the frame (3 to 64 points, at least 1% of the frame). Each PUT is a new mask version; the camera restarts its smoothed baseline on the first frame with a new version |
 | `GET` | `/v1/ponds/{pond}/devices` | Sensor node and camera health: last seen (receipt time), expected interval, contacts received and missed in 24 hours, battery trend from `battery_mv`, last reset reason, and each channel's last usable sample time. Every assessment also carries `data_confidence` (high, reduced, low) with its reasons |
+| `GET` | `/v1/ponds/{pond}/sensors/recent` | One channel's raw `SensorData` readings received in the last `minutes` (default 60, at most 180) for `sensor` (`pH`, `temp`, `TDS` or `LUX`; default `pH`): `{sensor, minutes, readings: [{at, value, flags}]}`, oldest first, at most the newest 500. Feeds the app's "Last hour" trace |
 | `GET` | `/health`, `/ready` (also under `/v1`), `/metrics` | Liveness; readiness (storage and the poller, 503 when not ready); Prometheus metrics |
 
 Forecast endpoints are read-only, evaluate the already-in-breach case before simulating

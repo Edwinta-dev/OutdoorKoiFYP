@@ -921,6 +921,18 @@ class DeviceHealth(_Closed):
     clock: Optional[ClockNote] = Field(description="Sensor node only.")
 
 
+class RecentSensorReading(_Closed):
+    at: datetime = Field(description="When the probe was read (sampled_at), else when the row was received.")
+    value: float
+    flags: Optional[int] = Field(description="Node flags (migration 0027); null on legacy rows.")
+
+
+class RecentSensorReadings(_Closed):
+    sensor: str
+    minutes: int
+    readings: list[RecentSensorReading] = Field(description="Oldest first; the newest 500 of the window.")
+
+
 class DevicesResponse(_Closed):
     pond_id: int
     generated_at: datetime

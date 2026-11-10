@@ -1,7 +1,9 @@
 import 'card_patch.dart';
 import 'camera_card_reading.dart';
 import 'pond_profile.dart';
+
 import 'dart:typed_data';
+
 import '../utils/digital_twin_api.dart';
 import '../utils/pond_camera_storage.dart';
 
@@ -13,6 +15,14 @@ abstract interface class TelemetryHistoryRepository {
   Future<Map<String, dynamic>?> fetchHistoricalGraphPayload(
     int userId,
     int days,
+  );
+
+  /// GET /v1/ponds/{pond}/sensors/recent: one sensor_type's raw readings
+  /// of the last [minutes], oldest first.
+  Future<Map<String, dynamic>> fetchRecentSensorReadings(
+    int userId,
+    String sensor,
+    int minutes,
   );
 }
 

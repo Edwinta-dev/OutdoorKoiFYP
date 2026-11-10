@@ -758,6 +758,20 @@ def get_devices(user_id):
     return jsonify({"pond_id": user_id, "generated_at": now.isoformat(), "devices": devices}), 200
 
 
+@route(bp, "GET", "/v1/ponds/<int:user_id>/sensors/recent", summary="Raw sensor readings of the last minutes",
+       tag="pond", query=schemas.RecentSensorQuery, response=res.RecentSensorReadings, errors=(400, *POND_ERRORS))
+def get_recent_sensor_readings(user_id):
+    """One channel's raw SensorData readings received in the last `minutes`
+    (default 60, at most 180), oldest first, at most the newest 500. Each
+    is timed by sampled_at when the node sent one, else by its receipt
+    time. Reads only."""
+    query = _parse_query(schemas.RecentSensorQuery)
+    _require_pond(user_id)
+    since = schemas.utc_now() - timedelta(minutes=query.minutes)
+    readings = _storage().fetch_recent_sensor_readings(user_id, query.sensor, since, schemas.MAX_RECENT_READINGS)
+    return jsonify({"sensor": query.sensor, "minutes": query.minutes, "readings": readings}), 200
+
+
 # ===================================================================
 # Cached assessment reads (dashboard cards + alert badges)
 # ===================================================================

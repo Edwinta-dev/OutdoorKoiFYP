@@ -10,6 +10,7 @@ import '../widgets/detail_graph/camera_card_reading_card.dart';
 import '../widgets/detail_graph/evaporation_status_card.dart';
 import '../widgets/detail_graph/historical_line_chart.dart';
 import '../widgets/detail_graph/intervention_legend.dart';
+import '../widgets/detail_graph/last_hour_card.dart';
 import '../widgets/detail_graph/scarce_data_placeholder.dart';
 import '../widgets/detail_graph/timeline_header_selector.dart';
 import '../widgets/detail_graph/water_buffer_status_card.dart';
@@ -54,6 +55,12 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
     ref.invalidate(cameraCardPatchesProvider(_userId));
     ref.invalidate(cameraCardReadingProvider(_userId));
     ref.invalidate(cameraCardMasksProvider(_userId));
+    ref.invalidate(
+      recentReadingsProvider((
+        pond: _userId,
+        sensor: _getTargetSensorTypes().first,
+      )),
+    );
   }
 
   List<String> _getTargetSensorTypes() {
@@ -161,6 +168,10 @@ class _DetailGraphScreenState extends ConsumerState<DetailGraphScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // --- 1. LAST HOUR OF RAW READINGS (live trace) ---
+                  LastHourCard(userId: _userId, sensorType: primaryType),
+                  const SizedBox(height: AppSpace.lg),
+
                   // --- 2. TIMELINE TIMEFRAME SELECTOR ---
                   TimelineHeaderSelector(
                     metricType: widget.metricType,

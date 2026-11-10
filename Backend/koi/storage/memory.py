@@ -51,6 +51,7 @@ from koi.storage.base import (
     daily_stats,
     parse_timestamp,
     pond_config_from_userdata_row,
+    recent_readings,
     with_provenance,
 )
 from koi.storage.evaluation_daily import (
@@ -424,6 +425,14 @@ class MemoryStorage:
                     and (after is None or times[int(r["id"])] > after) and times[int(r["id"])] <= until]
         rows.sort(key=lambda item: (item[0], int(item[1]["id"])))
         return [self._sensor_row(r) for _, r in rows]
+
+    def fetch_recent_sensor_readings(self, user_id: int, sensor_type: str, since: datetime,
+                                     limit: int) -> list[dict]:
+        self._check("fetch_recent_sensor_readings")
+        rows = [r for r in self._select("SensorData", user_id, newest_first_by="created_at",
+                                        sensor_type=sensor_type)
+                if parse_timestamp(r["created_at"]) >= since]
+        return recent_readings(rows[:limit])
 
     @staticmethod
     def _sensor_row(row: dict) -> dict:

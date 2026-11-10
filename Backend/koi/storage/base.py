@@ -119,6 +119,14 @@ class Storage(Protocol):
         (sensor_ingest_history, migration 0015). What a replay reads back."""
         ...
 
+    def fetch_recent_sensor_readings(self, user_id: int, sensor_type: str, since: datetime,
+                                     limit: int) -> list[dict]:
+        """The pond's SensorData rows of one sensor_type received
+        (created_at) at or after since, as [{at, value, flags}] oldest
+        first, the newest limit of them. at is sampled_at when the node
+        sent one, else created_at; rows without a value are left out."""
+        ...
+
     # --- interventions (pondInterventions, migration 0015) -------------
     def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:
         """The pond's rows with event_timestamp at or after since (None:
@@ -478,6 +486,16 @@ def daily_stats(rows: list[dict]) -> Optional[dict]:
         "max": max(maxs) if maxs else None,
         "sample_days": len(rows),
     }
+
+
+def recent_readings(rows: list[dict]) -> list[dict]:
+    """SensorData rows (data1, created_at, sampled_at, flags) as
+    fetch_recent_sensor_readings returns them."""
+    readings = [{"at": parse_timestamp(r.get("sampled_at") or r["created_at"]).isoformat(),
+                 "value": float(r["data1"]), "flags": r.get("flags")}
+                for r in rows if r.get("data1") is not None]
+    readings.sort(key=lambda r: parse_timestamp(r["at"]))
+    return readings
 
 
 def parse_timestamp(value: object) -> datetime:

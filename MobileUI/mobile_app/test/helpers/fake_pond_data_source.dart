@@ -39,6 +39,7 @@ class FakePondDataSource extends PondDataSource {
   FakePondDataSource({
     Map<String, dynamic>? dashboardPayload,
     this.historicalPayload,
+    Map<String, dynamic>? recentReadings,
     List<String>? speciesNames,
     this.userProfileResponse = const {'ClosestStations': null},
     this.frame,
@@ -57,12 +58,16 @@ class FakePondDataSource extends PondDataSource {
     Set<String>? hanging,
     Set<String>? failing,
   }) : dashboardPayload = dashboardPayload ?? Fixtures.dashboardPayload(),
+       recentReadings = recentReadings ?? Fixtures.recentReadings(),
        speciesNames = speciesNames ?? const ['Japanese Koi (Kohaku)'],
        hanging = hanging ?? <String>{},
        failing = failing ?? <String>{};
 
   Map<String, dynamic>? dashboardPayload;
   Map<String, dynamic>? historicalPayload;
+
+  /// The /sensors/recent response; sensor and minutes echo the request.
+  Map<String, dynamic> recentReadings;
   List<String> speciesNames;
   Map<String, dynamic> userProfileResponse;
   PondCameraFrame? frame;
@@ -224,6 +229,17 @@ class FakePondDataSource extends PondDataSource {
     'userId': userId,
     'days': days,
   }, historicalPayload);
+
+  @override
+  Future<Map<String, dynamic>> fetchRecentSensorReadings(
+    int userId,
+    String sensor,
+    int minutes,
+  ) => _answer(
+    'fetchRecentSensorReadings',
+    {'userId': userId, 'sensor': sensor, 'minutes': minutes},
+    {...recentReadings, 'sensor': sensor, 'minutes': minutes},
+  );
 
   @override
   Future<void> insertIntervention(Map<String, dynamic> payload) =>

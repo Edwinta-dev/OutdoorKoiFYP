@@ -53,6 +53,7 @@ from koi.storage.base import (
     StorageError,
     daily_stats,
     pond_config_from_userdata_row,
+    recent_readings,
     with_provenance,
 )
 from koi.storage.evaluation_daily import EVALUATION_DAILY_COLUMNS
@@ -175,6 +176,21 @@ class SupabaseStorage:
             }).execute()
             data = res.data
             return list((json.loads(data) if isinstance(data, str) else data) or [])
+
+    def fetch_recent_sensor_readings(self, user_id: int, sensor_type: str, since: datetime,
+                                     limit: int) -> list[dict]:
+        with _operation("fetch_recent_sensor_readings"):
+            res = (
+                self._db().table("SensorData")
+                .select("data1, created_at, sampled_at, flags")
+                .eq("userID", user_id)
+                .eq("sensor_type", sensor_type)
+                .gte("created_at", since.isoformat())
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return recent_readings(list(res.data or []))
 
     # --- interventions (migration 0015) -------------------------------
     def fetch_interventions(self, user_id: int, since: Optional[datetime]) -> list[dict]:

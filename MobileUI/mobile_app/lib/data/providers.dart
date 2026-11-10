@@ -4,8 +4,11 @@ import 'card_patch.dart';
 import 'camera_card_reading.dart';
 import 'rating_card_data.dart';
 import '../utils/pond_camera_storage.dart';
+import 'recent_readings.dart';
 import 'telemetry_history.dart';
+
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/pond_dashboard.dart';
@@ -159,6 +162,28 @@ final historyProvider =
           .watch(telemetryHistoryRepositoryProvider)
           .fetchHistoricalGraphPayload(query.pond, query.days);
       return json == null ? null : TelemetryHistory.fromJson(json);
+    });
+
+/// The window the "Last hour" card shows.
+const int recentReadingsMinutes = 60;
+
+/// One sensor's raw readings of the last hour, re-fetched every 30 s (the
+/// node's upload interval) while something is watching.
+final recentReadingsProvider = FutureProvider.autoDispose
+    .family<RecentReadings, ({int pond, String sensor})>((ref, query) async {
+      final timer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => ref.invalidateSelf(),
+      );
+      ref.onDispose(timer.cancel);
+      final json = await ref
+          .watch(telemetryHistoryRepositoryProvider)
+          .fetchRecentSensorReadings(
+            query.pond,
+            query.sensor,
+            recentReadingsMinutes,
+          );
+      return RecentReadings.fromJson(json);
     });
 final assessmentProvider = FutureProvider.family(
   (ref, int pond) =>

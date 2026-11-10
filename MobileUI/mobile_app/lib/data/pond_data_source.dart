@@ -1,8 +1,11 @@
 import 'card_patch.dart';
 import 'camera_card_reading.dart';
 import 'pond_profile.dart';
+
 import 'dart:typed_data';
+
 import 'repositories.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/digital_twin_api.dart';
@@ -59,6 +62,17 @@ class LivePondDataSource extends PondDataSource {
     );
     return response == null ? null : Map<String, dynamic>.from(response as Map);
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchRecentSensorReadings(
+    int userId,
+    String sensor,
+    int minutes,
+  ) => api.request(
+    'GET',
+    '/v1/ponds/$userId/sensors/recent'
+        '?sensor=${Uri.encodeQueryComponent(sensor)}&minutes=$minutes',
+  );
 
   @override
   Future<void> insertIntervention(Map<String, dynamic> payload) =>

@@ -71,6 +71,30 @@ class Fixtures {
   /// get_historical_graph_payload with a week of daily averages for every
   /// sensor type the detail screens chart, and one logged event of each
   /// domain's primary type.
+  /// GET /v1/ponds/{pond}/sensors/recent: [values] 30 s apart, the last
+  /// one at [latest] (UTC).
+  static Map<String, dynamic> recentReadings({
+    List<double> values = const [7.10, 7.18, 7.31, 7.42],
+    DateTime? latest,
+    String sensor = 'pH',
+  }) {
+    final end = latest ?? DateTime.utc(2026, 11, 10, 13, 5, 30);
+    return {
+      'sensor': sensor,
+      'minutes': 60,
+      'readings': [
+        for (var i = 0; i < values.length; i++)
+          {
+            'at': end
+                .subtract(Duration(seconds: 30 * (values.length - 1 - i)))
+                .toIso8601String(),
+            'value': values[i],
+            'flags': 0,
+          },
+      ],
+    };
+  }
+
   static Map<String, dynamic> historicalPayload() => {
     'daily_trends': [
       for (final (type, base) in [

@@ -109,7 +109,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id041
+              schema: &id042
                 $ref: '#/components/schemas/Ready'
           headers:
             ETag:
@@ -1937,6 +1937,90 @@ paths:
           content: *id039
       security:
       - bearerAuth: []
+  /v1/ponds/{pond}/sensors/recent:
+    get:
+      operationId: get_recent_sensor_readings
+      summary: Raw sensor readings of the last minutes
+      tags:
+      - pond
+      description: One channel's raw SensorData readings received in the last `minutes` (default 60, at
+        most 180), oldest first, at most the newest 500. Each is timed by sampled_at when the node sent
+        one, else by its receipt time. Reads only.
+      parameters:
+      - name: pond
+        in: path
+        required: true
+        description: The pond (UserData.userID); must be the signed-in account's pond.
+        schema:
+          type: integer
+          minimum: 0
+      - name: sensor
+        in: query
+        required: false
+        schema:
+          default: pH
+          enum:
+          - pH
+          - temp
+          - TDS
+          - LUX
+          title: Sensor
+          type: string
+      - name: minutes
+        in: query
+        required: false
+        schema:
+          default: 60
+          maximum: 180
+          minimum: 1
+          title: Minutes
+          type: integer
+      - name: If-None-Match
+        in: header
+        required: false
+        description: An ETag from an earlier response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentSensorReadings'
+          headers:
+            ETag:
+              description: Strong validator over the response body.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-cache
+        '304':
+          description: 'Not modified: If-None-Match matches the current ETag. No body.'
+        '400':
+          description: Invalid request
+          content: &id040
+            application/json:
+              schema: *id001
+        '401':
+          description: Not signed in
+          content: *id040
+        '403':
+          description: Another account's pond
+          content: *id040
+        '404':
+          description: Pond or assessment not found
+          content: *id040
+        '500':
+          description: Unexpected server error
+          content: *id040
+        '503':
+          description: Storage or service not available
+          content: *id040
+      security:
+      - bearerAuth: []
   /v1/ponds/{pond}/validation:
     get:
       operationId: get_kit_validation
@@ -1980,21 +2064,21 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '401':
           description: Not signed in
-          content: &id040
+          content: &id041
             application/json:
               schema: *id001
         '403':
           description: Another account's pond
-          content: *id040
+          content: *id041
         '404':
           description: Pond or assessment not found
-          content: *id040
+          content: *id041
         '500':
           description: Unexpected server error
-          content: *id040
+          content: *id041
         '503':
           description: Storage or service not available
-          content: *id040
+          content: *id041
       security:
       - bearerAuth: []
   /v1/ready:
@@ -2017,7 +2101,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id041
+              schema: *id042
           headers:
             ETag:
               description: Strong validator over the response body.
@@ -2031,12 +2115,12 @@ paths:
           description: 'Not modified: If-None-Match matches the current ETag. No body.'
         '500':
           description: Unexpected server error
-          content: &id042
+          content: &id043
             application/json:
               schema: *id001
         '503':
           description: Storage or service not available
-          content: *id042
+          content: *id043
       security: []
 components:
   schemas:
@@ -5712,6 +5796,50 @@ components:
       - poller
       - reasons
       title: Ready
+      type: object
+    RecentSensorReading:
+      additionalProperties: false
+      properties:
+        at:
+          description: When the probe was read (sampled_at), else when the row was received.
+          format: date-time
+          title: At
+          type: string
+        value:
+          title: Value
+          type: number
+        flags:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Node flags (migration 0027); null on legacy rows.
+          title: Flags
+      required:
+      - at
+      - value
+      - flags
+      title: RecentSensorReading
+      type: object
+    RecentSensorReadings:
+      additionalProperties: false
+      properties:
+        sensor:
+          title: Sensor
+          type: string
+        minutes:
+          title: Minutes
+          type: integer
+        readings:
+          description: Oldest first; the newest 500 of the window.
+          items:
+            $ref: '#/components/schemas/RecentSensorReading'
+          title: Readings
+          type: array
+      required:
+      - sensor
+      - minutes
+      - readings
+      title: RecentSensorReadings
       type: object
     ResetReason:
       additionalProperties: false
