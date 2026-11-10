@@ -15,6 +15,7 @@ PATCH_RADIUS = 4
 GLARE_FRACTION = 0.20
 GLARE_LUMINANCE = 1.10
 DOT_DEVIATION = 0.25
+LEAVE_ONE_OUT_MIN_DOTS = 4
 
 
 def _lab(rgb: np.ndarray) -> np.ndarray:
@@ -24,6 +25,25 @@ def _lab(rgb: np.ndarray) -> np.ndarray:
     xyz /= [0.95047, 1, 1.08883]
     f = np.where(xyz > 216 / 24389, np.cbrt(xyz), (24389 / 27 * xyz + 16) / 116)
     return np.array([116*f[1]-16, 500*(f[0]-f[1]), 200*(f[1]-f[2])])
+
+
+def _consistent(values: np.ndarray) -> np.ndarray:
+    """Which dots of one patch agree with the patch's other dots.
+
+    A dot is kept when its relative Euclidean deviation from the median of
+    the OTHER dots (leave-one-out, so a dot cannot vouch for itself) is at
+    most DOT_DEVIATION of that median's magnitude. With fewer than
+    LEAVE_ONE_OUT_MIN_DOTS dots the others' median is a single dot or the
+    mean of two, where one bad dot would reject the good ones, so those
+    patches use the median of all their dots instead (a single dot is kept).
+    """
+    count = len(values)
+    if count < LEAVE_ONE_OUT_MIN_DOTS:
+        centres = np.repeat(np.median(values, axis=0)[None, :], count, axis=0)
+    else:
+        centres = np.stack([np.median(np.delete(values, i, axis=0), axis=0) for i in range(count)])
+    scale = np.maximum(np.linalg.norm(centres, axis=1), 1e-9)
+    return np.linalg.norm(values - centres, axis=1) / scale <= DOT_DEVIATION
 
 
 def _patch(img: np.ndarray, points: list, white_lum: float | None = None) -> tuple[list, list]:
@@ -45,10 +65,7 @@ def _patch(img: np.ndarray, points: list, white_lum: float | None = None) -> tup
     if not dots:
         return [], []
     values = np.asarray(dots)
-    med = np.median(values, axis=0)
-    # Relative Euclidean deviation from the median magnitude, as specified by the owner.
-    scale = max(float(np.linalg.norm(med)), 1e-9)
-    keep = np.linalg.norm(values-med, axis=1) / scale <= DOT_DEVIATION
+    keep = _consistent(values)
     accepted = values[keep]
     return (np.median(accepted, axis=0).round().astype(int).tolist() if len(accepted) else [],
             [bool(v) for v in keep])

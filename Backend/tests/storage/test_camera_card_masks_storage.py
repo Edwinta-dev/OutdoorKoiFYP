@@ -49,3 +49,21 @@ def test_camera_card_reading_supabase_is_scoped_to_pond_and_image():
     assert storage.fetch_camera_card_reading(15, 12) == row
     assert ("eq", ("pond_id", 15), {}) in client.queries[-1].calls
     assert ("eq", ("image_id", 12), {}) in client.queries[-1].calls
+
+
+COVERED = {"image_id": 12, "pond_id": 15, "card_masks_version": 1, "white_rgb": None,
+           "patches": {"ph_reading": {"median_rgb": None, "dots_used": 0, "dots_total": 7}},
+           "ph": None, "nh3": None, "usable_dots": 0, "total_dots": 199, "quality": "unusable"}
+
+
+def test_camera_card_reading_memory_accepts_a_reading_without_white_reference():
+    storage = MemoryStorage()
+    assert storage.insert_camera_card_reading(COVERED)["white_rgb"] is None
+    stored = storage.fetch_camera_card_reading(15, 12)
+    assert stored["white_rgb"] is None and stored["quality"] == "unusable"
+
+
+def test_camera_card_reading_supabase_inserts_a_null_white_reference():
+    storage, client = supabase_storage(data={"camera_card_readings": [COVERED]})
+    assert storage.insert_camera_card_reading(COVERED)["white_rgb"] is None
+    assert client.queries[-1].calls == [("insert", (COVERED,), {})]

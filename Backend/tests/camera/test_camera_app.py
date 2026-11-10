@@ -120,6 +120,33 @@ def test_three_accepted_unusable_card_frames_enqueue_once_and_usable_rearms(stor
     assert len(storage.rows("notification_outbox")) == 2
 
 
+def _covered_placements():
+    """Home placements with the white reference card moved out of the frame,
+    so the real reader finds no white dot (as when the card is covered)."""
+    from koi.camera.card_masks import home_placements
+    placements = home_placements().to_json()
+    placements["white"]["cx"] = 5.0
+    return placements
+
+
+def test_covered_card_real_reading_is_stored_unusable_and_three_frames_alert_once(storage, monkeypatch):
+    storage.save_camera_card_masks(15, _covered_placements())
+    monkeypatch.setattr(camera_routes.quality, "assess", lambda *args, **kwargs: {
+        "status": "pass", "reasons": [], "metrics": {}})
+    client = _client(storage)
+    for expected_alerts in (0, 0, 1, 1):
+        resp = client.post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"})
+        assert resp.status_code == 200
+        assert resp.get_json().keys() == {"status", "state", "sleep_sec", "reason", "next_at"}
+        assert len(storage.rows("notification_outbox")) == expected_alerts
+    readings = storage.rows("camera_card_readings")
+    assert [r["white_rgb"] for r in readings] == [None] * 4
+    assert {r["quality"] for r in readings} == {"unusable"}
+    assert [r["unusable_streak"] for r in readings] == [1, 2, 3, 4]
+    assert [r["unusable_alerted"] for r in readings] == [False, False, True, True]
+    assert storage.fetch_camera_card_reading(15)["white_rgb"] is None
+
+
 def test_card_reader_failure_still_stores_frame(storage, monkeypatch):
     from koi.camera.card_masks import home_placements
     storage.save_camera_card_masks(15, home_placements().to_json())

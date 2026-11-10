@@ -70,3 +70,32 @@ def test_mostly_covered_card_is_stored_as_unusable_even_without_white_reference(
     assert result['quality'] == 'unusable'
     assert result['usable_dots'] == 0
     assert result['total_dots'] == 26
+
+
+def _gray_dots(values):
+    patches = [{'name': 'white_ref', 'points': [[.1, .5]]},
+               {'name': 'ph_ref_1', 'points': [[.3 + i * .1, .5] for i in range(len(values))]}]
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame[49:52, 19:22] = 250
+    for i, value in enumerate(values):
+        x = 60 + i * 20
+        frame[49:52, x-1:x+2] = value
+    return read_frame(frame, patches)['patches']['ph_ref_1']
+
+
+def test_dot_outlier_check_uses_the_median_of_the_other_dots():
+    # With its own value in the median (114) the 128 dot is within 25%; against
+    # the median of the other three dots (100) it is 28% off and is dropped.
+    patch = _gray_dots([100, 100, 128, 160])
+    assert patch['dots_used'] == 2
+    assert patch['median_rgb'] == [100, 100, 100]
+    # One bad dot among four does not cost the good ones.
+    assert _gray_dots([100, 100, 100, 200])['dots_used'] == 3
+
+
+def test_dot_outlier_check_stays_sane_for_one_to_three_dots():
+    assert _gray_dots([100])['dots_used'] == 1
+    assert _gray_dots([100, 110])['dots_used'] == 2
+    # Two dots that disagree cannot say which one is wrong: both go.
+    assert _gray_dots([60, 180])['dots_used'] == 0
+    assert _gray_dots([100, 100, 200])['dots_used'] == 2
