@@ -147,6 +147,10 @@ def error_reply(status: int, code: str, message: str, wake: imageSchedule.NextWa
 RESET_MASK_CHANGED = "mask_changed"
 RESET_OBSTRUCTION_PERSISTED = "obstruction_persisted"  # issue #80
 UNUSABLE_ALERT_FRAMES = 3
+# turbidity_reason when the card masks name a clear-water reference image
+# that has no stored usable card reading (turbidity.analyse reports
+# no_reference_frame only when no reference image is chosen).
+REASON_REFERENCE_UNREAD = "reference_frame_has_no_reading"
 
 
 # Rows searched for the newest frame that did not fail the quality gate.
@@ -226,10 +230,15 @@ def measure_cards(img, user_id: str) -> tuple[dict | None, int | None]:
             reading = card_reader.compare_reference(reading, reference)
         else:
             reading = card_reader.compare_reference(reading, None)
+            if saved.get("reference_image_id") is not None:
+                # A reference frame is chosen, but no usable card reading was stored for it.
+                reading["turbidity"]["reason"] = REASON_REFERENCE_UNREAD
         return reading, int(saved["version"])
     except Exception as exc:  # noqa: BLE001 - optional observation
         log_event(log, "camera_card_reading_failed", level=logging.WARNING, error=str(exc))
         return None, None
+
+
 def carried_state(prev_state, prev_green_ratio) -> list:
     """The state a failed frame stores: the previous accepted frame's
     [label, baseline, raised, stable] unchanged, so it is shown as the

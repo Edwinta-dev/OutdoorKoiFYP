@@ -6,6 +6,10 @@ import numpy as np
 MIN_PATCHES = 6
 MIN_TRANSMISSION = 0.05
 LUMINANCE_WEIGHTS = np.array([0.2126, 0.7152, 0.0722])
+# The reagent discs (ph_reading, nh3_reading) change colour with the water's
+# chemistry, not only with its clarity: they are corrected by the fit but
+# never used to make it.
+DISC_SUFFIX = "_reading"
 
 
 def analyse(current: dict, reference: dict | None) -> dict:
@@ -15,7 +19,8 @@ def analyse(current: dict, reference: dict | None) -> dict:
                 "reason": "no_reference_frame", "corrected": {}}
     now, ref = current.get("patches") or {}, reference.get("patches") or {}
     pairs = [(np.asarray(ref[n]["median_rgb"], float), np.asarray(now[n]["median_rgb"], float))
-             for n in ref.keys() & now.keys() if ref[n].get("median_rgb") and now[n].get("median_rgb")]
+             for n in sorted(ref.keys() & now.keys())
+             if not n.endswith(DISC_SUFFIX) and ref[n].get("median_rgb") and now[n].get("median_rgb")]
     if len(pairs) < MIN_PATCHES:
         return {"index": None, "a": None, "b": None, "r2": None, "patches_used": len(pairs),
                 "reason": "fewer_than_6_usable_patches", "corrected": {}}

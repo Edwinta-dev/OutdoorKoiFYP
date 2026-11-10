@@ -147,6 +147,29 @@ def test_covered_card_real_reading_is_stored_unusable_and_three_frames_alert_onc
     assert storage.fetch_camera_card_reading(15)["white_rgb"] is None
 
 
+def test_turbidity_reason_tells_unread_reference_frame_from_no_reference_frame(storage):
+    from koi.camera.card_masks import home_placements
+    client = _client(storage)
+
+    def upload_reason():
+        assert client.post("/upload", data=_jpeg((0, 200, 0)), headers={"X-User-ID": "15"}).status_code == 200
+        return storage.fetch_camera_card_reading(15, storage.rows("imageTable")[-1]["id"])
+
+    storage.save_camera_card_masks(15, home_placements().to_json())
+    first = upload_reason()
+    assert first["turbidity_reason"] == "no_reference_frame"
+    # A reference image is chosen, but no card reading was ever stored for it.
+    storage.save_camera_card_masks(15, home_placements().to_json(), 987654)
+    unread = upload_reason()
+    assert unread["turbidity_reason"] == "reference_frame_has_no_reading"
+    assert unread["turbidity_index"] is None and unread["frame_agreement"] == "disagree"
+    # The same when the reference frame's stored reading is unusable.
+    storage.insert_camera_card_reading({**{k: v for k, v in first.items() if k != "created_at"},
+                                        "image_id": 987655, "quality": "unusable"})
+    storage.save_camera_card_masks(15, home_placements().to_json(), 987655)
+    assert upload_reason()["turbidity_reason"] == "reference_frame_has_no_reading"
+
+
 def test_card_reader_failure_still_stores_frame(storage, monkeypatch):
     from koi.camera.card_masks import home_placements
     storage.save_camera_card_masks(15, home_placements().to_json())

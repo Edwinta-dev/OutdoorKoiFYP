@@ -132,10 +132,13 @@ def compare_reference(current: dict, reference: dict | None) -> dict:
             corrected = fit["corrected"].get(prefix)
             rows = []
             if corrected:
+                # The corrected disc is in the reference frame's raw colour space, as the
+                # reference segments are: both get the reference frame's white-balance gain.
+                corrected_lab = _lab(np.clip(np.asarray(corrected, float) * gain, 0, 255))
                 for name, item in (reference.get("patches") or {}).items():
                     rgb = item.get("median_rgb")
                     if name.startswith(prefix + "_ref_") and rgb:
-                        rows.append((float(np.linalg.norm(_lab(np.clip(corrected, 0, 255))[1:] -
+                        rows.append((float(np.linalg.norm(corrected_lab[1:] -
                                                            _lab(np.clip(np.asarray(rgb) * gain, 0, 255))[1:])), name))
             corrected_segment = min(rows)[1] if rows else None
             agreements[prefix] = bool(raw and raw.get("segment") and corrected_segment == raw["segment"])

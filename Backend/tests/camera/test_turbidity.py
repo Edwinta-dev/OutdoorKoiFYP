@@ -52,3 +52,55 @@ def test_two_pipeline_agreement_and_disagreement():
     assert compare_reference(current, reference)["frame_agreement"] == "clear"
     current["ph"]["segment"] = "ph_ref_2"
     assert compare_reference(current, reference)["frame_agreement"] == "disagree"
+
+
+def test_disc_colour_change_alone_does_not_move_the_fit():
+    """The reagent discs change with water chemistry; only the printed
+    patches may shape the clear-water fit."""
+    printed = {f"ph_ref_{i}": {"median_rgb": [30 + i * 30, 50 + i * 25, 70 + i * 20]} for i in range(1, 8)}
+    reference = {"white_rgb": [240, 240, 240], "patches": {
+        **printed, "ph_reading": {"median_rgb": [200, 60, 40]}, "nh3_reading": {"median_rgb": [220, 210, 60]}}}
+    current = {"patches": {
+        **printed, "ph_reading": {"median_rgb": [40, 60, 200]}, "nh3_reading": {"median_rgb": [30, 120, 90]}}}
+    fit = analyse(current, reference)
+    assert fit["reason"] is None
+    assert fit["patches_used"] == 7
+    assert fit["a"] == pytest.approx([1, 1, 1], abs=1e-6)
+    assert fit["b"] == pytest.approx([0, 0, 0], abs=1e-6)
+    assert fit["index"] == pytest.approx(0, abs=1e-6)
+    # The discs are still corrected (here by the identity fit).
+    assert fit["corrected"]["ph"] == pytest.approx([40, 60, 200])
+    assert fit["corrected"]["nh3"] == pytest.approx([30, 120, 90])
+
+
+def test_discs_do_not_count_towards_the_six_patch_minimum():
+    printed = {f"ph_ref_{i}": {"median_rgb": [30 + i * 30, 50 + i * 25, 70 + i * 20]} for i in range(1, 6)}
+    reading = {"white_rgb": [240, 240, 240], "patches": {
+        **printed, "ph_reading": {"median_rgb": [200, 60, 40]}, "nh3_reading": {"median_rgb": [220, 210, 60]}}}
+    fit = analyse(reading, reading)
+    assert fit["reason"] == "fewer_than_6_usable_patches" and fit["patches_used"] == 5
+
+
+def test_clear_water_frame_agrees_with_its_colour_cast_reference():
+    """Reference frame with a colour cast, current frame identical: the
+    corrected disc must be white-balanced like the reference segments."""
+    from koi.camera.card_reader import read_frame
+
+    colours = {"white_ref": [220, 220, 220],
+               "ph_reading": [150, 110, 100], "ph_ref_1": [150, 110, 100], "ph_ref_2": [100, 130, 100],
+               "ph_ref_3": [100, 100, 150],
+               "nh3_reading": [170, 170, 90], "nh3_ref_1": [170, 170, 90], "nh3_ref_2": [110, 170, 110],
+               "nh3_ref_3": [90, 150, 170]}
+    cast = np.array([.5, 1, .6])
+    patches = [{"name": name, "points": [[.1 + i * .1, .5]]} for i, name in enumerate(colours)]
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    for i, rgb in enumerate(colours.values()):
+        x = 20 + i * 20
+        frame[45:56, x-5:x+6] = (np.asarray(rgb) * cast).round()
+    reference = read_frame(frame, patches)
+    result = compare_reference(read_frame(frame, patches), reference)
+    assert result["turbidity"]["index"] == pytest.approx(0, abs=1e-6)
+    assert result["ph"]["segment"] == result["ph"]["corrected_segment"] == "ph_ref_1"
+    assert result["nh3"]["segment"] == result["nh3"]["corrected_segment"] == "nh3_ref_1"
+    assert result["agreement"] == {"ph": True, "nh3": True}
+    assert result["frame_agreement"] == "clear"
